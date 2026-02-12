@@ -27,7 +27,7 @@ Variables
 
 """
 # ---- Settings/Fixed values ---- #
-using JuMP, HiGHS, LinearAlgebra, Graphs, Colors
+using JuMP, HiGHS, LinearAlgebra, Graphs, Plots
 
 tau = 400 
 Reasnable_range_factor = 2
@@ -210,4 +210,39 @@ else
 end
 
 
-# ---- Visualization of results ---- #
+## ---- Visualization of results ---- #
+
+using Plots
+
+function plot_simple()
+    coords = [airport_coords[rev_idx_airport[i]] for i in 1:num_airports]
+    xs = first.(coords); ys = last.(coords)
+    node_color = [value(y[i]) > 0.5 ? :red : :lightgray for i in 1:num_airports]
+    node_size  = 8
+
+    pop_coords = [Population_coords[k] for k in K]
+    pop_xs = first.(pop_coords); pop_ys = last.(pop_coords)
+    
+    plt = scatter(xs, ys, markersize=node_size, markercolor=node_color, legend=false)
+    scatter!(plt, pop_xs, pop_ys, markersize=6, markercolor=:green, markerstrokewidth=0, label="Population")
+
+    for k in K
+        pop_x, pop_y = pop_coords[idx_Population[k]]
+        for airport in Closest_airports[k]
+            airport_idx = idx_airport[airport]
+            plot!(plt, [pop_x, xs[airport_idx]], [pop_y, ys[airport_idx]], color=:green, linestyle=:dash, linewidth=1)
+        end
+    end
+
+    for e in collect(edges(g))
+        i,j = src(e), dst(e)
+        col = (value(z[i,j]) > 0.5) ? :blue : :gray
+        plot!(plt, [xs[i], xs[j]], [ys[i], ys[j]], color=col, linewidth=1.5)
+    end
+    for i in 1:num_airports
+        annotate!(xs[i]+5, ys[i]+5, rev_idx_airport[i])
+    end
+    savefig(plt, "solution_plot.png")
+end
+
+plot_simple()
