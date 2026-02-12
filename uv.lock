@@ -1,0 +1,36 @@
+version = 1
+revision = 3
+requires-python = ">=3.11"
+
+[[package]]
+name = "julia"
+version = "0.6.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/d9/ec/e13a3d0951f0bc0c949b914a324da47358d5cb465d402677e704ecbede8a/julia-0.6.2.tar.gz", hash = "sha256:35eefc030671392b79ba0e1898b7103ed1286ad044783c4cadc99d4401c368e3", size = 54332, upload-time = "2023-12-30T02:52:47.146Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/82/af/2e9a1a996f32b34249582392bb419cf8983b627a1d31412acbe9d6dea5b0/julia-0.6.2-py2.py3-none-any.whl", hash = "sha256:90752f71376fdb9919439d20496c2dab24486dfa4fe8a831d6dd14a1bcbc04d1", size = 68776, upload-time = "2023-12-30T02:52:45.162Z" },
+]
+
+[[package]]
+name = "juliaup"
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/55/d6/5025183d6900a73eb36d239b711c81e6a4da6e0185ed60aa64aaacd04cc7/juliaup-0.1.1.tar.gz", hash = "sha256:69abc0bc94e0a1b5717fce9d38547f44e6d88265f81e1a86a3c043e6ce0578ec", size = 4516, upload-time = "2022-02-07T19:04:31.568Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8c/27/a6859a5f81941548d94ce6bc4a75dafbaa63d1c8ac812a11d711fb470d6c/juliaup-0.1.1-py3-none-any.whl", hash = "sha256:bf10acd206a09563966c66cea23dc337fbf5a5f6bcf8fac7aff4f1b481fd6cba", size = 4876, upload-time = "2022-02-07T19:04:30.42Z" },
+]
+
+[[package]]
+name = "simpel-eksempel"
+version = "0.1.0"
+source = { virtual = "." }
+dependencies = [
+    { name = "julia" },
+    { name = "juliaup" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "julia", specifier = ">=0.6.2" },
+    { name = "juliaup", specifier = ">=0.1.1" },
+]

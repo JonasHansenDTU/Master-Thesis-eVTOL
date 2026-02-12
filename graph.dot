@@ -1,0 +1,18 @@
+digraph G {
+"B" [style=filled, fillcolor=lightgray, label="B\nρ=130.0"];
+"A" [style=filled, fillcolor=red, label="A\nρ=0.0"];
+"C" [style=filled, fillcolor=red, label="C\nρ=0.0"];
+"D" [style=filled, fillcolor=red, label="D\nρ=0.0"];
+"B" -> "A" [color=blue];
+"B" -> "C" [color=gray];
+"B" -> "D" [color=gray];
+"A" -> "B" [color=gray];
+"A" -> "C" [color=gray];
+"A" -> "D" [color=blue];
+"C" -> "B" [color=gray];
+"C" -> "A" [color=gray];
+"C" -> "D" [color=gray];
+"D" -> "B" [color=gray];
+"D" -> "A" [color=gray];
+"D" -> "C" [color=gray];
+}

@@ -1,0 +1,10 @@
+[project]
+name = "simpel-eksempel"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "julia>=0.6.2",
+    "juliaup>=0.1.1",
+]
