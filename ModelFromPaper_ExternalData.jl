@@ -31,7 +31,7 @@ using JuMP, HiGHS, LinearAlgebra, Graphs, Plots
 
 # ---- Get data ---- #
 
-Data_file_name = "BiggerData.jl" # Change this to "BiggerData.jl" for the larger dataset
+Data_file_name = "model_data.jl" # Change this to "BiggerData.jl" for the larger dataset
 
 data_file = get(ENV, "MODEL_DATA", joinpath(@__DIR__, "Data", Data_file_name))
 if isfile(data_file)
@@ -209,9 +209,17 @@ if termination_status(model) == OPTIMAL
     println("Optimal solution found!")
     println("Objective value: ", objective_value(model))
     println("y (Charging Bases) = ", value.(y))
-    println("z (Feasible edges) = ", value.(z))
+    if length(E) <= 10
+        println("z (Feasible edges) = ", value.(z))
+    else
+        println("z (Feasible edges) = [Too many edges to display]")
+    end
     println("rho (Shortest dist to charger) = ", value.(rho))
-    println("psi (Path feasibility) = ", value.(psi))
+    if length(P) <= 10
+        println("psi (Path feasibility) = ", value.(psi))
+    else
+        println("psi (Path feasibility) = [Too many paths to display]")
+    end
     println("phi (Population coverage) = ", value.(phi))
 else
     println("No optimal solution found. Status: ", termination_status(model))
@@ -230,6 +238,7 @@ function plot_simple()
 
     pop_coords = [Population_coords[k] for k in K]
     pop_xs = first.(pop_coords); pop_ys = last.(pop_coords)
+    pop_labels = [k for k in K]
     
     plt = scatter(xs, ys, markersize=node_size, markercolor=node_color, legend=false)
     scatter!(plt, pop_xs, pop_ys, markersize=6, markercolor=:green, markerstrokewidth=0, label="Population")
@@ -260,6 +269,11 @@ function plot_simple()
     for i in 1:num_airports
         annotate!(xs[i]+5, ys[i]+5, rev_idx_airport[i])
     end
+    for k in K
+        pop_x, pop_y = pop_coords[idx_Population[k]]
+        annotate!(pop_x+5, pop_y+5, pop_labels[idx_Population[k]])
+    end
+
     savefig(plt, "Solution Plots/solution_plot_$(Data_file_name).png")
 end
 
