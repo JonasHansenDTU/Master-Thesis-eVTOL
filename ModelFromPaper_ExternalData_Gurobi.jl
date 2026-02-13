@@ -27,7 +27,7 @@ Variables
 
 """
 # ---- Settings/Fixed values ---- #
-using JuMP, HiGHS, LinearAlgebra, Graphs, Plots
+using JuMP, Gurobi, LinearAlgebra, Graphs, Plots
 
 # ---- Get data ---- #
 
@@ -165,7 +165,7 @@ end
 
 ## ---- 4. MODEL (EACN-REG Formulation) ---- #
 
-model = Model(HiGHS.Optimizer)
+model = Model(Gurobi.Optimizer)
 
 # ---- Variables ---- #
 @variable(model, y[1:num_airports], Bin) # Charging Bases
