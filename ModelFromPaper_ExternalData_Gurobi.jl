@@ -250,13 +250,17 @@ function plot_simple()
     coords = [airport_coords[rev_idx_airport[i]] for i in 1:num_airports]
     xs = first.(coords); ys = last.(coords)
     node_color = [value(y[i]) > 0.5 ? :red : :lightgray for i in 1:num_airports]
+    node_marker = [rev_idx_airport[i] in D ? :star5 : :circle for i in 1:num_airports]
     node_size  = 8
 
     pop_coords = [Population_coords[k] for k in K]
     pop_xs = first.(pop_coords); pop_ys = last.(pop_coords)
     pop_labels = [k for k in K]
     
-    plt = scatter(xs, ys, markersize=node_size, markercolor=node_color, legend=false)
+    plt = scatter(xs, ys, markersize=node_size, markercolor=node_color, markerstrokewidth=0, legend=false)
+    for i in 1:num_airports
+        scatter!(plt, [xs[i]], [ys[i]], markersize=node_size, markercolor=node_color[i], marker=node_marker[i], markerstrokewidth=0, legend=false)
+    end
     scatter!(plt, pop_xs, pop_ys, markersize=6, markercolor=:green, markerstrokewidth=0, label="Population")
 
     for k in K
