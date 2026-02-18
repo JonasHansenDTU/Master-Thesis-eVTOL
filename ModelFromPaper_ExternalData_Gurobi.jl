@@ -250,7 +250,7 @@ function plot_simple()
     coords = [airport_coords[rev_idx_airport[i]] for i in 1:num_airports]
     xs = first.(coords); ys = last.(coords)
     node_color = [value(y[i]) > 0.5 ? :red : :lightgray for i in 1:num_airports]
-    node_marker = [rev_idx_airport[i] in D ? :star5 : :circle for i in 1:num_airports]
+    node_marker = [rev_idx_airport[i] in D ? :square : :circle for i in 1:num_airports]
     node_size  = 8
 
     pop_coords = [Population_coords[k] for k in K]
@@ -258,9 +258,19 @@ function plot_simple()
     pop_labels = [k for k in K]
     
     plt = scatter(xs, ys, markersize=node_size, markercolor=node_color, markerstrokewidth=0, legend=false)
-    for i in 1:num_airports
-        scatter!(plt, [xs[i]], [ys[i]], markersize=node_size, markercolor=node_color[i], marker=node_marker[i], markerstrokewidth=0, legend=false)
+
+    # Plot non-destination airports
+    other_idx = [i for i in 1:num_airports if !(rev_idx_airport[i] in D)]
+    if !isempty(other_idx)
+        scatter!(plt, xs[other_idx], ys[other_idx], markersize=node_size, markercolor=node_color[other_idx], marker=:circle, markerstrokewidth=0, legend=false)
     end
+
+    # Plot destination airports with a star marker, larger and distinct color
+    dest_idx = [i for i in 1:num_airports if rev_idx_airport[i] in D]
+    if !isempty(dest_idx)
+        scatter!(plt, xs[dest_idx], ys[dest_idx], markersize=node_size, markercolor=node_color[dest_idx], marker=:square, markerstrokewidth=0, legend=false)
+    end
+
     scatter!(plt, pop_xs, pop_ys, markersize=6, markercolor=:green, markerstrokewidth=0, label="Population")
 
     for k in K
@@ -294,7 +304,10 @@ function plot_simple()
         annotate!(pop_x+5, pop_y+5, pop_labels[idx_Population[k]])
     end
 
-    savefig(plt, "Solution Plots/solution_plot_$(Data_file_name).png")
+    # Ensure output directory exists and save plot
+    outdir = joinpath(@__DIR__, "Solution Plots")
+    isdir(outdir) || mkpath(outdir)
+    savefig(plt, joinpath(outdir, "solution_plot_$(Data_file_name).png"))
 end
 
 plot_simple()
