@@ -28,10 +28,11 @@ Variables
 """
 # ---- Settings/Fixed values ---- #
 using JuMP, Gurobi, LinearAlgebra, Graphs, Plots
+using JSON, PyCall, GeoInterface, LibGEOS, CSV, DataFrames, Statistics
 
 # ---- Get data ---- #
 
-Data_file_name = "Denmark_FictiveData.jl" # Change this to "BiggerData.jl" for the larger dataset
+Data_file_name = "model_data_LonLat.jl" # Change this to "BiggerData.jl" for the larger dataset
 
 data_file = get(ENV, "MODEL_DATA", joinpath(@__DIR__, "Data", Data_file_name))
 if isfile(data_file)
@@ -41,6 +42,16 @@ else
 end
 
 Max_Path_Stops = 3 # Maximum number of stops allowed in a path (excluding start and end), used for filtering reasonable paths
+
+# --- Geographic distance helpers --- #
+const EARTH_RADIUS_KM = 6371.0
+deg2rad(deg) = deg * (pi/180)
+function haversine(lon1, lat1, lon2, lat2)
+    φ1 = deg2rad(lat1); φ2 = deg2rad(lat2)
+    Δφ = deg2rad(lat2 - lat1); Δλ = deg2rad(lon2 - lon1)
+    a = sin(Δφ/2)^2 + cos(φ1)*cos(φ2)*sin(Δλ/2)^2
+    return 2 * EARTH_RADIUS_KM * asin(min(1, sqrt(a)))
+end
 
 # ---- Airport Data ---- #
 N_i = Dict(i => String[] for i in keys(airport_coords))
@@ -61,8 +72,12 @@ P = []
 g = SimpleDiGraph(num_airports)
 
 # ---- Population Data ---- #
-Dist_to_airports = Dict(k => Dict(i => hypot(airport_coords[i][1]-Population_coords[k][1], 
-                                  airport_coords[i][2]-Population_coords[k][2]) for i in N) for k in keys(Population_coords))
+Dist_to_airports = Dict(k => Dict(i => begin
+            ax, ay = airport_coords[i]
+            px, py = Population_coords[k]
+            # assume stored as (lon, lat)
+            haversine(ax, ay, px, py)
+        end for i in N) for k in keys(Population_coords))
                                
 idx_Population = Dict(name => i for (i, name) in enumerate(keys(Population_coords)))
 rev_idx_Population = Dict(i => name for (i, name) in enumerate(keys(Population_coords)))
@@ -84,8 +99,9 @@ P_k_d = Dict{Tuple{String,String}, Vector{Vector{Int}}}() # For each (k, d), sto
 dist_matrix = zeros(num_airports, num_airports)
 for i in 1:num_airports, j in 1:num_airports
     if i != j
-        d = hypot(airport_coords[rev_idx_airport[i]][1]-airport_coords[rev_idx_airport[j]][1], 
-                  airport_coords[rev_idx_airport[i]][2]-airport_coords[rev_idx_airport[j]][2])
+        a_lon, a_lat = airport_coords[rev_idx_airport[i]]
+        b_lon, b_lat = airport_coords[rev_idx_airport[j]]
+        d = haversine(a_lon, a_lat, b_lon, b_lat)
         
         dist_matrix[i, j] = d
         if d <= tau
