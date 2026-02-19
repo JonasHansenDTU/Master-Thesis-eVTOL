@@ -28,7 +28,7 @@ Variables
 """
 # ---- Settings/Fixed values ---- #
 using JuMP, Gurobi, LinearAlgebra, Graphs, Plots
-using JSON, PyCall, GeoInterface, LibGEOS, CSV, DataFrames, Statistics
+using JSON, PyCall, GeoInterface, LibGEOS, CSV, DataFrames, Statistics, HTTP
 
 # ---- Get data ---- #
 
@@ -41,7 +41,7 @@ else
     error("Data file not found: $data_file")
 end
 
-Max_Path_Stops = 4 # Maximum number of stops allowed in a path (excluding start and end), used for filtering reasonable paths
+Max_Path_Stops = 3 # Maximum number of stops allowed in a path (excluding start and end), used for filtering reasonable paths
 
 # --- Geographic distance helpers --- #
 const EARTH_RADIUS_KM = 6371.0
@@ -51,6 +51,48 @@ function haversine(lon1, lat1, lon2, lat2)
     Δφ = deg2rad(lat2 - lat1); Δλ = deg2rad(lon2 - lon1)
     a = sin(Δφ/2)^2 + cos(φ1)*cos(φ2)*sin(Δλ/2)^2
     return 2 * EARTH_RADIUS_KM * asin(min(1, sqrt(a)))
+end
+
+function osrm_time_minutes(lat1, lon1, lat2, lon2) # Returns drive time in minutes using OSRM API
+    url = "http://router.project-osrm.org/route/v1/driving/$(lon1),$(lat1);$(lon2),$(lat2)?overview=false"
+    resp = HTTP.get(url)
+    data = JSON.parse(String(resp.body))
+    return data["routes"][1]["duration"] / 60.0
+end
+
+const DRIVE_TIME_CACHE_PATH = joinpath(@__DIR__, "Data", "drive_time_cache.csv")
+
+function drive_time_key(lat1, lon1, lat2, lon2) # Create a consistent key for drive time cache by rounding coordinates to 6 decimal places
+    return (round(lat1, digits=6), round(lon1, digits=6), round(lat2, digits=6), round(lon2, digits=6))
+end
+
+function load_drive_time_cache() # Load drive time cache from CSV if it exists, otherwise return an empty dictionary
+    if isfile(DRIVE_TIME_CACHE_PATH)
+        df = CSV.read(DRIVE_TIME_CACHE_PATH, DataFrame)
+        cache = Dict{Tuple{Float64,Float64,Float64,Float64}, Float64}()
+        for row in eachrow(df)
+            key = drive_time_key(row.lat1, row.lon1, row.lat2, row.lon2)
+            cache[key] = row.minutes
+        end
+        return cache
+    end
+    return Dict{Tuple{Float64,Float64,Float64,Float64}, Float64}()
+end
+
+function save_drive_time_cache(cache) # Save drive time cache to CSV
+    rows = [(lat1=k[1], lon1=k[2], lat2=k[3], lon2=k[4], minutes=v) for (k, v) in cache]
+    df = DataFrame(rows)
+    CSV.write(DRIVE_TIME_CACHE_PATH, df)
+end
+
+function drive_time_minutes(lat1, lon1, lat2, lon2, cache) # Get drive time from cache or call OSRM if not in cache
+    key = drive_time_key(lat1, lon1, lat2, lon2)
+    if haskey(cache, key)
+        return cache[key]
+    end
+    minutes = osrm_time_minutes(lat1, lon1, lat2, lon2)
+    cache[key] = minutes
+    return minutes
 end
 
 # ---- Airport Data ---- #
@@ -72,12 +114,34 @@ P = []
 g = SimpleDiGraph(num_airports)
 
 # ---- Population Data ---- #
-Dist_to_airports = Dict(k => Dict(i => begin
-            ax, ay = airport_coords[i]
-            px, py = Population_coords[k]
-            # assume stored as (lon, lat)
-            haversine(ax, ay, px, py)
+drive_time_cache = load_drive_time_cache()
+
+# 1) Fast pre-filter with straight-line distance
+straight_line_to_airports = Dict(k => Dict(i => begin
+            a_lat, a_lon = airport_coords[i]
+            p_lat, p_lon = Population_coords[k]
+            haversine(a_lon, a_lat, p_lon, p_lat)
         end for i in N) for k in keys(Population_coords))
+
+candidate_airports_by_population = Dict(k => begin
+    d = straight_line_to_airports[k]
+    min_d = minimum(values(d))
+    max_d = min_d * Travel_range_to_airort_factor
+    Set([airport for airport in N if d[airport] <= max_d])
+end for k in keys(Population_coords))
+
+# 2) Call OSRM only for candidate airports; set others to Inf
+Dist_to_airports = Dict(k => Dict(i => begin
+            if i in candidate_airports_by_population[k]
+                a_lat, a_lon = airport_coords[i]
+                p_lat, p_lon = Population_coords[k]
+                drive_time_minutes(a_lat, a_lon, p_lat, p_lon, drive_time_cache)
+            else
+                Inf
+            end
+        end for i in N) for k in keys(Population_coords))
+
+save_drive_time_cache(drive_time_cache)
                                
 idx_Population = Dict(name => i for (i, name) in enumerate(keys(Population_coords)))
 rev_idx_Population = Dict(i => name for (i, name) in enumerate(keys(Population_coords)))
@@ -85,9 +149,10 @@ rev_idx_Population = Dict(i => name for (i, name) in enumerate(keys(Population_c
 K = collect(keys(Population_coords))
 Closest_airports = Dict(k => begin
     distances = Dist_to_airports[k]
-    min_dist = minimum(values(distances))
+    finite_airports = [airport for airport in N if isfinite(distances[airport])]
+    min_dist = minimum(distances[airport] for airport in finite_airports)
     filter_dist = min_dist * Travel_range_to_airort_factor
-    [airport for airport in N if distances[airport] <= filter_dist]
+    [airport for airport in finite_airports if distances[airport] <= filter_dist]
 end for k in K) # For each population area, find the closest airports
 
 P_k_d = Dict{Tuple{String,String}, Vector{Vector{Int}}}() # For each (k, d), store the reasonable paths from k to d
@@ -326,7 +391,7 @@ function plot_simple()
     savefig(plt, joinpath(outdir, "solution_plot_$(Data_file_name).png"))
 end
 
-plot_simple()
+# plot_simple()
 
 
 ## ---- Folium Map Visualization ---- #
