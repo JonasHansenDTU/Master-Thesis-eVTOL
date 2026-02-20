@@ -26,60 +26,60 @@ function save_folium_map(
     for (name, (lat, lon)) in airport_coords
         if name in destination_airports
             if name in charging_airports
-                flm.RegularPolygonMarker(
+                flm.CircleMarker(
                     [lat, lon],
-                    number_of_sides=4,
                     radius=8,
-                    color="#991b1b",
+                    color="#7a4f01",
                     fill=true,
-                    fill_color="#ef4444",
-                    fill_opacity=0.95,
-                    popup=name
+                    fill_color="#f59e0b",
+                    fill_opacity=0.98,
+                    popup="Type: Charging + destination airport<br>Name: $(name)"
                 ).add_to(m)
             else
-                flm.RegularPolygonMarker(
+                flm.CircleMarker(
                     [lat, lon],
-                    number_of_sides=4,
                     radius=7,
-                    color="#1d4ed8",
+                    color="#5b21b6",
                     fill=true,
-                    fill_color="#3b82f6",
-                    fill_opacity=0.9,
-                    popup=name
+                    fill_color="#8b5cf6",
+                    fill_opacity=0.95,
+                    popup="Type: Destination airport<br>Name: $(name)"
                 ).add_to(m)
             end
         elseif name in charging_airports
             flm.CircleMarker(
                 [lat, lon],
-                radius=6,
-                color="#991b1b",
+                radius=7,
+                color="#14532d",
                 fill=true,
-                fill_color="#ef4444",
+                fill_color="#22c55e",
                 fill_opacity=0.95,
-                popup=name
+                popup="Type: Charging airport<br>Name: $(name)"
             ).add_to(m)
         else
             flm.CircleMarker(
                 [lat, lon],
                 radius=4,
-                color="#1d4ed8",
+                color="#0f766e",
                 fill=true,
-                fill_color="#3b82f6",
-                fill_opacity=0.9,
-                popup=name
+                fill_color="#14b8a6",
+                fill_opacity=0.92,
+                popup="Type: Airport<br>Name: $(name)"
             ).add_to(m)
         end
     end
 
     for (name, (lat, lon)) in Population_coords
-        flm.CircleMarker(
+        flm.RegularPolygonMarker(
             [lat, lon],
-            radius=5,
-            color="#c2410c",
+            number_of_sides=4,
+            radius=7,
+            rotation=45,
+            color="#9a3412",
             fill=true,
-            fill_color="#f97316",
-            fill_opacity=0.9,
-            popup=name
+            fill_color="#fb923c",
+            fill_opacity=0.88,
+            popup="Type: Population<br>Name: $(name)"
         ).add_to(m)
     end
 
@@ -98,6 +98,30 @@ function save_folium_map(
             dash_array="5,5"
         ).add_to(m)
     end
+
+    legend_html = """
+    <div style="
+        position: fixed;
+        bottom: 24px;
+        left: 24px;
+        z-index: 9999;
+        background: white;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        padding: 10px 12px;
+        font-size: 13px;
+        line-height: 1.5;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+    ">
+        <div style="font-weight: 600; margin-bottom: 6px;">Markers</div>
+        <div><span style="color:#fb923c;">◆</span> Population</div>
+        <div><span style="color:#14b8a6;">●</span> Airport</div>
+        <div><span style="color:#22c55e;">●</span> Charging airport</div>
+        <div><span style="color:#8b5cf6;">●</span> Destination airport</div>
+        <div><span style="color:#f59e0b;">●</span> Charging + destination</div>
+    </div>
+    """
+    m.get_root().html.add_child(flm.Element(legend_html))
 
     m.save("map.html")
 end
