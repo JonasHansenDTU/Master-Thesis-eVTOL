@@ -32,7 +32,7 @@ using JSON, PyCall, GeoInterface, LibGEOS, CSV, DataFrames, Statistics, HTTP
 
 # ---- Get data ---- #
 
-Data_file_name = "Denmark_FictiveData_LonLat1.jl" # Change this to "BiggerData.jl" for the larger dataset
+Data_file_name = "Denmark_FictiveData_LonLat.jl" # Change this to "BiggerData.jl" for the larger dataset
 
 data_file = get(ENV, "MODEL_DATA", joinpath(@__DIR__, "Data", Data_file_name))
 if isfile(data_file)
@@ -412,5 +412,5 @@ for k in K
     end
 end
 
-#Done
 save_folium_map(airport_coords, Population_coords, routes, charging_airports, population_links, D)
+
