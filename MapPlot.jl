@@ -24,47 +24,44 @@ function save_folium_map(
     m = flm.Map(location=[latitude_mean, longitude_mean], zoom_start=5, tiles="CartoDB positron")
 
     for (name, (lat, lon)) in airport_coords
-        if name in destination_airports
-            if name in charging_airports
-                flm.CircleMarker(
-                    [lat, lon],
-                    radius=8,
-                    color="#7a4f01",
-                    fill=true,
-                    fill_color="#f59e0b",
-                    fill_opacity=0.98,
-                    popup="Type: Charging + destination airport<br>Name: $(name)"
-                ).add_to(m)
-            else
-                flm.CircleMarker(
-                    [lat, lon],
-                    radius=7,
-                    color="#5b21b6",
-                    fill=true,
-                    fill_color="#8b5cf6",
-                    fill_opacity=0.95,
-                    popup="Type: Destination airport<br>Name: $(name)"
-                ).add_to(m)
-            end
-        elseif name in charging_airports
+        is_destination = name in destination_airports
+        is_charging = name in charging_airports
+        border_color = is_destination ? "#000000" : (is_charging ? "#7f1d1d" : "#991b1b")
+        border_weight = is_destination ? 2 : 1
+
+        if is_charging
             flm.CircleMarker(
                 [lat, lon],
                 radius=7,
-                color="#14532d",
+                color=border_color,
+                weight=border_weight,
                 fill=true,
-                fill_color="#22c55e",
+                fill_color="#ef4444",
                 fill_opacity=0.95,
-                popup="Type: Charging airport<br>Name: $(name)"
+                popup=is_destination ? "Type: Charging airport (Destination)<br>Name: $(name)" : "Type: Charging airport<br>Name: $(name)"
             ).add_to(m)
         else
             flm.CircleMarker(
                 [lat, lon],
                 radius=4,
-                color="#0f766e",
+                color=border_color,
+                weight=border_weight,
                 fill=true,
-                fill_color="#14b8a6",
+                fill_color="#fca5a5",
                 fill_opacity=0.92,
-                popup="Type: Airport<br>Name: $(name)"
+                popup=is_destination ? "Type: Airport (Destination)<br>Name: $(name)" : "Type: Airport<br>Name: $(name)"
+            ).add_to(m)
+        end
+
+        if is_destination
+            flm.Marker(
+                [lat, lon],
+                icon=flm.DivIcon(
+                    html="<div style='width: 14px; height: 14px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; color: #000000;'>✕</div>",
+                    icon_size=(14, 14),
+                    icon_anchor=(7, 7),
+                    class_name="destination-cross"
+                )
             ).add_to(m)
         end
     end
@@ -73,18 +70,18 @@ function save_folium_map(
         flm.RegularPolygonMarker(
             [lat, lon],
             number_of_sides=4,
-            radius=7,
+            radius=5,
             rotation=45,
-            color="#9a3412",
+            color="#7f1d1d",
             fill=true,
-            fill_color="#fb923c",
+            fill_color="#dc2626",
             fill_opacity=0.88,
             popup="Type: Population<br>Name: $(name)"
         ).add_to(m)
     end
 
     for route in routes
-        flm.PolyLine(route, color="#1f77b4", weight=2, opacity=0.8).add_to(m)
+        flm.PolyLine(route, color="#000000", weight=1, opacity=0.70).add_to(m)
     end
 
     for (pop, airport) in population_links
@@ -92,8 +89,8 @@ function save_folium_map(
         airport_lat, airport_lon = airport_coords[airport]
         flm.PolyLine(
             [(pop_lat, pop_lon), (airport_lat, airport_lon)],
-            color="#2ca02c",
-            weight=1,
+            color="#000000",
+            weight=0.8,
             opacity=0.6,
             dash_array="5,5"
         ).add_to(m)
@@ -102,8 +99,8 @@ function save_folium_map(
     legend_html = """
     <div style="
         position: fixed;
-        bottom: 24px;
-        left: 24px;
+        top: 24px;
+        right: 24px;
         z-index: 9999;
         background: white;
         border: 1px solid #d1d5db;
@@ -114,11 +111,10 @@ function save_folium_map(
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
     ">
         <div style="font-weight: 600; margin-bottom: 6px;">Markers</div>
-        <div><span style="color:#fb923c;">◆</span> Population</div>
-        <div><span style="color:#14b8a6;">●</span> Airport</div>
-        <div><span style="color:#22c55e;">●</span> Charging airport</div>
-        <div><span style="color:#8b5cf6;">●</span> Destination airport</div>
-        <div><span style="color:#f59e0b;">●</span> Charging + destination</div>
+        <div><span style="color:#dc2626;">◆</span> Population</div>
+        <div><span style="color:#fca5a5;">●</span> Airport</div>
+        <div><span style="color:#ef4444;">●</span> Charging airport</div>
+        <div><span style="color:#111827;">⊗</span> Black border + cross = Destination airport</div>
     </div>
     """
     m.get_root().html.add_child(flm.Element(legend_html))
