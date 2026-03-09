@@ -7,7 +7,7 @@
 # Simple Julia example
 
 # Simple calculation
-x = 10
+x = 30
 y = 20
-result = x + y
-println("Sum: $result")
+result = x * y
+println("Product: $result")
