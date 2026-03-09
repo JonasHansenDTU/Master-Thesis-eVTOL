@@ -10,4 +10,4 @@
 x = 30
 y = 20
 result = x + y7p
-println("Sum: $result")
+println("Sum is: $result")
