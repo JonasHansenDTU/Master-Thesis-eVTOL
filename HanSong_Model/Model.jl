@@ -335,10 +335,10 @@ function build_model(excel_file::String)
     @variable(model, u[m in M, n in N] >= 0)
 
     # dep[m,n] = departure time of operation m of eVTOL n
-    @variable(model, dep[m in M, n in N] >= 0)
+    @variable(model, dep[m in M, n in N] >= 0, Int)
 
     # arr[m,n] = arrival time of operation m of eVTOL n
-    @variable(model, arr[m in M, n in N] >= 0)
+    @variable(model, arr[m in M, n in N] >= 0, Int)
 
     ###########################################################################
     # Initialization helpers (operation 0 should not be an actual flown trip)
@@ -510,12 +510,12 @@ function build_model(excel_file::String)
 
     # (6.31) Arrival time lower bound
     @constraint(model, [i in V, j in V, m in M_no0, n in N],
-        arr[m,n] >= arr[m-1,n] + (te + rt[(i,j)]) * x[i,j,m,n]
+    arr[m,n] >= arr[m-1,n] + (te + rt_int[(i,j)]) * x[i,j,m,n]
     )
 
     # (6.32) Departure time = arrival time - travel time
     @constraint(model, [m in M, n in N],
-        dep[m,n] == arr[m,n] - sum(rt[(i,j)] * x[i,j,m,n] for i in V, j in V)
+    dep[m,n] == arr[m,n] - sum(rt_int[(i,j)] * x[i,j,m,n] for i in V, j in V)
     )
 
     # (6.33) Minimum layover time
@@ -556,7 +556,7 @@ function build_model(excel_file::String)
 
     # (6.39) Departure time bound from occupancy
     @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
-        dep[m,n] <= t + L * (1 - is_o[i,j,m,n,t]) 
+        dep[m,n] <= t + L * (1 - is_o[i,j,m,n,t]) - 1
     )
 
     # (6.40) Arrival time bound from occupancy
@@ -669,5 +669,21 @@ for n in N, m in M, i in V, j in V, t in T
     val = value(model[:is_o][i,j,m,n,t])
     if val != 0 
         println("  is_o[$i,$j,$m,$n,$t] = ", val)
+    end
+end
+
+println("\ns[a,m,n] values:")
+for a in A, n in N, m in M
+    val = value(model[:s][a,m,n])
+    if val != 0 
+        println("  a[$a,$m,$n] = ", val)
+    end
+end
+
+println("\nss[a,n] values:")
+for a in A, n in N
+    val = value(model[:ss][a,n])
+    if val != 0 
+        println("ss[$a,$n] = ", val)
     end
 end
