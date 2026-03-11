@@ -85,8 +85,8 @@ function load_data(excel_file::String)
     ###########################################################################
     # Read sheets
     ###########################################################################
-    infra = read_sheet(excel_file, "Infrastructure")
-    pax   = read_sheet(excel_file, "PassengerGroups")
+    infra = read_sheet(excel_file, "Infrastructure (2)")
+    pax   = read_sheet(excel_file, "PassengerGroups (2)")
 
     ###########################################################################
     # Infrastructure columns
@@ -137,8 +137,8 @@ function load_data(excel_file::String)
     VP = sort(Int.(infra[lowercase.(String.(infra[!, type_col])) .== "vertiport", id_col]))
     VS = sort(Int.(infra[lowercase.(String.(infra[!, type_col])) .== "vertistop", id_col]))
 
-    N = 1:4
-    vb = Dict(1 => 1, 2 => 1, 3 => 2, 4 => 2)
+    N = 1:1
+    vb = Dict(1 => 1)
 
     M = 0:5
     M_no0 = 1:maximum(M)
@@ -166,8 +166,8 @@ function load_data(excel_file::String)
     ec                    = 5.0      # 5% battery charged per unit time
     te                    = 10.0     # minimum turnaround time at vertiport
     w                     = 10.0     # maximum waiting time
-    ET                    = 500      # end time
-    L                     = 10_000.0 # default Big-M
+    ET                    = 120      # end time
+    L                     = 1000000.0  # default Big-M
 
     ###########################################################################
     # Node coordinates and parking capacities
@@ -556,7 +556,7 @@ function build_model(excel_file::String)
 
     # (6.39) Departure time bound from occupancy
     @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
-        dep[m,n] <= t + L * (1 - is_o[i,j,m,n,t]) - 1
+        dep[m,n] <= t + L * (1 - is_o[i,j,m,n,t]) 
     )
 
     # (6.40) Arrival time bound from occupancy
@@ -660,4 +660,14 @@ println("\nArrival/departure times:")
 for n in N, m in M
     println("  eVTOL $n, op $m: dep = ", value(model[:dep][m,n]),
             ", arr = ", value(model[:arr][m,n]))
+end
+
+T = 0:120
+
+println("\nis_o[i,j,m,n,t] values:")
+for n in N, m in M, i in V, j in V, t in T
+    val = value(model[:is_o][i,j,m,n,t])
+    if val != 0 
+        println("  is_o[$i,$j,$m,$n,$t] = ", val)
+    end
 end
