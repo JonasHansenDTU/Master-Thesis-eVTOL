@@ -140,7 +140,7 @@ function load_data(excel_file::String)
     N = 1:1
     vb = Dict(1 => 1)
 
-    M = 0:2
+    M = 0:5
     M_no0 = 1:maximum(M)
     M_mid = 1:(maximum(M)-1)
 
@@ -167,7 +167,7 @@ function load_data(excel_file::String)
     te                    = 10.0     # minimum turnaround time at vertiport
     w                     = 10.0     # maximum waiting time
     ET                    = 120      # end time
-    L                     = 10000.0  # default Big-M
+    L                     = 1000000.0  # default Big-M
 
     ###########################################################################
     # Node coordinates and parking capacities
@@ -556,7 +556,7 @@ function build_model(excel_file::String)
 
     # (6.39) Departure time bound from occupancy
     @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
-        dep[m,n] <= t + L * (1 - is_o[i,j,m,n,t])
+        dep[m,n] <= t + L * (1 - is_o[i,j,m,n,t]) 
     )
 
     # (6.40) Arrival time bound from occupancy
@@ -662,8 +662,10 @@ for n in N, m in M
             ", arr = ", value(model[:arr][m,n]))
 end
 
+T = 0:120
+
 println("\nis_o[i,j,m,n,t] values:")
-for n in N, m in M, i in I, j in J, t in T
+for n in N, m in M, i in V, j in V, t in T
     val = value(model[:is_o][i,j,m,n,t])
     if val != 0 
         println("  is_o[$i,$j,$m,$n,$t] = ", val)
