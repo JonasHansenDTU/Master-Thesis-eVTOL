@@ -85,8 +85,8 @@ function load_data(excel_file::String)
     ###########################################################################
     # Read sheets
     ###########################################################################
-    infra = read_sheet(excel_file, "Infrastructure (2)")
-    pax   = read_sheet(excel_file, "PassengerGroups (2)")
+    infra = read_sheet(excel_file, "Infrastructure")
+    pax   = read_sheet(excel_file, "PassengerGroups")
 
     ###########################################################################
     # Infrastructure columns
@@ -137,8 +137,8 @@ function load_data(excel_file::String)
     VP = sort(Int.(infra[lowercase.(String.(infra[!, type_col])) .== "vertiport", id_col]))
     VS = sort(Int.(infra[lowercase.(String.(infra[!, type_col])) .== "vertistop", id_col]))
 
-    N = 1:1
-    vb = Dict(1 => 1)
+    N = 1:4
+    vb = Dict(1 => 1, 2 => 1, 3 => 2, 4 => 2)
 
     M = 0:5
     M_no0 = 1:maximum(M)
@@ -199,8 +199,7 @@ function load_data(excel_file::String)
     fs   = Dict{Tuple{Int,Int},Float64}()
     c    = Dict{Tuple{Int,Int},Float64}()
     e    = Dict{Tuple{Int,Int},Float64}()
-    rt   = Dict{Tuple{Int,Int},Float64}()
-    rt_int = Dict{Tuple{Int,Int},Int}()
+    rt   = Dict{Tuple{Int,Int},Int}()
 
     for i in V, j in V
         dij = haversine_km(lat[i], lon[i], lat[j], lon[j])
@@ -209,8 +208,7 @@ function load_data(excel_file::String)
         fs[(i,j)] = fare_stopover_factor * fd[(i,j)]
         c[(i,j)]  = operating_cost_per_km * dij
         e[(i,j)]  = battery_per_km * dij
-        rt[(i,j)] = time_per_km * dij
-        rt_int[(i,j)] = Int(ceil(rt[(i,j)]))   # discretized travel time for time-indexed constraints
+        rt[(i,j)] = Int(ceil(time_per_km * dij)) 
     end
 
     ###########################################################################
@@ -248,7 +246,7 @@ function load_data(excel_file::String)
         M = collect(M), M_no0 = collect(M_no0), M_mid = collect(M_mid),
         T = collect(T), T_no0 = collect(T_no0),
         vb = vb,
-        dist = dist, fd = fd, fs = fs, c = c, e = e, rt = rt, rt_int = rt_int,
+        dist = dist, fd = fd, fs = fs, c = c, e = e, rt = rt,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
         cap_node = cap_node, cap_flt = cap_flt, cap_u = cap_u,
         bmax = bmax, bmin = bmin, ec = ec, te = te, w = w, ET = ET, L = L
@@ -280,7 +278,6 @@ function build_model(excel_file::String)
     c  = data.c
     e  = data.e
     rt = data.rt
-    rt_int = data.rt_int
     d  = data.d
     op = data.op
     dp = data.dp
@@ -335,10 +332,10 @@ function build_model(excel_file::String)
     @variable(model, u[m in M, n in N] >= 0)
 
     # dep[m,n] = departure time of operation m of eVTOL n
-    @variable(model, dep[m in M, n in N] >= 0, Int)
+    @variable(model, dep[m in M, n in N] >= 0)
 
     # arr[m,n] = arrival time of operation m of eVTOL n
-    @variable(model, arr[m in M, n in N] >= 0, Int)
+    @variable(model, arr[m in M, n in N] >= 0)
 
     ###########################################################################
     # Initialization helpers (operation 0 should not be an actual flown trip)
@@ -510,12 +507,12 @@ function build_model(excel_file::String)
 
     # (6.31) Arrival time lower bound
     @constraint(model, [i in V, j in V, m in M_no0, n in N],
-    arr[m,n] >= arr[m-1,n] + (te + rt_int[(i,j)]) * x[i,j,m,n]
+    arr[m,n] >= arr[m-1,n] + (te + rt[(i,j)]) * x[i,j,m,n]
     )
 
     # (6.32) Departure time = arrival time - travel time
     @constraint(model, [m in M, n in N],
-    dep[m,n] == arr[m,n] - sum(rt_int[(i,j)] * x[i,j,m,n] for i in V, j in V)
+    dep[m,n] == arr[m,n] - sum(rt[(i,j)] * x[i,j,m,n] for i in V, j in V)
     )
 
     # (6.33) Minimum layover time
@@ -551,7 +548,7 @@ function build_model(excel_file::String)
 
     # (6.38) Travel time occupancy relation
     @constraint(model, [i in V, j in V, m in M, n in N],
-        rt_int[(i,j)] * x[i,j,m,n] == sum(is_o[i,j,m,n,t] for t in T)
+        rt[(i,j)] * x[i,j,m,n] == sum(is_o[i,j,m,n,t] for t in T)
     )
 
     # (6.39) Departure time bound from occupancy
