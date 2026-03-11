@@ -1,0 +1,1792 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_0ed73439a3041d016f5a4c477920b924 {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+
+            <style>html, body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            </style>
+
+            <style>#map {
+                position:absolute;
+                top:0;
+                bottom:0;
+                right:0;
+                left:0;
+                }
+            </style>
+
+            <script>
+                L_NO_TOUCH = false;
+                L_DISABLE_3D = false;
+            </script>
+
+        
+</head>
+<body>
+    
+    
+            <div class="folium-map" id="map_0ed73439a3041d016f5a4c477920b924" ></div>
+        
+</body>
+<script>
+    
+    
+            var map_0ed73439a3041d016f5a4c477920b924 = L.map(
+                "map_0ed73439a3041d016f5a4c477920b924",
+                {
+                    center: [55.70795561, 11.00213121],
+                    crs: L.CRS.EPSG3857,
+                    ...{
+  "zoom": 7,
+  "zoomControl": true,
+  "preferCanvas": false,
+}
+
+                }
+            );
+
+            
+
+        
+    
+            var tile_layer_061d0767bf9b263a4b7c19a5589ec797 = L.tileLayer(
+                "https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png",
+                {
+  "minZoom": 0,
+  "maxZoom": 20,
+  "maxNativeZoom": 20,
+  "noWrap": false,
+  "attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors \u0026copy; \u003ca href=\"https://carto.com/attributions\"\u003eCARTO\u003c/a\u003e",
+  "subdomains": "abcd",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            tile_layer_061d0767bf9b263a4b7c19a5589ec797.addTo(map_0ed73439a3041d016f5a4c477920b924);
+        
+    
+            var feature_group_56f80fff2bb177fac2a26e5389670b66 = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var circle_marker_f5cdf82e9a36b72e2a95dd4e08d5eb7c = L.circleMarker(
+                [57.0429609, 9.9167688],
+                {"bubblingMouseEvents": true, "color": "black", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "black", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 2, "stroke": true, "weight": 3}
+            ).addTo(feature_group_56f80fff2bb177fac2a26e5389670b66);
+        
+    
+        var popup_0965f6641a2231f9e79445df4e8095e2 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_de3cad19548e47395a4541194968abd9 = $(`<div id="html_de3cad19548e47395a4541194968abd9" style="width: 100.0%; height: 100.0%;">Aalborg</div>`)[0];
+                popup_0965f6641a2231f9e79445df4e8095e2.setContent(html_de3cad19548e47395a4541194968abd9);
+            
+        
+
+        circle_marker_f5cdf82e9a36b72e2a95dd4e08d5eb7c.bindPopup(popup_0965f6641a2231f9e79445df4e8095e2)
+        ;
+
+        
+    
+    
+            var circle_marker_55d7a297b993f1dac3f088e85a89729a = L.circleMarker(
+                [56.1497091, 10.2039136],
+                {"bubblingMouseEvents": true, "color": "black", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "black", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 2, "stroke": true, "weight": 3}
+            ).addTo(feature_group_56f80fff2bb177fac2a26e5389670b66);
+        
+    
+        var popup_10a7fd446f63137f9a3c2518f9fb8957 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_01301478404487e5f8d21eae6ff51f84 = $(`<div id="html_01301478404487e5f8d21eae6ff51f84" style="width: 100.0%; height: 100.0%;">Aarhus H</div>`)[0];
+                popup_10a7fd446f63137f9a3c2518f9fb8957.setContent(html_01301478404487e5f8d21eae6ff51f84);
+            
+        
+
+        circle_marker_55d7a297b993f1dac3f088e85a89729a.bindPopup(popup_10a7fd446f63137f9a3c2518f9fb8957)
+        ;
+
+        
+    
+    
+            var circle_marker_b7eb0bf3745d5f3cb420bef4c3556553 = L.circleMarker(
+                [55.7155286, 11.7080223],
+                {"bubblingMouseEvents": true, "color": "black", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "black", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 2, "stroke": true, "weight": 3}
+            ).addTo(feature_group_56f80fff2bb177fac2a26e5389670b66);
+        
+    
+        var popup_7b49e759f204a44b4e04678fb1240fb4 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_7be3112bb03c05ca41de51208a686439 = $(`<div id="html_7be3112bb03c05ca41de51208a686439" style="width: 100.0%; height: 100.0%;">Holbæk</div>`)[0];
+                popup_7b49e759f204a44b4e04678fb1240fb4.setContent(html_7be3112bb03c05ca41de51208a686439);
+            
+        
+
+        circle_marker_b7eb0bf3745d5f3cb420bef4c3556553.bindPopup(popup_7b49e759f204a44b4e04678fb1240fb4)
+        ;
+
+        
+    
+    
+            var circle_marker_a36534466783a15e61e651f4c46543de = L.circleMarker(
+                [55.6721858, 12.564607],
+                {"bubblingMouseEvents": true, "color": "black", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "black", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 2, "stroke": true, "weight": 3}
+            ).addTo(feature_group_56f80fff2bb177fac2a26e5389670b66);
+        
+    
+        var popup_c563dc52e62ee01b1498dbb79a62174f = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_1428d9ed6d43f824a2b29f6a69bc136d = $(`<div id="html_1428d9ed6d43f824a2b29f6a69bc136d" style="width: 100.0%; height: 100.0%;">København H</div>`)[0];
+                popup_c563dc52e62ee01b1498dbb79a62174f.setContent(html_1428d9ed6d43f824a2b29f6a69bc136d);
+            
+        
+
+        circle_marker_a36534466783a15e61e651f4c46543de.bindPopup(popup_c563dc52e62ee01b1498dbb79a62174f)
+        ;
+
+        
+    
+    
+            var circle_marker_9b1c70a98b2dfa9ef3dcc799577b1e1f = L.circleMarker(
+                [55.3138856, 10.8035012],
+                {"bubblingMouseEvents": true, "color": "black", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "black", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 2, "stroke": true, "weight": 3}
+            ).addTo(feature_group_56f80fff2bb177fac2a26e5389670b66);
+        
+    
+        var popup_f3f06eda060e0e1c12d9e649b8cfc0c1 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_19c81f28ac14a73b33419fc3b2227665 = $(`<div id="html_19c81f28ac14a73b33419fc3b2227665" style="width: 100.0%; height: 100.0%;">Nyborg</div>`)[0];
+                popup_f3f06eda060e0e1c12d9e649b8cfc0c1.setContent(html_19c81f28ac14a73b33419fc3b2227665);
+            
+        
+
+        circle_marker_9b1c70a98b2dfa9ef3dcc799577b1e1f.bindPopup(popup_f3f06eda060e0e1c12d9e649b8cfc0c1)
+        ;
+
+        
+    
+    
+            var circle_marker_c8a9cfb13fd433f36443a896d8851cd8 = L.circleMarker(
+                [55.2311888, 11.7670814],
+                {"bubblingMouseEvents": true, "color": "black", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "black", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 2, "stroke": true, "weight": 3}
+            ).addTo(feature_group_56f80fff2bb177fac2a26e5389670b66);
+        
+    
+        var popup_6acb6f3425b59b35eba655191f1da4ce = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_6b6aa799e8dbd20ce09b27ecc05a0f23 = $(`<div id="html_6b6aa799e8dbd20ce09b27ecc05a0f23" style="width: 100.0%; height: 100.0%;">Næstved</div>`)[0];
+                popup_6acb6f3425b59b35eba655191f1da4ce.setContent(html_6b6aa799e8dbd20ce09b27ecc05a0f23);
+            
+        
+
+        circle_marker_c8a9cfb13fd433f36443a896d8851cd8.bindPopup(popup_6acb6f3425b59b35eba655191f1da4ce)
+        ;
+
+        
+    
+    
+            var circle_marker_afe15b48dfc260a56fc4f50cc4ecc8ea = L.circleMarker(
+                [55.4018379, 10.3861989],
+                {"bubblingMouseEvents": true, "color": "black", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "black", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 2, "stroke": true, "weight": 3}
+            ).addTo(feature_group_56f80fff2bb177fac2a26e5389670b66);
+        
+    
+        var popup_359b26b13c1210a17c9829991950d3ed = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_ba5d08e042377b873f32a086f63e852f = $(`<div id="html_ba5d08e042377b873f32a086f63e852f" style="width: 100.0%; height: 100.0%;">Odense</div>`)[0];
+                popup_359b26b13c1210a17c9829991950d3ed.setContent(html_ba5d08e042377b873f32a086f63e852f);
+            
+        
+
+        circle_marker_afe15b48dfc260a56fc4f50cc4ecc8ea.bindPopup(popup_359b26b13c1210a17c9829991950d3ed)
+        ;
+
+        
+    
+    
+            var circle_marker_87174a4b2e61b6e187b3cddd4f66c1af = L.circleMarker(
+                [55.4380663, 11.7860978],
+                {"bubblingMouseEvents": true, "color": "black", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "black", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 2, "stroke": true, "weight": 3}
+            ).addTo(feature_group_56f80fff2bb177fac2a26e5389670b66);
+        
+    
+        var popup_5227b64cf6322682693f8df18386abbf = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_9637b6fc6a12e6322a8c454096b8a0c3 = $(`<div id="html_9637b6fc6a12e6322a8c454096b8a0c3" style="width: 100.0%; height: 100.0%;">Ringsted</div>`)[0];
+                popup_5227b64cf6322682693f8df18386abbf.setContent(html_9637b6fc6a12e6322a8c454096b8a0c3);
+            
+        
+
+        circle_marker_87174a4b2e61b6e187b3cddd4f66c1af.bindPopup(popup_5227b64cf6322682693f8df18386abbf)
+        ;
+
+        
+    
+    
+            var circle_marker_81fbf4dd0de0f84fffb1fa4b29532990 = L.circleMarker(
+                [55.4075014, 11.3485562],
+                {"bubblingMouseEvents": true, "color": "black", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "black", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 2, "stroke": true, "weight": 3}
+            ).addTo(feature_group_56f80fff2bb177fac2a26e5389670b66);
+        
+    
+        var popup_467b65f21fe8ff7183c832ddcab295c4 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_b5142085ff9f5ea19f4470dd689e00b1 = $(`<div id="html_b5142085ff9f5ea19f4470dd689e00b1" style="width: 100.0%; height: 100.0%;">Slagelse</div>`)[0];
+                popup_467b65f21fe8ff7183c832ddcab295c4.setContent(html_b5142085ff9f5ea19f4470dd689e00b1);
+            
+        
+
+        circle_marker_81fbf4dd0de0f84fffb1fa4b29532990.bindPopup(popup_467b65f21fe8ff7183c832ddcab295c4)
+        ;
+
+        
+    
+    
+            var circle_marker_0796c4c8452ae35c99aa2bd851dc3c45 = L.circleMarker(
+                [55.7066917, 9.5365649],
+                {"bubblingMouseEvents": true, "color": "black", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "black", "fillOpacity": 0.9, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 2, "stroke": true, "weight": 3}
+            ).addTo(feature_group_56f80fff2bb177fac2a26e5389670b66);
+        
+    
+        var popup_397cce7935cd56f967af14d750cfce3c = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_aee3a69d2c79fcc193323838ae7aba30 = $(`<div id="html_aee3a69d2c79fcc193323838ae7aba30" style="width: 100.0%; height: 100.0%;">Vejle</div>`)[0];
+                popup_397cce7935cd56f967af14d750cfce3c.setContent(html_aee3a69d2c79fcc193323838ae7aba30);
+            
+        
+
+        circle_marker_0796c4c8452ae35c99aa2bd851dc3c45.bindPopup(popup_397cce7935cd56f967af14d750cfce3c)
+        ;
+
+        
+    
+    
+            feature_group_56f80fff2bb177fac2a26e5389670b66.addTo(map_0ed73439a3041d016f5a4c477920b924);
+        
+    
+            var feature_group_890c8121e30a85444337df9f1785aa20 = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var poly_line_97b7d86420d72c1b73415c4668090eb9 = L.polyline(
+                [[55.6721858, 12.564607], [55.4018379, 10.3861989]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.7000000000000001, "smoothFactor": 1.0, "stroke": true, "weight": 7.0}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_97b7d86420d72c1b73415c4668090eb9.bindTooltip(
+                `<div>
+                     København H → Odense: 568,503
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_5da5b41d7d1c89d1a57d815dd57f5128 = L.polyline(
+                [[56.1497091, 10.2039136], [55.6721858, 12.564607]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.6353119546200785, "smoothFactor": 1.0, "stroke": true, "weight": 6.2943122322190375}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_5da5b41d7d1c89d1a57d815dd57f5128.bindTooltip(
+                `<div>
+                     Aarhus H → København H: 251,889
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_0c01e8a50197024ae27048013a635b29 = L.polyline(
+                [[55.6721858, 12.564607], [55.7155286, 11.7080223]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.6310321233718507, "smoothFactor": 1.0, "stroke": true, "weight": 6.247623164056552}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_0c01e8a50197024ae27048013a635b29.bindTooltip(
+                `<div>
+                     København H → Holbæk: 238,682
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_383a1b37d182c6ef7700484b9261cbb7 = L.polyline(
+                [[55.6721858, 12.564607], [55.4075014, 11.3485562]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.6274984291334882, "smoothFactor": 1.0, "stroke": true, "weight": 6.2090737723653255}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_383a1b37d182c6ef7700484b9261cbb7.bindTooltip(
+                `<div>
+                     København H → Slagelse: 228,301
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_c61fb5725f3aaa24401db576e98b99d1 = L.polyline(
+                [[55.6721858, 12.564607], [55.4380663, 11.7860978]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.6258268867612266, "smoothFactor": 1.0, "stroke": true, "weight": 6.190838764667926}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_c61fb5725f3aaa24401db576e98b99d1.bindTooltip(
+                `<div>
+                     København H → Ringsted: 223,549
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_657e0c6a12977bdf770a2504dec2d1f0 = L.polyline(
+                [[55.6721858, 12.564607], [55.2311888, 11.7670814]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.6181153202558408, "smoothFactor": 1.0, "stroke": true, "weight": 6.1067125846091725}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_657e0c6a12977bdf770a2504dec2d1f0.bindTooltip(
+                `<div>
+                     København H → Næstved: 202,875
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_e452fc1527b638d929be4a7552f0dffe = L.polyline(
+                [[57.0429609, 9.9167688], [56.1497091, 10.2039136]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.6160285690313893, "smoothFactor": 1.0, "stroke": true, "weight": 6.083948025796973}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_e452fc1527b638d929be4a7552f0dffe.bindTooltip(
+                `<div>
+                     Aalborg → Aarhus H: 197,617
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_b66eb567f2419b32e9fa21bf8d9f42a4 = L.polyline(
+                [[55.6721858, 12.564607], [55.3138856, 10.8035012]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.6142667608249537, "smoothFactor": 1.0, "stroke": true, "weight": 6.064728299908586}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_b66eb567f2419b32e9fa21bf8d9f42a4.bindTooltip(
+                `<div>
+                     København H → Nyborg: 193,284
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_07b944f70d4f019e432bf6802d436e3f = L.polyline(
+                [[56.1497091, 10.2039136], [55.7066917, 9.5365649]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.6114065599180127, "smoothFactor": 1.0, "stroke": true, "weight": 6.033526108196502}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_07b944f70d4f019e432bf6802d436e3f.bindTooltip(
+                `<div>
+                     Aarhus H → Vejle: 186,451
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_1f1903bc5e7764fa4bf04703db572317 = L.polyline(
+                [[55.4018379, 10.3861989], [55.4075014, 11.3485562]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5891626882611388, "smoothFactor": 1.0, "stroke": true, "weight": 5.790865690121514}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_1f1903bc5e7764fa4bf04703db572317.bindTooltip(
+                `<div>
+                     Odense → Slagelse: 140,929
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_5727549f97536c97805cb3f6fd19daaa = L.polyline(
+                [[56.1497091, 10.2039136], [55.4018379, 10.3861989]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5663421932955764, "smoothFactor": 1.0, "stroke": true, "weight": 5.541914835951743}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_5727549f97536c97805cb3f6fd19daaa.bindTooltip(
+                `<div>
+                     Aarhus H → Odense: 105,751
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_727dd400d77e900dd00d365cad5dd5da = L.polyline(
+                [[55.7066917, 9.5365649], [55.6721858, 12.564607]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5508227636097611, "smoothFactor": 1.0, "stroke": true, "weight": 5.37261196665194}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_727dd400d77e900dd00d365cad5dd5da.bindTooltip(
+                `<div>
+                     Vejle → København H: 86,990
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_dcb437525173a076023a6e9a1d204391 = L.polyline(
+                [[55.4018379, 10.3861989], [55.7066917, 9.5365649]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5386763657277991, "smoothFactor": 1.0, "stroke": true, "weight": 5.240105807939626}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_dcb437525173a076023a6e9a1d204391.bindTooltip(
+                `<div>
+                     Odense → Vejle: 74,660
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_45259bcd05af275d64adb75f903cc0a2 = L.polyline(
+                [[55.4380663, 11.7860978], [55.4018379, 10.3861989]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5310078091828071, "smoothFactor": 1.0, "stroke": true, "weight": 5.156448827448805}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_45259bcd05af275d64adb75f903cc0a2.bindTooltip(
+                `<div>
+                     Ringsted → Odense: 67,792
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_ba7b636d24a7119a1227dbeefb2961da = L.polyline(
+                [[57.0429609, 9.9167688], [55.6721858, 12.564607]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5253900112228566, "smoothFactor": 1.0, "stroke": true, "weight": 5.095163758794799}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_ba7b636d24a7119a1227dbeefb2961da.bindTooltip(
+                `<div>
+                     Aalborg → København H: 63,165
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_e3b3fe225bfbe4567253ed9649bcb3c3 = L.polyline(
+                [[57.0429609, 9.9167688], [55.7066917, 9.5365649]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.45175114891250223, "smoothFactor": 1.0, "stroke": true, "weight": 4.291830715409114}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_e3b3fe225bfbe4567253ed9649bcb3c3.bindTooltip(
+                `<div>
+                     Aalborg → Vejle: 25,005
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_1913aa61306e472d3accacada4c322c9 = L.polyline(
+                [[57.0429609, 9.9167688], [55.4018379, 10.3861989]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.44475966092856944, "smoothFactor": 1.0, "stroke": true, "weight": 4.215559937402576}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_1913aa61306e472d3accacada4c322c9.bindTooltip(
+                `<div>
+                     Aalborg → Odense: 22,899
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_a5e11410b37cdfaea54762b75dfe6e3c = L.polyline(
+                [[55.4380663, 11.7860978], [55.3138856, 10.8035012]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.4331123284135431, "smoothFactor": 1.0, "stroke": true, "weight": 4.088498128147743}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_a5e11410b37cdfaea54762b75dfe6e3c.bindTooltip(
+                `<div>
+                     Ringsted → Nyborg: 19,777
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_03ca6cb2d96d093a62c71f8c02a5aa11 = L.polyline(
+                [[55.2311888, 11.7670814], [55.4018379, 10.3861989]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.408471209721709, "smoothFactor": 1.0, "stroke": true, "weight": 3.8196859242368255}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_03ca6cb2d96d093a62c71f8c02a5aa11.bindTooltip(
+                `<div>
+                     Næstved → Odense: 14,504
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_9965b764e94959236c695cb112cbdad9 = L.polyline(
+                [[55.4075014, 11.3485562], [56.1497091, 10.2039136]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.39058767803685407, "smoothFactor": 1.0, "stroke": true, "weight": 3.624592851311135}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_9965b764e94959236c695cb112cbdad9.bindTooltip(
+                `<div>
+                     Slagelse → Aarhus H: 11,581
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_99644fdc903b447d2f16c4d1f1096d13 = L.polyline(
+                [[55.4380663, 11.7860978], [56.1497091, 10.2039136]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.3750992042675617, "smoothFactor": 1.0, "stroke": true, "weight": 3.4556276829188546}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_99644fdc903b447d2f16c4d1f1096d13.bindTooltip(
+                `<div>
+                     Ringsted → Aarhus H: 9,530
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_742c5802cf87bb342e930e8cf244c4a2 = L.polyline(
+                [[56.1497091, 10.2039136], [55.3138856, 10.8035012]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.35904944695556684, "smoothFactor": 1.0, "stroke": true, "weight": 3.2805394213334558}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_742c5802cf87bb342e930e8cf244c4a2.bindTooltip(
+                `<div>
+                     Aarhus H → Nyborg: 7,787
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_adb6e64679d8064066dc8123e5cb563c = L.polyline(
+                [[55.4075014, 11.3485562], [55.7066917, 9.5365649]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.33825603904969415, "smoothFactor": 1.0, "stroke": true, "weight": 3.0537022441784814}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_adb6e64679d8064066dc8123e5cb563c.bindTooltip(
+                `<div>
+                     Slagelse → Vejle: 5,994
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_2004470585f28fc1514aa2e4461ee23e = L.polyline(
+                [[55.4380663, 11.7860978], [55.7066917, 9.5365649]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.3258423694169371, "smoothFactor": 1.0, "stroke": true, "weight": 2.918280393639314}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_2004470585f28fc1514aa2e4461ee23e.bindTooltip(
+                `<div>
+                     Ringsted → Vejle: 5,127
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_c3cd1a08e73c1080592bc4277e275dc8 = L.polyline(
+                [[57.0429609, 9.9167688], [55.4075014, 11.3485562]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.31369302056108206, "smoothFactor": 1.0, "stroke": true, "weight": 2.7857420424845314}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_c3cd1a08e73c1080592bc4277e275dc8.bindTooltip(
+                `<div>
+                     Aalborg → Slagelse: 4,400
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_d5bb24eaf57ddc0b228a681a9f533233 = L.polyline(
+                [[55.3138856, 10.8035012], [55.2311888, 11.7670814]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.311496120617589, "smoothFactor": 1.0, "stroke": true, "weight": 2.761775861282789}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_d5bb24eaf57ddc0b228a681a9f533233.bindTooltip(
+                `<div>
+                     Nyborg → Næstved: 4,280
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_59ca2348f754130c3f8a6f5a13d97f7e = L.polyline(
+                [[55.2311888, 11.7670814], [55.7155286, 11.7080223]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.3095607648117744, "smoothFactor": 1.0, "stroke": true, "weight": 2.740662888855721}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_59ca2348f754130c3f8a6f5a13d97f7e.bindTooltip(
+                `<div>
+                     Næstved → Holbæk: 4,177
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_10d8c4f23c175aea309722015eb41b6e = L.polyline(
+                [[55.4018379, 10.3861989], [55.7155286, 11.7080223]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.30695059166511196, "smoothFactor": 1.0, "stroke": true, "weight": 2.712188272710312}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_10d8c4f23c175aea309722015eb41b6e.bindTooltip(
+                `<div>
+                     Odense → Holbæk: 4,042
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_12fe649e1cc65f2860aa293e29bf2942 = L.polyline(
+                [[57.0429609, 9.9167688], [55.4380663, 11.7860978]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.2996688327389511, "smoothFactor": 1.0, "stroke": true, "weight": 2.6327509026067393}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_12fe649e1cc65f2860aa293e29bf2942.bindTooltip(
+                `<div>
+                     Aalborg → Ringsted: 3,688
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_f39534de1f2f53223691a50d617b1161 = L.polyline(
+                [[55.3138856, 10.8035012], [55.7066917, 9.5365649]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.2985625346720228, "smoothFactor": 1.0, "stroke": true, "weight": 2.620682196422067}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_f39534de1f2f53223691a50d617b1161.bindTooltip(
+                `<div>
+                     Nyborg → Vejle: 3,637
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_ab482e54b8b65a5f7eb89ffc8f9fbd6d = L.polyline(
+                [[56.1497091, 10.2039136], [55.2311888, 11.7670814]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.2878948997520834, "smoothFactor": 1.0, "stroke": true, "weight": 2.504307997295455}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_ab482e54b8b65a5f7eb89ffc8f9fbd6d.bindTooltip(
+                `<div>
+                     Aarhus H → Næstved: 3,180
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_484bb4c1d52db7130bdb1a044ec34cc1 = L.polyline(
+                [[57.0429609, 9.9167688], [55.3138856, 10.8035012]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.2548952410919662, "smoothFactor": 1.0, "stroke": true, "weight": 2.1443117210032674}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_484bb4c1d52db7130bdb1a044ec34cc1.bindTooltip(
+                `<div>
+                     Aalborg → Nyborg: 2,099
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_6daea71d9ec9e982ce2b3b3d970a4392 = L.polyline(
+                [[55.3138856, 10.8035012], [55.7155286, 11.7080223]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.22513293856099809, "smoothFactor": 1.0, "stroke": true, "weight": 1.8196320570290698}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_6daea71d9ec9e982ce2b3b3d970a4392.bindTooltip(
+                `<div>
+                     Nyborg → Holbæk: 1,443
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_1a31e4a7e835386da1388dfa49c374f2 = L.polyline(
+                [[55.2311888, 11.7670814], [55.7066917, 9.5365649]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.2197837667823272, "smoothFactor": 1.0, "stroke": true, "weight": 1.7612774558072057}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_1a31e4a7e835386da1388dfa49c374f2.bindTooltip(
+                `<div>
+                     Næstved → Vejle: 1,349
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_ffcc4dbb20964ca89dc0455a08ed1030 = L.polyline(
+                [[55.2311888, 11.7670814], [57.0429609, 9.9167688]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.21035755795271044, "smoothFactor": 1.0, "stroke": true, "weight": 1.6584460867568414}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_ffcc4dbb20964ca89dc0455a08ed1030.bindTooltip(
+                `<div>
+                     Næstved → Aalborg: 1,198
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_f4049ea0eba9fd547bb4d00cf98eadc6 = L.polyline(
+                [[55.7066917, 9.5365649], [55.7155286, 11.7080223]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.15, "smoothFactor": 1.0, "stroke": true, "weight": 1.0}
+            ).addTo(feature_group_890c8121e30a85444337df9f1785aa20);
+        
+    
+            poly_line_f4049ea0eba9fd547bb4d00cf98eadc6.bindTooltip(
+                `<div>
+                     Vejle → Holbæk: 560
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            feature_group_890c8121e30a85444337df9f1785aa20.addTo(map_0ed73439a3041d016f5a4c477920b924);
+        
+    
+            var feature_group_48a72f2990b08160d5485e05dd8a91a6 = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var poly_line_f696794eed89d044391e762459c2c80e = L.polyline(
+                [[55.6721858, 12.564607], [55.4018379, 10.3861989]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.7000000000000001, "smoothFactor": 1.0, "stroke": true, "weight": 7.0}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_f696794eed89d044391e762459c2c80e.bindTooltip(
+                `<div>
+                     København H → Odense: 568,503
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_081936958c46871ac1ec4c904d829327 = L.polyline(
+                [[56.1497091, 10.2039136], [55.6721858, 12.564607]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.6200673004569965, "smoothFactor": 1.0, "stroke": true, "weight": 6.128006914076326}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_081936958c46871ac1ec4c904d829327.bindTooltip(
+                `<div>
+                     Aarhus H → København H: 251,889
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_4b741dfc0eb897aecef7dda068a316ec = L.polyline(
+                [[55.6721858, 12.564607], [55.7155286, 11.7080223]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.6147788663537529, "smoothFactor": 1.0, "stroke": true, "weight": 6.0703149056773045}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_4b741dfc0eb897aecef7dda068a316ec.bindTooltip(
+                `<div>
+                     København H → Holbæk: 238,682
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_6e898dce98a592835e46432c7bc2b9c2 = L.polyline(
+                [[55.6721858, 12.564607], [55.4075014, 11.3485562]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.6104124070153549, "smoothFactor": 1.0, "stroke": true, "weight": 6.022680803803872}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_6e898dce98a592835e46432c7bc2b9c2.bindTooltip(
+                `<div>
+                     København H → Slagelse: 228,301
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_48afaca6c74056cd20c2ac48f676fb6f = L.polyline(
+                [[55.6721858, 12.564607], [55.4380663, 11.7860978]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.6083469420066246, "smoothFactor": 1.0, "stroke": true, "weight": 6.0001484582540865}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_48afaca6c74056cd20c2ac48f676fb6f.bindTooltip(
+                `<div>
+                     København H → Ringsted: 223,549
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_d9540443b30f5b80e57f0141f7f9c185 = L.polyline(
+                [[55.6721858, 12.564607], [55.2311888, 11.7670814]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5988180356242992, "smoothFactor": 1.0, "stroke": true, "weight": 5.896196752265083}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_d9540443b30f5b80e57f0141f7f9c185.bindTooltip(
+                `<div>
+                     København H → Næstved: 202,875
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_d0b85df7abbba1ec8750ee044458c254 = L.polyline(
+                [[57.0429609, 9.9167688], [56.1497091, 10.2039136]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5962395119161635, "smoothFactor": 1.0, "stroke": true, "weight": 5.868067402721783}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_d0b85df7abbba1ec8750ee044458c254.bindTooltip(
+                `<div>
+                     Aalborg → Aarhus H: 197,617
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_312f67c024d749b6fb836f9bd0018ffb = L.polyline(
+                [[55.6721858, 12.564607], [55.3138856, 10.8035012]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5940625086508722, "smoothFactor": 1.0, "stroke": true, "weight": 5.844318276191332}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_312f67c024d749b6fb836f9bd0018ffb.bindTooltip(
+                `<div>
+                     København H → Nyborg: 193,284
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_8269b666c33bdc861b565f73bb3cf753 = L.polyline(
+                [[56.1497091, 10.2039136], [55.7066917, 9.5365649]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5905282608870944, "smoothFactor": 1.0, "stroke": true, "weight": 5.80576284604103}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_8269b666c33bdc861b565f73bb3cf753.bindTooltip(
+                `<div>
+                     Aarhus H → Vejle: 186,451
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_7fcf073fb5e0418d2efc3ae2681234d1 = L.polyline(
+                [[55.4018379, 10.3861989], [55.4075014, 11.3485562]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5630423058025107, "smoothFactor": 1.0, "stroke": true, "weight": 5.505916063300116}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_7fcf073fb5e0418d2efc3ae2681234d1.bindTooltip(
+                `<div>
+                     Odense → Slagelse: 140,929
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_2d72943ef3767fdde566ef8b7fd28a8f = L.polyline(
+                [[56.1497091, 10.2039136], [55.4018379, 10.3861989]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5348438379590056, "smoothFactor": 1.0, "stroke": true, "weight": 5.198296414098243}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_2d72943ef3767fdde566ef8b7fd28a8f.bindTooltip(
+                `<div>
+                     Aarhus H → Odense: 105,751
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_2363a80adc9a64628c23d59a458cd070 = L.polyline(
+                [[55.7066917, 9.5365649], [55.6721858, 12.564607]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5156670348438495, "smoothFactor": 1.0, "stroke": true, "weight": 4.989094925569267}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_2363a80adc9a64628c23d59a458cd070.bindTooltip(
+                `<div>
+                     Vejle → København H: 86,990
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_feedb681475b0bba2881f7df3bb398d1 = L.polyline(
+                [[55.4018379, 10.3861989], [55.7066917, 9.5365649]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5006581662541981, "smoothFactor": 1.0, "stroke": true, "weight": 4.825361813682161}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_feedb681475b0bba2881f7df3bb398d1.bindTooltip(
+                `<div>
+                     Odense → Vejle: 74,660
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_36e52501ca9cea89251c1668c827e84a = L.polyline(
+                [[55.4380663, 11.7860978], [55.4018379, 10.3861989]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.4911824057386449, "smoothFactor": 1.0, "stroke": true, "weight": 4.721989880785217}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_36e52501ca9cea89251c1668c827e84a.bindTooltip(
+                `<div>
+                     Ringsted → Odense: 67,792
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_aae5ce0e9f303c6955ab5b1816515077 = L.polyline(
+                [[57.0429609, 9.9167688], [55.6721858, 12.564607]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.48424069411652493, "smoothFactor": 1.0, "stroke": true, "weight": 4.646262117634817}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_aae5ce0e9f303c6955ab5b1816515077.bindTooltip(
+                `<div>
+                     Aalborg → København H: 63,165
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_211d633b004d896616fed9dcbf60d148 = L.polyline(
+                [[57.0429609, 9.9167688], [55.7066917, 9.5365649]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.39324779085021055, "smoothFactor": 1.0, "stroke": true, "weight": 3.6536122638204787}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_211d633b004d896616fed9dcbf60d148.bindTooltip(
+                `<div>
+                     Aalborg → Vejle: 25,005
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_87f998c6c8dc783bedb7c784b668729f = L.polyline(
+                [[57.0429609, 9.9167688], [55.4018379, 10.3861989]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.38460865969242053, "smoothFactor": 1.0, "stroke": true, "weight": 3.5593671966445877}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_87f998c6c8dc783bedb7c784b668729f.bindTooltip(
+                `<div>
+                     Aalborg → Odense: 22,899
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_1a8c1fec791d0f5c8d2876fd46dea9d3 = L.polyline(
+                [[55.4380663, 11.7860978], [55.3138856, 10.8035012]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.37021646829239974, "smoothFactor": 1.0, "stroke": true, "weight": 3.4023614722807247}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_1a8c1fec791d0f5c8d2876fd46dea9d3.bindTooltip(
+                `<div>
+                     Ringsted → Nyborg: 19,777
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_f125cda5be3683a729fd431b81c73ebc = L.polyline(
+                [[55.2311888, 11.7670814], [55.4018379, 10.3861989]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.33976832095342935, "smoothFactor": 1.0, "stroke": true, "weight": 3.070199864946502}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_f125cda5be3683a729fd431b81c73ebc.bindTooltip(
+                `<div>
+                     Næstved → Odense: 14,504
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_2eac6b6b8f4f55e47bc0b737f1c0e409 = L.polyline(
+                [[55.4075014, 11.3485562], [56.1497091, 10.2039136]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.3176702817170021, "smoothFactor": 1.0, "stroke": true, "weight": 2.829130346003659}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_2eac6b6b8f4f55e47bc0b737f1c0e409.bindTooltip(
+                `<div>
+                     Slagelse → Aarhus H: 11,581
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_5315eb31ba7f29815febb1626bf16989 = L.polyline(
+                [[55.4380663, 11.7860978], [56.1497091, 10.2039136]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.29853172971857045, "smoothFactor": 1.0, "stroke": true, "weight": 2.6203461423844043}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_5315eb31ba7f29815febb1626bf16989.bindTooltip(
+                `<div>
+                     Ringsted → Aarhus H: 9,530
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_887658f07ef0374096b625340072b4e3 = L.polyline(
+                [[56.1497091, 10.2039136], [55.3138856, 10.8035012]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.2786996197603368, "smoothFactor": 1.0, "stroke": true, "weight": 2.403995851930947}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_887658f07ef0374096b625340072b4e3.bindTooltip(
+                `<div>
+                     Aarhus H → Nyborg: 7,787
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_8323169ff43ced37f5c42019871c0721 = L.polyline(
+                [[55.4075014, 11.3485562], [55.7066917, 9.5365649]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.25300595075467036, "smoothFactor": 1.0, "stroke": true, "weight": 2.1237012809600406}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_8323169ff43ced37f5c42019871c0721.bindTooltip(
+                `<div>
+                     Slagelse → Vejle: 5,994
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_ff639b265a52164390b8d854b2afee78 = L.polyline(
+                [[55.4380663, 11.7860978], [55.7066917, 9.5365649]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.23766682404039718, "smoothFactor": 1.0, "stroke": true, "weight": 1.9563653531679692}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_ff639b265a52164390b8d854b2afee78.bindTooltip(
+                `<div>
+                     Ringsted → Vejle: 5,127
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_ec760f1c6e01a821f3993359e265de3e = L.polyline(
+                [[57.0429609, 9.9167688], [55.4075014, 11.3485562]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.22265430903805605, "smoothFactor": 1.0, "stroke": true, "weight": 1.7925924622333387}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_ec760f1c6e01a821f3993359e265de3e.bindTooltip(
+                `<div>
+                     Aalborg → Slagelse: 4,400
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_e856f436402615d6d392f1e4cacab158 = L.polyline(
+                [[55.3138856, 10.8035012], [55.2311888, 11.7670814]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.219939678505043, "smoothFactor": 1.0, "stroke": true, "weight": 1.7629783109641055}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_e856f436402615d6d392f1e4cacab158.bindTooltip(
+                `<div>
+                     Nyborg → Næstved: 4,280
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_f2161c76f5d10985a25ee55b17ba663b = L.polyline(
+                [[55.2311888, 11.7670814], [55.7155286, 11.7080223]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.21754822869037596, "smoothFactor": 1.0, "stroke": true, "weight": 1.7368897675313741}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_f2161c76f5d10985a25ee55b17ba663b.bindTooltip(
+                `<div>
+                     Næstved → Holbæk: 4,177
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_8a612db5c8ff734771037adbaafe304b = L.polyline(
+                [[55.4018379, 10.3861989], [55.7155286, 11.7080223]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.2143229312700871, "smoothFactor": 1.0, "stroke": true, "weight": 1.7017047047645868}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_8a612db5c8ff734771037adbaafe304b.bindTooltip(
+                `<div>
+                     Odense → Holbæk: 4,042
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_71efeece3b64ccda2423e38f527b31ae = L.polyline(
+                [[57.0429609, 9.9167688], [55.4380663, 11.7860978]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.2053251227110105, "smoothFactor": 1.0, "stroke": true, "weight": 1.6035467932110237}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_71efeece3b64ccda2423e38f527b31ae.bindTooltip(
+                `<div>
+                     Aalborg → Ringsted: 3,688
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_1649e95500e6a8f127633cb3b5ec2e54 = L.polyline(
+                [[55.3138856, 10.8035012], [55.7066917, 9.5365649]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.2039581098345288, "smoothFactor": 1.0, "stroke": true, "weight": 1.5886339254675867}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_1649e95500e6a8f127633cb3b5ec2e54.bindTooltip(
+                `<div>
+                     Nyborg → Vejle: 3,637
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_2dc7a998803e74ca0a817d5917c09a03 = L.polyline(
+                [[56.1497091, 10.2039136], [55.2311888, 11.7670814]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.19077649564473542, "smoothFactor": 1.0, "stroke": true, "weight": 1.4448344979425685}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_2dc7a998803e74ca0a817d5917c09a03.bindTooltip(
+                `<div>
+                     Aarhus H → Næstved: 3,180
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_01a4bbf5b7c0811b4a305afe30221795 = L.polyline(
+                [[57.0429609, 9.9167688], [55.3138856, 10.8035012]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.15, "smoothFactor": 1.0, "stroke": true, "weight": 1.0}
+            ).addTo(feature_group_48a72f2990b08160d5485e05dd8a91a6);
+        
+    
+            poly_line_01a4bbf5b7c0811b4a305afe30221795.bindTooltip(
+                `<div>
+                     Aalborg → Nyborg: 2,099
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var feature_group_70fd0c452aa09efe8e25f12d904343e2 = L.featureGroup(
+                {
+}
+            );
+        
+    
+            var poly_line_1361fab23e55388b6ceb3de6624ab0d8 = L.polyline(
+                [[55.6721858, 12.564607], [55.4018379, 10.3861989]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.7000000000000001, "smoothFactor": 1.0, "stroke": true, "weight": 7.0}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_1361fab23e55388b6ceb3de6624ab0d8.bindTooltip(
+                `<div>
+                     København H → Odense: 568,503
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_8a43c67913f2342062c01f4bb63be240 = L.polyline(
+                [[56.1497091, 10.2039136], [55.6721858, 12.564607]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5850129020938132, "smoothFactor": 1.0, "stroke": true, "weight": 5.7455952955688705}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_8a43c67913f2342062c01f4bb63be240.bindTooltip(
+                `<div>
+                     Aarhus H → København H: 251,889
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_ce1467ff019aa61d46c6f920538cebce = L.polyline(
+                [[55.6721858, 12.564607], [55.7155286, 11.7080223]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5774052309720223, "smoothFactor": 1.0, "stroke": true, "weight": 5.662602519694789}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_ce1467ff019aa61d46c6f920538cebce.bindTooltip(
+                `<div>
+                     København H → Holbæk: 238,682
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_48263bb6bc9b6e2c04af563baf80de6c = L.polyline(
+                [[55.6721858, 12.564607], [55.4075014, 11.3485562]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5711238656444616, "smoothFactor": 1.0, "stroke": true, "weight": 5.594078534303216}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_48263bb6bc9b6e2c04af563baf80de6c.bindTooltip(
+                `<div>
+                     København H → Slagelse: 228,301
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_e08fdf6405d20a3e493f055210678952 = L.polyline(
+                [[55.6721858, 12.564607], [55.4380663, 11.7860978]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.56815259320479, "smoothFactor": 1.0, "stroke": true, "weight": 5.561664653143163}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_e08fdf6405d20a3e493f055210678952.bindTooltip(
+                `<div>
+                     København H → Ringsted: 223,549
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_97bc90d3cf3b4ef10625993377031a3d = L.polyline(
+                [[55.6721858, 12.564607], [55.2311888, 11.7670814]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5544447953024578, "smoothFactor": 1.0, "stroke": true, "weight": 5.4121250396631755}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_97bc90d3cf3b4ef10625993377031a3d.bindTooltip(
+                `<div>
+                     København H → Næstved: 202,875
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_a68820a4c725475161e2ab7c36c0e0d1 = L.polyline(
+                [[57.0429609, 9.9167688], [56.1497091, 10.2039136]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.550735462829315, "smoothFactor": 1.0, "stroke": true, "weight": 5.371659594501618}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_a68820a4c725475161e2ab7c36c0e0d1.bindTooltip(
+                `<div>
+                     Aalborg → Aarhus H: 197,617
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_249504a0f50771f069e02622ca315c7f = L.polyline(
+                [[55.6721858, 12.564607], [55.3138856, 10.8035012]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5476037371520974, "smoothFactor": 1.0, "stroke": true, "weight": 5.3374953143865165}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_249504a0f50771f069e02622ca315c7f.bindTooltip(
+                `<div>
+                     København H → Nyborg: 193,284
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_97b2f16466a8e57911741755af0eb7e7 = L.polyline(
+                [[56.1497091, 10.2039136], [55.7066917, 9.5365649]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5425195488791916, "smoothFactor": 1.0, "stroke": true, "weight": 5.282031442318454}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_97b2f16466a8e57911741755af0eb7e7.bindTooltip(
+                `<div>
+                     Aarhus H → Vejle: 186,451
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_71cbbc5ad3cd5b84199610ba72245549 = L.polyline(
+                [[55.4018379, 10.3861989], [55.4075014, 11.3485562]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5029796581157661, "smoothFactor": 1.0, "stroke": true, "weight": 4.85068717944472}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_71cbbc5ad3cd5b84199610ba72245549.bindTooltip(
+                `<div>
+                     Odense → Slagelse: 140,929
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_8a0cd37efe526a29971fd87070673047 = L.polyline(
+                [[56.1497091, 10.2039136], [55.4018379, 10.3861989]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.46241478289869475, "smoothFactor": 1.0, "stroke": true, "weight": 4.408161267985761}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_8a0cd37efe526a29971fd87070673047.bindTooltip(
+                `<div>
+                     Aarhus H → Odense: 105,751
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_b9131a6996e4c72feb3393d96145e859 = L.polyline(
+                [[55.7066917, 9.5365649], [55.6721858, 12.564607]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.4348280136548536, "smoothFactor": 1.0, "stroke": true, "weight": 4.107214694416584}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_b9131a6996e4c72feb3393d96145e859.bindTooltip(
+                `<div>
+                     Vejle → København H: 86,990
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_31376c2a9cfd5d6c2fce3d60bb850ba3 = L.polyline(
+                [[55.4018379, 10.3861989], [55.7066917, 9.5365649]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.41323702208511626, "smoothFactor": 1.0, "stroke": true, "weight": 3.8716766045649047}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_31376c2a9cfd5d6c2fce3d60bb850ba3.bindTooltip(
+                `<div>
+                     Odense → Vejle: 74,660
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_b238510e327c2113eebe5425a2cedb20 = L.polyline(
+                [[55.4380663, 11.7860978], [55.4018379, 10.3861989]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.3996056771115701, "smoothFactor": 1.0, "stroke": true, "weight": 3.72297102303531}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_b238510e327c2113eebe5425a2cedb20.bindTooltip(
+                `<div>
+                     Ringsted → Odense: 67,792
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_f700c7cc05d72201a3868e88fe3fc50b = L.polyline(
+                [[57.0429609, 9.9167688], [55.6721858, 12.564607]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.3896196854148954, "smoothFactor": 1.0, "stroke": true, "weight": 3.614032931798859}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_f700c7cc05d72201a3868e88fe3fc50b.bindTooltip(
+                `<div>
+                     Aalborg → København H: 63,165
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_769d472a96cf19ccb17ab0c2ed33d83d = L.polyline(
+                [[57.0429609, 9.9167688], [55.7066917, 9.5365649]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.25872194348359956, "smoothFactor": 1.0, "stroke": true, "weight": 2.1860575652756316}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_769d472a96cf19ccb17ab0c2ed33d83d.bindTooltip(
+                `<div>
+                     Aalborg → Vejle: 25,005
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_7ffe9652392964148a00fb13a6b920ad = L.polyline(
+                [[57.0429609, 9.9167688], [55.4018379, 10.3861989]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.24629413076183926, "smoothFactor": 1.0, "stroke": true, "weight": 2.0504814264927917}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_7ffe9652392964148a00fb13a6b920ad.bindTooltip(
+                `<div>
+                     Aalborg → Odense: 22,899
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_7797fed68fd41f7aff6fc22cdfaedbf8 = L.polyline(
+                [[55.4380663, 11.7860978], [55.3138856, 10.8035012]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.22559025949187878, "smoothFactor": 1.0, "stroke": true, "weight": 1.8246210126386773}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_7797fed68fd41f7aff6fc22cdfaedbf8.bindTooltip(
+                `<div>
+                     Ringsted → Nyborg: 19,777
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_e7902b6905b147e660a5231bcb89c8b9 = L.polyline(
+                [[55.2311888, 11.7670814], [55.4018379, 10.3861989]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.1817891102857946, "smoothFactor": 1.0, "stroke": true, "weight": 1.34679029402685}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_e7902b6905b147e660a5231bcb89c8b9.bindTooltip(
+                `<div>
+                     Næstved → Odense: 14,504
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_ddf9a771077b3778b1d9e5b1fcab1b19 = L.polyline(
+                [[55.4075014, 11.3485562], [56.1497091, 10.2039136]],
+                {"bubblingMouseEvents": true, "color": "#1f78b4", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "#1f78b4", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.15, "smoothFactor": 1.0, "stroke": true, "weight": 1.0}
+            ).addTo(feature_group_70fd0c452aa09efe8e25f12d904343e2);
+        
+    
+            poly_line_ddf9a771077b3778b1d9e5b1fcab1b19.bindTooltip(
+                `<div>
+                     Slagelse → Aarhus H: 11,581
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var layer_control_52a4d445ab9aeb01c102fda35220d1bd_layers = {
+                base_layers : {
+                    "cartodbpositron" : tile_layer_061d0767bf9b263a4b7c19a5589ec797,
+                },
+                overlays :  {
+                    "Stations" : feature_group_56f80fff2bb177fac2a26e5389670b66,
+                    "OD \u2265 500 (36 lines)" : feature_group_890c8121e30a85444337df9f1785aa20,
+                    "OD \u2265 2,000 (32 lines)" : feature_group_48a72f2990b08160d5485e05dd8a91a6,
+                    "OD \u2265 10,000 (20 lines)" : feature_group_70fd0c452aa09efe8e25f12d904343e2,
+                },
+            };
+            let layer_control_52a4d445ab9aeb01c102fda35220d1bd = L.control.layers(
+                layer_control_52a4d445ab9aeb01c102fda35220d1bd_layers.base_layers,
+                layer_control_52a4d445ab9aeb01c102fda35220d1bd_layers.overlays,
+                {
+  "position": "topright",
+  "collapsed": false,
+  "autoZIndex": true,
+}
+            ).addTo(map_0ed73439a3041d016f5a4c477920b924);
+
+        
+</script>
+</html>
