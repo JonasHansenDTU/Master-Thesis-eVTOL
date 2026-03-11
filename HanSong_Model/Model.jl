@@ -85,8 +85,8 @@ function load_data(excel_file::String)
     ###########################################################################
     # Read sheets
     ###########################################################################
-    infra = read_sheet(excel_file, "Infrastructure")
-    pax   = read_sheet(excel_file, "PassengerGroups")
+    infra = read_sheet(excel_file, "Infrastructure (2)")
+    pax   = read_sheet(excel_file, "PassengerGroups (2)")
 
     ###########################################################################
     # Infrastructure columns
@@ -137,10 +137,10 @@ function load_data(excel_file::String)
     VP = sort(Int.(infra[lowercase.(String.(infra[!, type_col])) .== "vertiport", id_col]))
     VS = sort(Int.(infra[lowercase.(String.(infra[!, type_col])) .== "vertistop", id_col]))
 
-    N = 1:4
-    vb = Dict(1 => 1, 2 => 1, 3 => 2, 4 => 2)
+    N = 1:1
+    vb = Dict(1 => 1)
 
-    M = 0:5
+    M = 0:2
     M_no0 = 1:maximum(M)
     M_mid = 1:(maximum(M)-1)
 
