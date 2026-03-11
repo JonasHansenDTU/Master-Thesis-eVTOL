@@ -4,15 +4,6 @@
 # Reads input from one Excel file with two sheets:
 #   1) "Infrastructure"
 #   2) "PassengerGroups"
-#
-#   - 4 eVTOLs
-#   - base vertiports: 1,1,2,2
-#   - operations M = {0,1,2,3,4,5}
-#   - time set T = {0,1,2,...,120}
-#   - system parameters are taken from Table 3 and hard-coded below
-#   - red comments in the manuscript are ignored
-#
-
 
 using JuMP
 using Gurobi
@@ -146,15 +137,14 @@ function load_data(excel_file::String)
     VP = sort(Int.(infra[lowercase.(String.(infra[!, type_col])) .== "vertiport", id_col]))
     VS = sort(Int.(infra[lowercase.(String.(infra[!, type_col])) .== "vertistop", id_col]))
 
-    # eVTOL set N and base vertiports vb[n]
-    N = 1:2
-    vb = Dict(1 => 1, 2 => 1)   # or Dict(1 => 1, 2 => 2)
+    N = 1:4
+    vb = Dict(1 => 1, 2 => 1, 3 => 2, 4 => 2)
 
-    M = 0:2
+    M = 0:5
     M_no0 = 1:maximum(M)
     M_mid = 1:(maximum(M)-1)
 
-    T = 0:1000
+    T = 0:120
     T_no0 = 1:maximum(T)
 
     # Passenger groups
@@ -176,7 +166,7 @@ function load_data(excel_file::String)
     ec                    = 5.0      # 5% battery charged per unit time
     te                    = 10.0     # minimum turnaround time at vertiport
     w                     = 10.0     # maximum waiting time
-    ET                    = 1000      # end time
+    ET                    = 500      # end time
     L                     = 10_000.0 # default Big-M
 
     ###########################################################################
@@ -326,8 +316,8 @@ function build_model(excel_file::String)
     # s[a,m,n] = 1 if eVTOL n serves passenger group a in operation m
     @variable(model, s[a in A, m in M, n in N], Bin)
 
-    # s_flt[a,n] = 1 if eVTOL n serves passenger group a
-    @variable(model, s_flt[a in A, n in N], Bin)
+    # s[a,n] = 1 if eVTOL n serves passenger group a
+    @variable(model, ss[a in A, n in N], Bin)
 
     # is_p[j,n,t] = 1 if eVTOL n is parking at vertiport/vertistop j at time t
     @variable(model, is_p[j in V, n in N, t in T], Bin)
@@ -368,10 +358,9 @@ function build_model(excel_file::String)
     ###########################################################################
     @objective(
         model, Max,
-        sum(fd[(i,j)] * d[(a,i,j)] * s_flt[a,n] * (1 - so[a]) for a in A, i in V, j in V, n in N) +
-        sum(fs[(i,j)] * d[(a,i,j)] * s_flt[a,n] * so[a]       for a in A, i in V, j in V, n in N) -
+        sum(d[(a,i,j)] * ss[a,n] * (fd[i,j]*(1 - so[a]) + fs[i,j]*so[a]) for a in A, i in V, j in V, n in N) -
         sum(c[(i,j)] * x[i,j,m,n] for i in V, j in V, m in M, n in N) -
-        sum(p[a] * (1 - sum(s_flt[a,n] for n in N)) for a in A)
+        sum(p[a] * (1 - sum(ss[a,n] for n in N)) for a in A)
     )
 
     ###########################################################################
@@ -394,7 +383,7 @@ function build_model(excel_file::String)
 
     # (6.5) Flow consistency between operation m and m+1
     @constraint(model, [j in V, m in M_mid, n in N],
-        sum(x[i,j,m,n] for i in V) - sum(x[j,j2,m+1,n] for j2 in V) >= 0
+        sum(x[i,j,m,n] for i in V) - sum(x[j,i2,m+1,n] for i2 in V) >= 0
     )
 
     # (6.6) No self-travel i -> i
@@ -442,15 +431,13 @@ function build_model(excel_file::String)
     # (6.14) Layover path existence lower bound using m and m+1
     @constraint(model, [a in A, m in M_mid, n in N],
         s[a,m,n] >=
-        sum(x[op[a], k_node, m, n] + x[k_node, dp[a], m+1, n] for k_node in V) -
-        1 - (1 - z[a]) * L
+        sum(x[op[a], k_node, m, n] + x[k_node, dp[a], m+1, n] for k_node in V) - 1 - (1 - z[a]) * L
     )
 
     # (6.15) Same as above, using m-1 and m
     @constraint(model, [a in A, m in M_no0, n in N],
         s[a,m,n] >=
-        sum(x[op[a], k_node, m-1, n] + x[k_node, dp[a], m, n] for k_node in V) -
-        1 - (1 - z[a]) * L
+        sum(x[op[a], k_node, m-1, n] + x[k_node, dp[a], m, n] for k_node in V) - 1 - (1 - z[a]) * L
     )
 
     # (6.16) If passenger group does not allow layovers, then z[a] must be 0
@@ -458,17 +445,17 @@ function build_model(excel_file::String)
 
     # (6.17) If passenger group a is not served by eVTOL n, it cannot be served in any operation m
     @constraint(model, [a in A, m in M, n in N],
-        s[a,m,n] <= s_flt[a,n]
+        s[a,m,n] <= ss[a,n]
     )
 
     # (6.18) If passenger group a is served by eVTOL n, then it must be served in some operation
     @constraint(model, [a in A, n in N],
-        sum(s[a,m,n] for m in M) >= s_flt[a,n]
+        sum(s[a,m,n] for m in M) >= ss[a,n]
     )
 
     # (6.19) Each passenger group can only be served by one eVTOL
     @constraint(model, [a in A],
-        sum(s_flt[a,n] for n in N) <= 1
+        sum(ss[a,n] for n in N) <= 1
     )
 
     # (6.20) If s[a,m,n] = 1, then at least one arc serving that passenger must exist
@@ -652,9 +639,9 @@ for n in N, m in M, i in V, j in V
     end
 end
 
-println("\nPassenger assignment s_flt[a,n] = 1:")
+println("\nPassenger assignment ss[a,n] = 1:")
 for a in A, n in N
-    if value(model[:s_flt][a,n]) > 0.5
+    if value(model[:ss][a,n]) > 0.5
         println("  passenger group $a served by eVTOL $n")
     end
 end
@@ -671,6 +658,6 @@ end
 
 println("\nArrival/departure times:")
 for n in N, m in M
-    println("  eVTOL $n, op $m: arr = ", value(model[:arr][m,n]),
-            ", dep = ", value(model[:dep][m,n]))
+    println("  eVTOL $n, op $m: dep = ", value(model[:dep][m,n]),
+            ", arr = ", value(model[:arr][m,n]))
 end
