@@ -513,6 +513,11 @@ function build_model(excel_file::String)
     arr[m,n] >= arr[m-1,n] + (te + rt[(i,j)]) * x[i,j,m,n]
     )
 
+    # (6.31) Arrival time lower bound (alternative)
+    # @constraint(model, [m in M_no0, n in N],
+    # arr[m,n] >= arr[m-1,n] + sum((te + rt[(i,j)]) * x[i,j,m,n] for i in V, j in V)
+    # )
+
     # (6.32) Departure time = arrival time - travel time
     @constraint(model, [m in M, n in N],
     dep[m,n] == arr[m,n] - sum(rt[(i,j)] * x[i,j,m,n] for i in V, j in V)
@@ -660,11 +665,19 @@ function export_solution_snapshots(model::Model, data; out_csv::String = joinpat
     end
 
     V = data.V
+    A = data.A
     N = data.N
     M = data.M
     T = data.T
+    q = data.q
     lat = data.lat
     lon = data.lon
+
+    # Precompute passenger groups served by each eVTOL (global assignment).
+    served_groups_by_evtol = Dict{Int,Vector{Int}}()
+    for n in N
+        served_groups_by_evtol[n] = [a for a in A if value(model[:ss][a, n]) > 0.5]
+    end
 
     rows = NamedTuple[]
 
@@ -709,6 +722,25 @@ function export_solution_snapshots(model::Model, data; out_csv::String = joinpat
         x = (x_from === missing || x_to === missing) ? missing : (x_from + x_to) / 2
         y = (y_from === missing || y_to === missing) ? missing : (y_from + y_to) / 2
 
+        # Battery estimate at time t: use battery level after latest arrived operation.
+        latest_completed_m = minimum(M)
+        for m in sort(M)
+            if value(model[:arr][m, n]) <= t + 1e-6
+                latest_completed_m = m
+            end
+        end
+        battery_level = value(model[:u][latest_completed_m, n])
+
+        # Passenger load at time t: if flying in op m, use groups served in that op.
+        onboard_groups = Int[]
+        if state == "flying" && fly_m !== missing
+            onboard_groups = [a for a in A if value(model[:s][a, fly_m, n]) > 0.5]
+        end
+        onboard_passenger_count = sum((q[a] for a in onboard_groups); init=0)
+        onboard_group_sizes = isempty(onboard_groups) ? "" : join(["$(a):$(q[a])" for a in onboard_groups], ";")
+
+        served_groups_evtol = served_groups_by_evtol[n]
+
         push!(rows, (
             time = t,
             evtol_id = n,
@@ -718,6 +750,12 @@ function export_solution_snapshots(model::Model, data; out_csv::String = joinpat
             op = op,
             is_p = best_p,
             is_o = best_o,
+            battery_level = battery_level,
+            battery_after_op = latest_completed_m,
+            onboard_passenger_count = onboard_passenger_count,
+            onboard_groups = isempty(onboard_groups) ? "" : join(onboard_groups, ";"),
+            onboard_group_sizes = onboard_group_sizes,
+            served_groups_evtol = isempty(served_groups_evtol) ? "" : join(served_groups_evtol, ";"),
             x = x,
             y = y,
             x_from = x_from,
