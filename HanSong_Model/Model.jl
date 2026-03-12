@@ -169,7 +169,7 @@ function load_data(excel_file::String)
     te                    = 10.0     # minimum turnaround time at vertiport
     w                     = 10.0     # maximum waiting time
     ET                    = 120      # end time
-    L                     = 1000000.0  # default Big-M
+    L                     = 100000.0  # default Big-M
 
     ###########################################################################
     # Node coordinates and parking capacities
