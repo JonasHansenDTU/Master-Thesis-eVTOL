@@ -9,6 +9,7 @@ using JuMP
 using Gurobi
 using XLSX
 using DataFrames
+using CSV
 using MathOptInterface
 using Printf
 const MOI = MathOptInterface
@@ -138,8 +139,8 @@ function load_data(excel_file::String)
     VP = sort(Int.(infra[lowercase.(String.(infra[!, type_col])) .== "vertiport", id_col]))
     VS = sort(Int.(infra[lowercase.(String.(infra[!, type_col])) .== "vertistop", id_col]))
 
-    N = 1:4
-    vb = Dict(1 => 1, 2 => 2, 3 => 1, 4 => 2)  # base vertiport for each eVTOL
+    N = 1:2
+    vb = Dict(1 => 1, 2 => 2)  # base vertiport for each eVTOL
 
     M = 0:6
     M_no0 = 1:maximum(M)
@@ -247,6 +248,7 @@ function load_data(excel_file::String)
         M = collect(M), M_no0 = collect(M_no0), M_mid = collect(M_mid),
         T = collect(T), T_no0 = collect(T_no0),
         vb = vb,
+        lat = lat, lon = lon,
         dist = dist, fd = fd, fs = fs, c = c, e = e, rt = rt,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
         cap_node = cap_node, cap_flt = cap_flt, cap_u = cap_u,
@@ -625,18 +627,110 @@ function print_timing_summary(timings::Dict{String,Float64})
     println(lpad("Program Part", 38) * " | " * lpad("Seconds", 10))
     println("-" ^ 53)
 
-    ordered_parts = [
+    measured_parts = [
         "Build model (incl. data load)",
         "Optimization",
-        "Pretty printing",
-        "Total script"
+        "Snapshot export",
+        "Pretty printing"
     ]
 
-    for part in ordered_parts
+    subtotal = 0.0
+    for part in measured_parts
         if haskey(timings, part)
-            println(lpad(part, 38) * " | " * lpad(@sprintf("%.3f", timings[part]), 10))
+            v = timings[part]
+            subtotal += v
+            println(lpad(part, 38) * " | " * lpad(@sprintf("%.3f", v), 10))
         end
     end
+
+    if haskey(timings, "Total script")
+        total = timings["Total script"]
+        overhead = total - subtotal
+        println("-" ^ 53)
+        println(lpad("Measured subtotal", 38) * " | " * lpad(@sprintf("%.3f", subtotal), 10))
+        println(lpad("Unaccounted overhead", 38) * " | " * lpad(@sprintf("%.3f", overhead), 10))
+        println(lpad("Total script", 38) * " | " * lpad(@sprintf("%.3f", total), 10))
+    end
+end
+
+function export_solution_snapshots(model::Model, data; out_csv::String = joinpath(@__DIR__, "solution_snapshots.csv"))
+    if !has_values(model)
+        println("No primal solution available; skipping snapshot export.")
+        return nothing
+    end
+
+    V = data.V
+    N = data.N
+    M = data.M
+    T = data.T
+    lat = data.lat
+    lon = data.lon
+
+    rows = NamedTuple[]
+
+    for n in N, t in T
+        # Best parked state at (n, t)
+        best_p = 0.0
+        park_node = missing
+        for j in V
+            pv = value(model[:is_p][j, n, t])
+            if pv > best_p
+                best_p = pv
+                park_node = j
+            end
+        end
+
+        # Best flying state at (n, t)
+        best_o = 0.0
+        fly_i = missing
+        fly_j = missing
+        fly_m = missing
+        for i in V, j in V, m in M
+            ov = value(model[:is_o][i, j, m, n, t])
+            if ov > best_o
+                best_o = ov
+                fly_i = i
+                fly_j = j
+                fly_m = m
+            end
+        end
+
+        state = best_o > 0.5 ? "flying" : (best_p > 0.5 ? "parked" : "inactive")
+
+        node_from = state == "flying" ? fly_i : (state == "parked" ? park_node : missing)
+        node_to = state == "flying" ? fly_j : (state == "parked" ? park_node : missing)
+        op = state == "flying" ? fly_m : missing
+
+        x_from = (node_from === missing) ? missing : lon[node_from]
+        y_from = (node_from === missing) ? missing : lat[node_from]
+        x_to = (node_to === missing) ? missing : lon[node_to]
+        y_to = (node_to === missing) ? missing : lat[node_to]
+
+        x = (x_from === missing || x_to === missing) ? missing : (x_from + x_to) / 2
+        y = (y_from === missing || y_to === missing) ? missing : (y_from + y_to) / 2
+
+        push!(rows, (
+            time = t,
+            evtol_id = n,
+            state = state,
+            node_from = node_from,
+            node_to = node_to,
+            op = op,
+            is_p = best_p,
+            is_o = best_o,
+            x = x,
+            y = y,
+            x_from = x_from,
+            y_from = y_from,
+            x_to = x_to,
+            y_to = y_to
+        ))
+    end
+
+    snapshots = DataFrame(rows)
+    CSV.write(out_csv, snapshots)
+    println("Snapshot export written: ", out_csv, " (rows=", nrow(snapshots), ")")
+    return snapshots
 end
 
 ###############################################################################
@@ -647,6 +741,9 @@ excel_file = joinpath(@__DIR__, "inputData.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()
 model, data, timings = solve_instance(excel_file)
+
+t_export = @elapsed export_solution_snapshots(model, data)
+timings["Snapshot export"] = t_export
 
 ###############################################################################
 # Pretty result printing - ALL VARIABLES
@@ -867,10 +964,11 @@ function print_results_pretty(model::Model, data)
 
     for n in N, t in T
         p_node = "-"
+        check = 0.5
         p_val = 0.0
         for j in V
             pv = value(model[:is_p][j,n,t])
-            if pv > p_val
+            if pv > check
                 p_val = pv
                 p_node = string(j)
             end
@@ -881,7 +979,7 @@ function print_results_pretty(model::Model, data)
         o_val = 0.0
         for i in V, j in V, m in M
             ov = value(model[:is_o][i,j,m,n,t])
-            if ov > o_val
+            if ov > check
                 o_val = ov
                 o_arc = "$i->$j"
                 o_op = string(m)
