@@ -139,8 +139,8 @@ function load_data(excel_file::String)
     VP = sort(Int.(infra[lowercase.(String.(infra[!, type_col])) .== "vertiport", id_col]))
     VS = sort(Int.(infra[lowercase.(String.(infra[!, type_col])) .== "vertistop", id_col]))
 
-    N = 1:2
-    vb = Dict(1 => 1, 2 => 2)  # base vertiport for each eVTOL
+    N = 1:4
+    vb = Dict(1 => 1, 2 => 2, 3 => 1, 4 => 2)  # base vertiport for each eVTOL
 
     M = 0:6
     M_no0 = 1:maximum(M)
@@ -509,14 +509,14 @@ function build_model(excel_file::String)
     @constraint(model, [n in N], arr[0,n] == 0)
 
     # (6.31) Arrival time lower bound
-    @constraint(model, [i in V, j in V, m in M_no0, n in N],
-    arr[m,n] >= arr[m-1,n] + (te + rt[(i,j)]) * x[i,j,m,n]
-    )
+    # @constraint(model, [i in V, j in V, m in M_no0, n in N],
+    # arr[m,n] >= arr[m-1,n] + (te + rt[(i,j)]) * x[i,j,m,n]
+    # )
 
     # (6.31) Arrival time lower bound (alternative)
-    # @constraint(model, [m in M_no0, n in N],
-    # arr[m,n] >= arr[m-1,n] + sum((te + rt[(i,j)]) * x[i,j,m,n] for i in V, j in V)
-    # )
+    @constraint(model, [m in M_no0, n in N],
+    arr[m,n] >= arr[m-1,n] + sum((te + rt[(i,j)]) * x[i,j,m,n] for i in V, j in V)
+    )
 
     # (6.32) Departure time = arrival time - travel time
     @constraint(model, [m in M, n in N],
