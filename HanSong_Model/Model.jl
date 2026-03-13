@@ -37,6 +37,19 @@ function read_sheet(path::String, sheet_name::String)
     return df
 end
 
+"Read first available sheet among candidates into a DataFrame."
+function read_sheet_any(path::String, candidates::Vector{String})
+    for sheet_name in candidates
+        try
+            return read_sheet(path, sheet_name)
+        catch
+            # Try next candidate sheet name.
+        end
+    end
+
+    error("Could not find any of these sheets: $(candidates)")
+end
+
 "Try to find a column among several possible names."
 function find_col(df::DataFrame, candidates::Vector{Symbol})
     name_map = Dict(Symbol(String(n)) => n for n in names(df))
@@ -77,10 +90,11 @@ function haversine_km(lat1, lon1, lat2, lon2)
 end
 
 """
-Build all sets and parameters from Excel + hard-coded system parameters.
+Build all sets and parameters from Excel + system parameters.
 Expected sheets:
-  - Infrastructure
-  - PassengerGroups
+    - Infrastructure (3)
+    - PassengerGroups (3)
+    - PlaneData
 """
 function load_data(excel_file::String)
 
@@ -89,6 +103,7 @@ function load_data(excel_file::String)
     ###########################################################################
     infra = read_sheet(excel_file, "Infrastructure (3)")
     pax   = read_sheet(excel_file, "PassengerGroups (3)")
+    plane = read_sheet_any(excel_file, ["PlaneData"])
 
     ###########################################################################
     # Infrastructure columns
@@ -139,8 +154,28 @@ function load_data(excel_file::String)
     VP = sort(Int.(infra[lowercase.(String.(infra[!, type_col])) .== "vertiport", id_col]))
     VS = sort(Int.(infra[lowercase.(String.(infra[!, type_col])) .== "vertistop", id_col]))
 
-    N = 1:4
-    vb = Dict(1 => 1, 2 => 2, 3 => 1, 4 => 2)  # base vertiport for each eVTOL
+    plane_id_col = find_col(plane, [:plane_id, :id, :evtol_id, :plane])
+    base_vp_col  = find_col(plane, [:base_vertiport, :base_vertiport_id, :base, :home_vertiport])
+
+    N = sort(Int.(plane[!, plane_id_col]))
+    if isempty(N)
+        error("PlaneData sheet is empty. Add at least one row with Plane ID and Base Vertiport.")
+    end
+    if length(unique(N)) != length(N)
+        error("PlaneData contains duplicate Plane ID values. Each Plane ID must be unique.")
+    end
+
+    vb = Dict{Int,Int}()  # base vertiport for each eVTOL
+    for r in eachrow(plane)
+        n = Int(r[plane_id_col])
+        b = Int(r[base_vp_col])
+        vb[n] = b
+    end
+
+    bad_bases = sort([b for b in values(vb) if !(b in VP)])
+    if !isempty(bad_bases)
+        error("PlaneData has invalid Base Vertiport values $(bad_bases). Valid vertiports from Infrastructure are $(VP).")
+    end
 
     M = 0:6
     M_no0 = 1:maximum(M)
@@ -244,6 +279,7 @@ function load_data(excel_file::String)
     return (
         infra = infra,
         pax = pax,
+        plane = plane,
         V = V, VP = VP, VS = VS, A = A, N = collect(N),
         M = collect(M), M_no0 = collect(M_no0), M_mid = collect(M_mid),
         T = collect(T), T_no0 = collect(T_no0),
