@@ -139,8 +139,8 @@ function load_data(excel_file::String)
     VP = sort(Int.(infra[lowercase.(String.(infra[!, type_col])) .== "vertiport", id_col]))
     VS = sort(Int.(infra[lowercase.(String.(infra[!, type_col])) .== "vertistop", id_col]))
 
-    N = 1:4
-    vb = Dict(1 => 1, 2 => 2, 3 => 1, 4 => 2)  # base vertiport for each eVTOL
+    N = 1:2
+    vb = Dict(1 => 1, 2 => 2)  # base vertiport for each eVTOL
 
     M = 0:6
     M_no0 = 1:maximum(M)

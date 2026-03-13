@@ -8,6 +8,13 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+try:
+    import folium
+    from folium.plugins import TimestampedGeoJson
+except ImportError:  # pragma: no cover
+    folium = None
+    TimestampedGeoJson = None
+
 
 def _safe_num(series: pd.Series) -> pd.Series:
     return pd.to_numeric(series, errors="coerce")
@@ -23,22 +30,15 @@ def _nearest_valid(values: list[float], idx: int, direction: int) -> float | Non
     return None
 
 
-def build_animation(
-    snapshot_csv: Path,
-    output_html: Path,
-    title: str = "eVTOL Solution Animation",
-    fps: float = 12.0,
-    subframes: int = 1,
-) -> None:
-    if fps <= 0:
-        raise ValueError("fps must be > 0")
-    if subframes < 1:
-        raise ValueError("subframes must be >= 1")
+def _prepare_snapshot_data(snapshot_csv: Path) -> tuple[pd.DataFrame, pd.DataFrame, list[int], list[int]]:
+    """Read and normalize snapshot CSV into a dataframe ready for visualization.
 
-    # Keep the same total runtime per original time step.
-    # Example: subframes=4 -> 4x more frames, each with 1/4 duration.
-    base_frame_duration_ms = max(1, int(round(1000.0 / fps)))
-    frame_duration_ms = max(1, int(round(base_frame_duration_ms / subframes)))
+    Returns:
+        df: Full snapshot dataframe with interpolated coordinates (`anim_x`, `anim_y`) and battery smoothing.
+        nodes: Unique nodes extracted from `node_from/node_to` endpoints.
+        times: Sorted list of unique integer time steps.
+        evtols: Sorted list of unique eVTOL identifiers.
+    """
 
     df = pd.read_csv(snapshot_csv)
 
@@ -94,7 +94,6 @@ def build_animation(
     if "onboard_groups" not in df.columns:
         df["onboard_groups"] = ""
 
-
     # Build a smoothed battery series at integer times under a linear assumption:
     # - flying segments: linear decrease
     # - ground segments (parked/inactive): linear increase or flat
@@ -123,17 +122,6 @@ def build_animation(
         raise ValueError("No time values found in snapshot CSV.")
 
     evtols = sorted(df["evtol_id"].dropna().astype(int).unique().tolist())
-    color_cycle = [
-        "#1f77b4",
-        "#d62728",
-        "#2ca02c",
-        "#ff7f0e",
-        "#9467bd",
-        "#8c564b",
-        "#e377c2",
-        "#17becf",
-    ]
-    evtol_color = {n: color_cycle[i % len(color_cycle)] for i, n in enumerate(evtols)}
 
     # Build animated point position for each (evtol, time):
     # - parked/inactive -> node coordinate
@@ -255,6 +243,40 @@ def build_animation(
                 df.loc[idx[s + k_seg], "battery_smooth"] = b
 
             s = e + 1
+
+    return df, nodes, times, evtols
+
+
+def build_animation(
+    snapshot_csv: Path,
+    output_html: Path,
+    title: str = "eVTOL Solution Animation",
+    fps: float = 12.0,
+    subframes: int = 1,
+) -> None:
+    if fps <= 0:
+        raise ValueError("fps must be > 0")
+    if subframes < 1:
+        raise ValueError("subframes must be >= 1")
+
+    # Keep the same total runtime per original time step.
+    # Example: subframes=4 -> 4x more frames, each with 1/4 duration.
+    base_frame_duration_ms = max(1, int(round(1000.0 / fps)))
+    frame_duration_ms = max(1, int(round(base_frame_duration_ms / subframes)))
+
+    df, nodes, times, evtols = _prepare_snapshot_data(snapshot_csv)
+
+    color_cycle = [
+        "#1f77b4",
+        "#d62728",
+        "#2ca02c",
+        "#ff7f0e",
+        "#9467bd",
+        "#8c564b",
+        "#e377c2",
+        "#17becf",
+    ]
+    evtol_color = {n: color_cycle[i % len(color_cycle)] for i, n in enumerate(evtols)}
 
     x_min = min(nodes["x"].min(), df["x_from"].min(), df["x_to"].min(), df["anim_x"].min())
     x_max = max(nodes["x"].max(), df["x_from"].max(), df["x_to"].max(), df["anim_x"].max())
@@ -550,8 +572,223 @@ def build_animation(
     print(f"Animation written: {output_html}")
 
 
+def build_folium_map(
+    snapshot_csv: Path,
+    output_html: Path,
+    title: str = "eVTOL Solution Map",
+    start_time: str = "2020-01-01T00:00:00Z",
+    time_unit: str = "s",
+) -> None:
+    """Generate a Folium map with a time slider showing eVTOL positions."""
+
+    if folium is None or TimestampedGeoJson is None:
+        raise ImportError(
+            "folium is required for the folium backend. Install it with `pip install folium`."
+        )
+
+    df, nodes, _, _ = _prepare_snapshot_data(snapshot_csv)
+
+    # Prefer already-processed interpolated coords when available.
+    x_col = "anim_x" if "anim_x" in df.columns else "x"
+    y_col = "anim_y" if "anim_y" in df.columns else "y"
+
+    # Assign a consistent color per eVTOL.
+    evtols = sorted(df["evtol_id"].dropna().astype(int).unique().tolist())
+    color_cycle = [
+        "#1f77b4",
+        "#d62728",
+        "#2ca02c",
+        "#ff7f0e",
+        "#9467bd",
+        "#8c564b",
+        "#e377c2",
+        "#17becf",
+    ]
+    evtol_color = {n: color_cycle[i % len(color_cycle)] for i, n in enumerate(evtols)}
+
+    # Time -> ISO string for TimestampedGeoJson.
+    origin = pd.Timestamp(start_time)
+    if origin.tzinfo is not None:
+        origin = origin.tz_convert(None)
+    df["timestamp"] = pd.to_datetime(df["time"], unit=time_unit, origin=origin)
+    df["timestamp_str"] = df["timestamp"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    # Build GeoJSON features for each snapshot.
+    features = []
+    status_by_time: dict[str, dict[str, dict[str, str]]] = {}
+
+    for _, r in df.iterrows():
+        lon = float(r[x_col])
+        lat = float(r[y_col])
+        if math.isnan(lon) or math.isnan(lat):
+            continue
+
+        time_str = r["timestamp_str"]
+        evtol_id = str(int(r["evtol_id"])) if pd.notna(r["evtol_id"]) else None
+        if evtol_id is not None:
+            status_by_time.setdefault(time_str, {})[evtol_id] = {
+                "state": str(r["state"]),
+                "pax": str(int(r["onboard_passenger_count"])) if pd.notna(r.get("onboard_passenger_count")) else "-",
+                "battery": f"{float(r['battery_smooth']):.1f}%" if pd.notna(r.get("battery_smooth")) else "-",
+                "groups": str(r.get("onboard_groups") or "-"),
+            }
+
+        popup = (
+            f"eVTOL {evtol_id if evtol_id is not None else '?'}<br>"
+            f"time={time_str}<br>"
+            f"state={r['state']}<br>"
+            f"node_from={int(r['node_from']) if pd.notna(r['node_from']) else '-'}<br>"
+            f"node_to={int(r['node_to']) if pd.notna(r['node_to']) else '-'}"
+        )
+
+        fill_color = evtol_color.get(int(r["evtol_id"]) if pd.notna(r["evtol_id"]) else None, "#1f77b4")
+        properties = {
+            "time": time_str,
+            "popup": popup,
+            "icon": "circle",
+            "iconstyle": {
+                "fillColor": fill_color,
+                "fillOpacity": 0.8,
+                "stroke": "true",
+                "radius": 6,
+            },
+        }
+
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [lon, lat]},
+                "properties": properties,
+            }
+        )
+
+    geojson = {"type": "FeatureCollection", "features": features}
+
+    if not df.empty:
+        center_lat = float(df[y_col].dropna().mean())
+        center_lon = float(df[x_col].dropna().mean())
+    else:
+        center_lat = 0.0
+        center_lon = 0.0
+
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=11, tiles="OpenStreetMap")
+    folium.TileLayer("cartodbpositron").add_to(m)
+
+    for _, r in nodes.iterrows():
+        folium.CircleMarker(
+            location=[float(r["y"]), float(r["x"])],
+            radius=5,
+            color="#222222",
+            fill=True,
+            fill_color="#888888",
+            fill_opacity=0.7,
+            popup=f"Node {int(r['node'])}",
+        ).add_to(m)
+
+    # Add an info table overlay.
+    evtol_ids = sorted({int(k) for t in status_by_time.values() for k in t.keys()})
+    status_table_html = """
+    <div id="evtol-status" style="position:absolute; top:10px; left:10px; z-index:9999; background:rgba(255,255,255,0.85); padding:10px; border-radius:8px; max-height:240px; overflow:auto; font-size:12px;">
+      <div style="font-weight:bold; margin-bottom:6px;">eVTOL status</div>
+      <table style="border-collapse:collapse; width:100%;">
+        <thead>
+          <tr>
+            <th style="text-align:left; padding:2px 4px;">eVTOL</th>
+            <th style="text-align:left; padding:2px 4px;">State</th>
+            <th style="text-align:right; padding:2px 4px;">Pax</th>
+            <th style="text-align:right; padding:2px 4px;">Battery</th>
+            <th style="text-align:left; padding:2px 4px;">Groups</th>
+          </tr>
+        </thead>
+        <tbody id="evtol-status-table-body">
+        </tbody>
+      </table>
+    </div>
+    """
+    m.get_root().html.add_child(folium.Element(status_table_html))
+
+    TimestampedGeoJson(
+        geojson,
+        period="PT1S",
+        add_last_point=True,
+        duration="PT2S",
+        auto_play=False,
+        loop=False,
+        max_speed=1,
+        loop_button=True,
+        date_options="YYYY/MM/DD HH:mm:ss",
+        time_slider_drag_update=True,
+    ).add_to(m)
+
+    # Inject JS to update table as the timeline changes.
+    import json
+
+    js = """
+    <script>
+    const evtolStatus = %s;
+    const mapName = "%s";
+
+    function updateEVTOLTable(timestamp) {
+      const body = document.getElementById('evtol-status-table-body');
+      if (!body) return;
+      const status = evtolStatus[timestamp] || {};
+      const rows = [];
+      const ids = %s;
+      for (const id of ids) {
+        const s = status[id] || {state: '-', pax: '-', battery: '-', groups: '-'};
+        rows.push(
+          `<tr>` +
+            `<td style="padding:2px 4px;">${id}</td>` +
+            `<td style="padding:2px 4px;">${s.state}</td>` +
+            `<td style="padding:2px 4px; text-align:right;">${s.pax}</td>` +
+            `<td style="padding:2px 4px; text-align:right;">${s.battery}</td>` +
+            `<td style="padding:2px 4px;">${s.groups}</td>` +
+          `</tr>`
+        );
+      }
+      body.innerHTML = rows.join('');
+    }
+
+    function toTimestampKey(v) {
+      // Normalize to the exact keys we generate in Python: YYYY-MM-DDTHH:MM:SSZ
+      const date = typeof v === 'string' ? new Date(v) : new Date(v);
+      if (Number.isNaN(date.getTime())) {
+        return v;
+      }
+      return date.toISOString().slice(0,19) + 'Z';
+    }
+
+    window.addEventListener('load', () => {
+      const mapObj = window[mapName];
+      if (!mapObj || !mapObj.timeDimension) {
+        console.warn('Timedimension not found for map:', mapName);
+        return;
+      }
+
+      mapObj.timeDimension.on('timeload', (e) => {
+        updateEVTOLTable(toTimestampKey(e.time));
+      });
+
+      // Initialize table immediately.
+      const initialTime = Object.keys(evtolStatus)[0];
+      if (initialTime) updateEVTOLTable(initialTime);
+    });
+    </script>
+    """ % (
+        json.dumps(status_by_time),
+        m.get_name(),
+        json.dumps(evtol_ids),
+    )
+
+    m.get_root().html.add_child(folium.Element(js))
+
+    output_html.parent.mkdir(parents=True, exist_ok=True)
+    m.save(str(output_html))
+    print(f"Folium map written: {output_html}")
+
+
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Build Plotly slider animation from eVTOL solution snapshots.")
+    parser = argparse.ArgumentParser(description="Build an animated view of an eVTOL solution (Plotly or Folium).")
     parser.add_argument(
         "--input",
         type=Path,
@@ -562,9 +799,16 @@ def parse_args() -> argparse.Namespace:
         "--output",
         type=Path,
         default=Path(__file__).with_name("solution_animation.html"),
-        help="Output HTML animation path",
+        help="Output HTML animation/map path",
     )
-    parser.add_argument("--title", type=str, default="eVTOL Solution Animation", help="Figure title")
+    parser.add_argument(
+        "--backend",
+        type=str,
+        choices=["plotly", "folium"],
+        default="folium",
+        help="Visualization backend to use (plotly or folium).",
+    )
+    parser.add_argument("--title", type=str, default="eVTOL Solution Visualization", help="Figure title")
     parser.add_argument(
         "--fps",
         type=float,
@@ -577,9 +821,31 @@ def parse_args() -> argparse.Namespace:
         default=5,
         help="Interpolated frames inserted between consecutive time steps while keeping total runtime per step unchanged",
     )
+    parser.add_argument(
+        "--start-time",
+        type=str,
+        default="2020-01-01T00:00:00Z",
+        help="Base timestamp used for folium timeline (time=0 corresponds to this).",
+    )
+    parser.add_argument(
+        "--time-unit",
+        type=str,
+        default="s",
+        choices=["s", "m", "h", "d"],
+        help="Unit of the numeric 'time' column when generating folium timestamps (s=seconds, m=minutes, h=hours, d=days).",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
-    build_animation(args.input, args.output, title=args.title, fps=args.fps, subframes=args.subframes)
+    if args.backend == "plotly":
+        build_animation(args.input, args.output, title=args.title, fps=args.fps, subframes=args.subframes)
+    else:
+        build_folium_map(
+            args.input,
+            args.output,
+            title=args.title,
+            start_time=args.start_time,
+            time_unit=args.time_unit,
+        )
