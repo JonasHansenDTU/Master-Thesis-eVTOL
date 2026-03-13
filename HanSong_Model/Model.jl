@@ -101,8 +101,8 @@ function load_data(excel_file::String)
     ###########################################################################
     # Read sheets
     ###########################################################################
-    infra = read_sheet(excel_file, "Infrastructure (3)")
-    pax   = read_sheet(excel_file, "PassengerGroups (3)")
+    infra = read_sheet(excel_file, "Infrastructure")
+    pax   = read_sheet(excel_file, "PassengerGroups")
     plane = read_sheet_any(excel_file, ["PlaneData"])
 
     ###########################################################################
@@ -296,7 +296,7 @@ end
 # Model builder
 ###############################################################################
 
-function build_model(excel_file::String)
+function build_model(excel_file::String; show_progress::Bool = true, display_interval_sec::Int = 5)
 
     data = load_data(excel_file)
 
@@ -340,7 +340,11 @@ function build_model(excel_file::String)
     ###########################################################################
 
     model = Model(Gurobi.Optimizer)
-    set_silent(model)
+    # Show Gurobi MIP progress (incumbent, bound, gap, nodes, time).
+    set_optimizer_attribute(model, "OutputFlag", show_progress ? 1 : 0)
+    if show_progress
+        set_optimizer_attribute(model, "DisplayInterval", max(1, display_interval_sec))
+    end
 
     ###########################################################################
     # Decision variables
@@ -638,10 +642,14 @@ end
 # Solve + simple reporting
 ###############################################################################
 
-function solve_instance(excel_file::String)
+function solve_instance(excel_file::String; show_progress::Bool = true, display_interval_sec::Int = 5)
     timings = Dict{String,Float64}()
 
-    t_build = @elapsed model, data = build_model(excel_file)
+    t_build = @elapsed model, data = build_model(
+        excel_file;
+        show_progress = show_progress,
+        display_interval_sec = display_interval_sec,
+    )
     timings["Build model (incl. data load)"] = t_build
 
     t_opt = @elapsed optimize!(model)
