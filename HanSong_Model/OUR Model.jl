@@ -537,13 +537,13 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
     )
 
     # (6.23) Battery update between operations
-    @constraint(model, [i in V, j in V, m in 1:maximum(M), n in N],
+    @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
         u[m,n] <= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                   ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) +
                   (1 - x[i,j,m,n]) * L2
     )
 
-    @constraint(model, [i in V, j in V, m in 1:maximum(M), n in N],
+    @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
         u[m,n] >= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                   ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) -
                   (1 - x[i,j,m,n]) * L2
