@@ -592,47 +592,47 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
         - (1 - (s[a,m,n] - s[a,m-1,n])) * L <= w
     )
 
-    # (6.37) eVTOL is either parked or flying at each time t
-    @constraint(model, [n in N, t in T],
-        sum(is_p[j,n,t] for j in V) +
-        sum(is_o[i,j,m,n,t] for i in V, j in V, m in M) == 1
-    )
+    # # (6.37) eVTOL is either parked or flying at each time t
+    # @constraint(model, [n in N, t in T],
+    #     sum(is_p[j,n,t] for j in V) +
+    #     sum(is_o[i,j,m,n,t] for i in V, j in V, m in M) == 1
+    # )
 
-    # (6.38) Travel time occupancy relation
-    @constraint(model, [i in V, j in V, m in M, n in N],
-        rt[(i,j)] * x[i,j,m,n] == sum(is_o[i,j,m,n,t] for t in T)
-    )
+    # # (6.38) Travel time occupancy relation
+    # @constraint(model, [i in V, j in V, m in M, n in N],
+    #     rt[(i,j)] * x[i,j,m,n] == sum(is_o[i,j,m,n,t] for t in T)
+    # )
 
-    # (6.39) Departure time bound from occupancy
-    @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
-        dep[m,n] <= t + L * (1 - is_o[i,j,m,n,t]) - 1
-    )
+    # # (6.39) Departure time bound from occupancy
+    # @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
+    #     dep[m,n] <= t + L * (1 - is_o[i,j,m,n,t]) - 1
+    # )
 
-    # (6.40) Arrival time bound from occupancy
-    @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
-        arr[m,n] >= t - L * (1 - is_o[i,j,m,n,t])
-    )
+    # # (6.40) Arrival time bound from occupancy
+    # @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
+    #     arr[m,n] >= t - L * (1 - is_o[i,j,m,n,t])
+    # )
 
-    # (6.41) Parking state propagation
-    @constraint(model, [j in V, n in N, t in T_no0],
-        is_p[j,n,t] <= is_p[j,n,t-1] +
-                       sum(is_o[i,j,m,n,t-1] for i in V, m in M)
-    )
+    # # (6.41) Parking state propagation
+    # @constraint(model, [j in V, n in N, t in T_no0],
+    #     is_p[j,n,t] <= is_p[j,n,t-1] +
+    #                    sum(is_o[i,j,m,n,t-1] for i in V, m in M)
+    # )
 
-    # (6.42) Parking capacity at vertiports
-    @constraint(model, [j in VP, t in T],
-        sum(is_p[j,n,t] for n in N) <= cap_node[j]
-    )
+    # # (6.42) Parking capacity at vertiports
+    # @constraint(model, [j in VP, t in T],
+    #     sum(is_p[j,n,t] for n in N) <= cap_node[j]
+    # )
 
-    # (6.43) Parking capacity at vertistops
-    @constraint(model, [j in VS, t in T],
-        sum(is_p[j,n,t] for n in N) <= cap_node[j]
-    )
+    # # (6.43) Parking capacity at vertistops
+    # @constraint(model, [j in VS, t in T],
+    #     sum(is_p[j,n,t] for n in N) <= cap_node[j]
+    # )
 
-    # (6.44) Air corridor capacity
-    @constraint(model, [i in V, j in V, t in T],
-        sum(is_o[i,j,m,n,t] for m in M, n in N) <= cap_flt
-    )
+    # # (6.44) Air corridor capacity
+    # @constraint(model, [i in V, j in V, t in T],
+    #     sum(is_o[i,j,m,n,t] for m in M, n in N) <= cap_flt
+    # )
 
     # (6.45) Initial parking at base vertiport
     @constraint(model, [n in N],
