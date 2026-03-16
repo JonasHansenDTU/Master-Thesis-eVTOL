@@ -101,9 +101,9 @@ function load_data(excel_file::String)
     ###########################################################################
     # Read sheets
     ###########################################################################
-    infra = read_sheet(excel_file, "Infrastructure")
-    pax   = read_sheet(excel_file, "PassengerGroups")
-    plane = read_sheet_any(excel_file, ["PlaneData"])
+    infra = read_sheet(excel_file, "Infrastructure (3)")
+    pax   = read_sheet(excel_file, "PassengerGroups (3)")
+    plane = read_sheet_any(excel_file, ["PlaneData (2)"])
 
     ###########################################################################
     # Infrastructure columns
@@ -401,7 +401,8 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
     ###########################################################################
     @objective(
         model, Max,
-        sum(d[(a,i,j)] * ss[a,n] * (fd[i,j]*(1 - so[a]) + fs[i,j]*so[a]) for a in A, i in V, j in V, n in N) -
+        sum(fd[i,j]* d[(a,i,j)] * ss[a,n] * (1 - so[a]) for a in A, i in V, j in V, n in N) +
+        sum(fs[i,j]* d[(a,i,j)] * ss[a,n] * so[a] for a in A, i in V, j in V, n in N) -
         sum(c[(i,j)] * x[i,j,m,n] for i in V, j in V, m in M, n in N) -
         sum(p[a] * (1 - sum(ss[a,n] for n in N)) for a in A)
     )
