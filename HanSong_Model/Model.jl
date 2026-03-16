@@ -180,6 +180,7 @@ function load_data(excel_file::String)
     M = 0:6
     M_no0 = 1:maximum(M)
     M_mid = 1:(maximum(M)-1)
+    M_no_last = 0:(maximum(M)-1)
 
     T = 0:120
     T_no0 = 1:maximum(T)
@@ -237,6 +238,7 @@ function load_data(excel_file::String)
     c    = Dict{Tuple{Int,Int},Float64}()
     e    = Dict{Tuple{Int,Int},Float64}()
     rt   = Dict{Tuple{Int,Int},Int}()
+  
 
     for i in V, j in V
         dij = haversine_km(lat[i], lon[i], lat[j], lon[j])
@@ -245,7 +247,7 @@ function load_data(excel_file::String)
         fs[(i,j)] = fare_stopover_factor * fd[(i,j)]
         c[(i,j)]  = operating_cost_per_km * dij
         e[(i,j)]  = battery_per_km * dij
-        rt[(i,j)] = Int(ceil(time_per_km * dij)) 
+        rt[(i,j)] = Int(ceil(time_per_km * dij))
     end
 
     ###########################################################################
@@ -281,7 +283,7 @@ function load_data(excel_file::String)
         pax = pax,
         plane = plane,
         V = V, VP = VP, VS = VS, A = A, N = collect(N),
-        M = collect(M), M_no0 = collect(M_no0), M_mid = collect(M_mid),
+        M = collect(M), M_no0 = collect(M_no0), M_mid = collect(M_mid), M_no_last = collect(M_no_last),
         T = collect(T), T_no0 = collect(T_no0),
         vb = vb,
         lat = lat, lon = lon,
@@ -308,6 +310,7 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
     M = data.M
     M_no0 = data.M_no0
     M_mid = data.M_mid
+    M_no_last = data.M_no_last
     T = data.T
     T_no0 = data.T_no0
 
@@ -469,7 +472,7 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
     )
 
     # (6.14) Layover path existence lower bound using m and m+1
-    @constraint(model, [a in A, m in M_mid, n in N],
+    @constraint(model, [a in A, m in M_no_last, n in N],
         s[a,m,n] >=
         sum(x[op[a], k_node, m, n] + x[k_node, dp[a], m+1, n] for k_node in V) - 1 - (1 - z[a]) * L
     )
@@ -509,7 +512,7 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
     )
 
     # (6.22) Layover service linkage
-    @constraint(model, [a in A, i in V, k_node in V, j in V, m in M_mid, n in N],
+    @constraint(model, [a in A, i in V, k_node in V, j in V, m in M_no_last, n in N],
         k[a,i,k_node,m,n] + k[a,k_node,j,m+1,n] <=
         d[(a,i,j)] + x[i,k_node,m,n] + x[k_node,j,m+1,n] + (1 - z[a]) * L
     )
@@ -549,14 +552,14 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
     @constraint(model, [n in N], arr[0,n] == 0)
 
     # (6.31) Arrival time lower bound
-    # @constraint(model, [i in V, j in V, m in M_no0, n in N],
-    # arr[m,n] >= arr[m-1,n] + (te + rt[(i,j)]) * x[i,j,m,n]
-    # )
+    @constraint(model, [i in V, j in V, m in M_no0, n in N],
+    arr[m,n] >= arr[m-1,n] + (te + rt[(i,j)]) * x[i,j,m,n]
+    )
 
     # (6.31) Arrival time lower bound (alternative)
-    @constraint(model, [m in M_no0, n in N],
-    arr[m,n] >= arr[m-1,n] + sum((te + rt[(i,j)]) * x[i,j,m,n] for i in V, j in V)
-    )
+    # @constraint(model, [m in M_no0, n in N],
+    # arr[m,n] >= arr[m-1,n] + sum((te + rt[(i,j)]) * x[i,j,m,n] for i in V, j in V)
+    # )
 
     # (6.32) Departure time = arrival time - travel time
     @constraint(model, [m in M, n in N],
@@ -564,7 +567,7 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
     )
 
     # (6.33) Minimum layover time
-    @constraint(model, [a in A, n in N, m in M_mid],
+    @constraint(model, [a in A, n in N, m in M_no_last],
         dep[m+1,n] <= arr[m,n] + te + (2 - s[a,m,n] - s[a,m+1,n]) * L
     )
 
