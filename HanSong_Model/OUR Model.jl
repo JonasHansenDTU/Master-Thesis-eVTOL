@@ -102,7 +102,7 @@ function load_data(excel_file::String)
     # Read sheets
     ###########################################################################
     infra = read_sheet(excel_file, "Infrastructure (3)")
-    pax   = read_sheet(excel_file, "PassengerGroups")
+    pax   = read_sheet(excel_file, "PassengerGroups (3)")
     plane = read_sheet_any(excel_file, ["PlaneData (2)"])
 
     ###########################################################################
@@ -223,7 +223,9 @@ function load_data(excel_file::String)
     w                     = params["w"]
     ET                    = params["ET"]
     L1                    = 1
-    L2                    = bmax*2
+    L2a                   = 0
+    L2b                   = bmax
+    L2c                   = bmax + ec * ET
     L3                    = ET
 
 
@@ -310,7 +312,7 @@ function load_data(excel_file::String)
         dist = dist, fd = fd, fs = fs, c = c, e = e, rt = rt,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
         cap_node = cap_node, cap_flt = cap_flt, cap_u = cap_u,
-        bmax = bmax, bmin = bmin, ec = ec, te = te, w = w, ET = ET, L1 = L1, L2 = L2, L3 = L3
+        bmax = bmax, bmin = bmin, ec = ec, te = te, w = w, ET = ET, L1 = L1, L2a = L2a, L2b = L2b, L2c = L2c, L3 = L3
     )
 end
 
@@ -354,9 +356,11 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
     ec       = data.ec
     te       = data.te
     w        = data.w
-    L1        = data.L1
-    L2        = data.L2
-    L3        = data.L3
+    L1       = data.L1
+    L2a      = data.L2a
+    L2b      = data.L2b
+    L2c      = data.L2c
+    L3       = data.L3
 
     ###########################################################################
     # Solver
@@ -529,24 +533,24 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
 
     # (6.22) First operation from a vertiport only reflects energy consumption
     @constraint(model, [i in V, j in V, n in N],
-        u[1,n] <= u[0,n] - e[(i,j)] * x[i,j,1,n] + (1 - x[i,j,1,n]) * L2
+        u[1,n] <= u[0,n] - e[(i,j)] * x[i,j,1,n] + (1 - x[i,j,1,n]) * L2a
     )
 
     @constraint(model, [i in V, j in V, n in N],
-        u[1,n] >= u[0,n] - e[(i,j)] * x[i,j,1,n] - (1 - x[i,j,1,n]) * L2
+        u[1,n] >= u[0,n] - e[(i,j)] * x[i,j,1,n] - (1 - x[i,j,1,n]) * L2b
     )
 
     # (6.23) Battery update between operations
     @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
         u[m,n] <= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                   ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) +
-                  (1 - x[i,j,m,n]) * L2
+                  (1 - x[i,j,m,n]) * L2c
     )
 
     @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
         u[m,n] >= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                   ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) -
-                  (1 - x[i,j,m,n]) * L2
+                  (1 - x[i,j,m,n]) * L2c
     )
 
     # (6.24) Operation 0 starts at time 0
@@ -856,7 +860,9 @@ function print_results_pretty(model::Model, data)
     w = data.w
     ET = data.ET
     L1 = data.L1
-    L2 = data.L2
+    L2a = data.L2a
+    L2b = data.L2b
+    L2c = data.L2c
     L3 = data.L3
     fd = data.fd
     fs = data.fs
@@ -1083,4 +1089,4 @@ t_pretty = @elapsed Base.invokelatest(print_results_pretty, model, data)
 timings["Pretty printing"] = t_pretty
 timings["Total script"] = time() - total_start
 
-print_timing_summary(timings)
+print_timing_summary(timings) 
