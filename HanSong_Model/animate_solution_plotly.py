@@ -238,11 +238,15 @@ def _prepare_snapshot_data(snapshot_csv: Path) -> tuple[pd.DataFrame, pd.DataFra
             next_b = batt_raw[e + 1] if e + 1 < len(idx) else batt_raw[e]
 
             if mode[s] == "flying":
-                b0 = prev_b
-                b1 = next_b
-                # Flying should not increase under linear usage assumption.
-                if b1 > b0:
-                    b1 = b0
+                # For flying segments, use actual segment boundaries in raw data
+                b0 = batt_raw[s]
+                b1 = batt_raw[e]
+                
+                # If battery didn't decrease during flight (data issue), estimate consumption
+                # Assume ~5% consumption per time step of flying
+                if b1 >= b0:
+                    seg_len = e - s + 1
+                    b1 = max(0, b0 - 5 * seg_len)
             else:
                 b0 = prev_b
                 b1 = next_b
@@ -434,33 +438,115 @@ def build_animation(
         for n in evtols:
             snap = _snapshot_for_evtol(n, tau)
             if snap is None:
-                rows.append((str(n), "-", "-", "-", "-"))
+                rows.append((str(n), "-", "-", "-", "-", "-"))
                 continue
-            batt_txt = "-" if math.isnan(snap["battery"]) else f"{snap['battery']:.1f}%"
+            
+            # Get current battery
+            current_batt = snap["battery"]
+            batt_txt = "-" if math.isnan(current_batt) else f"{current_batt:.1f}%"
+            
+            # Find battery bounds for the current operation phase
+            # Look backward to find the start of the current operation, and forward to find the end
+            t_floor = math.floor(tau)
+            t_ceil = math.ceil(tau)
+            
+            # Get the main data row
+            main_row = row_lookup.get((n, t_floor)) if t_floor in times else None
+            if main_row is None:
+                main_row = row_lookup.get((n, t_ceil))
+            
+            # For flying segments: show battery at start of flight → battery at end of flight
+            # For charging segments: show battery at start of charge → battery at end of charge
+            # For parked: show current battery → current battery
+            op_end_batt = "-"
+            
+            if main_row is not None:
+                is_o = float(main_row.get("is_o", 0.0) or 0.0)
+                is_p = float(main_row.get("is_p", 0.0) or 0.0)
+                
+                # Find the segment this row belongs to (same operation, consecutive times)
+                current_op = main_row.get("op")
+                current_from = main_row.get("node_from")
+                current_to = main_row.get("node_to")
+                
+                # Find segment boundaries
+                seg_start_idx = t_floor
+                seg_end_idx = t_floor
+                
+                # Look backward for segment start
+                search_t = t_floor - 1
+                while search_t >= 0:
+                    alt_row = row_lookup.get((n, search_t))
+                    if alt_row is not None:
+                        alt_is_o = float(alt_row.get("is_o", 0.0) or 0.0)
+                        alt_is_p = float(alt_row.get("is_p", 0.0) or 0.0)
+                        same_mode = (is_o > 0.5 and alt_is_o > 0.5) or (is_p > 0.5 and alt_is_p > 0.5)
+                        same_arc = (
+                            same_mode and 
+                            alt_row.get("op") == current_op and 
+                            alt_row.get("node_from") == current_from and 
+                            alt_row.get("node_to") == current_to
+                        )
+                        if not same_arc:
+                            break
+                        seg_start_idx = search_t
+                    search_t -= 1
+                
+                # Look forward for segment end
+                search_t = t_floor + 1
+                while search_t <= max(times) if times else False:
+                    alt_row = row_lookup.get((n, search_t))
+                    if alt_row is not None:
+                        alt_is_o = float(alt_row.get("is_o", 0.0) or 0.0)
+                        alt_is_p = float(alt_row.get("is_p", 0.0) or 0.0)
+                        same_mode = (is_o > 0.5 and alt_is_o > 0.5) or (is_p > 0.5 and alt_is_p > 0.5)
+                        same_arc = (
+                            same_mode and 
+                            alt_row.get("op") == current_op and 
+                            alt_row.get("node_from") == current_from and 
+                            alt_row.get("node_to") == current_to
+                        )
+                        if not same_arc:
+                            break
+                        seg_end_idx = search_t
+                    search_t += 1
+                
+                # Get battery at segment boundaries
+                start_row = row_lookup.get((n, seg_start_idx))
+                end_row = row_lookup.get((n, seg_end_idx))
+                
+                if start_row is not None and end_row is not None:
+                    start_batt = float(start_row.get("battery_smooth", float("nan"))) if pd.notna(start_row.get("battery_smooth")) else float("nan")
+                    end_batt = float(end_row.get("battery_smooth", float("nan"))) if pd.notna(end_row.get("battery_smooth")) else float("nan")
+                    
+                    if not math.isnan(start_batt) and not math.isnan(end_batt):
+                        op_end_batt = f"{start_batt:.1f}% → {end_batt:.1f}%"
+            
             groups_txt = snap["groups"] if snap["groups"] and snap["groups"].lower() != "nan" else "-"
-            rows.append((str(n), snap["state"], str(snap["pax"]), batt_txt, groups_txt))
+            rows.append((str(n), snap["state"], str(snap["pax"]), batt_txt, op_end_batt, groups_txt))
 
         col_evtol = [r[0] for r in rows]
         col_state = [r[1] for r in rows]
         col_pax = [r[2] for r in rows]
         col_batt = [r[3] for r in rows]
-        col_groups = [r[4] for r in rows]
+        col_op_batt = [r[4] for r in rows]
+        col_groups = [r[5] for r in rows]
 
         return go.Table(
             header=dict(
-                values=["eVTOL", "State", "Pax", "Battery", "Groups"],
+                values=["eVTOL", "State", "Pax", "Battery (now)", "Battery (operation)", "Groups"],
                 fill_color="#e9eef5",
                 align="left",
-                font=dict(size=12),
+                font=dict(size=11),
             ),
             cells=dict(
-                values=[col_evtol, col_state, col_pax, col_batt, col_groups],
+                values=[col_evtol, col_state, col_pax, col_batt, col_op_batt, col_groups],
                 align="left",
-                font=dict(size=11),
+                font=dict(size=10),
                 fill_color="#ffffff",
                 height=26,
             ),
-            columnwidth=[60, 75, 50, 80, 260],
+            columnwidth=[60, 75, 50, 85, 140, 260],
         )
 
     frame_times: list[float] = []
