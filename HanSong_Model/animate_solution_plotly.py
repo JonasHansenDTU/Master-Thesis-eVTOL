@@ -30,7 +30,7 @@ def _nearest_valid(values: list[float], idx: int, direction: int) -> float | Non
     return None
 
 
-def _prepare_snapshot_data(snapshot_csv: Path, infrastructure_csv: Path | None = None) -> tuple[pd.DataFrame, pd.DataFrame, list[int], list[int]]:
+def _prepare_snapshot_data(snapshot_csv: Path) -> tuple[pd.DataFrame, pd.DataFrame, list[int], list[int]]:
     """Read and normalize snapshot CSV into a dataframe ready for visualization.
 
     Returns:
@@ -103,14 +103,16 @@ def _prepare_snapshot_data(snapshot_csv: Path, infrastructure_csv: Path | None =
     df["time"] = df["time"].astype("Int64")
     df["evtol_id"] = df["evtol_id"].astype("Int64")
 
-    # Build static node layer
-    if infrastructure_csv is not None and infrastructure_csv.exists():
-        infra_df = pd.read_csv(infrastructure_csv)
-        # Assume columns: node, lat, lon
-        infra_df = infra_df.rename(columns={"lon": "x", "lat": "y"})
-        nodes = infra_df[["node", "x", "y"]].dropna().drop_duplicates(subset=["node"]).sort_values("node")
+    # Build static node layer - extract vertiports and solution nodes
+    # Vertiports are stored as special rows with state="vertiport", evtol_id=-1, time=-1
+    vertiport_rows = df[df["state"] == "vertiport"].copy()
+    if not vertiport_rows.empty:
+        # Use vertiport rows for node coordinates
+        nodes = vertiport_rows[["node_from", "x", "y"]].rename(
+            columns={"node_from": "node"}
+        ).drop_duplicates(subset=["node"]).sort_values("node")
     else:
-        # Build from snapshot data
+        # Fallback: build from snapshot data
         node_points_a = df[["node_from", "x_from", "y_from"]].rename(
             columns={"node_from": "node", "x_from": "x", "y_from": "y"}
         )
@@ -123,6 +125,9 @@ def _prepare_snapshot_data(snapshot_csv: Path, infrastructure_csv: Path | None =
             .drop_duplicates(subset=["node"])
             .sort_values("node")
         )
+    
+    # Filter out vertiport rows from the main dataframe for processing
+    df = df[df["state"] != "vertiport"].copy()
 
     times = sorted(df["time"].dropna().astype(int).unique().tolist())
     if not times:
@@ -261,7 +266,6 @@ def build_animation(
     title: str = "eVTOL Solution Animation",
     fps: float = 12.0,
     subframes: int = 1,
-    infrastructure_csv: Path | None = None,
 ) -> None:
     if fps <= 0:
         raise ValueError("fps must be > 0")
@@ -273,7 +277,7 @@ def build_animation(
     base_frame_duration_ms = max(1, int(round(1000.0 / fps)))
     frame_duration_ms = max(1, int(round(base_frame_duration_ms / subframes)))
 
-    df, nodes, times, evtols = _prepare_snapshot_data(snapshot_csv, infrastructure_csv)
+    df, nodes, times, evtols = _prepare_snapshot_data(snapshot_csv)
 
     color_cycle = [
         "#1f77b4",
@@ -587,7 +591,6 @@ def build_folium_map(
     title: str = "eVTOL Solution Map",
     start_time: str = "2020-01-01T00:00:00Z",
     time_unit: str = "s",
-    infrastructure_csv: Path | None = None,
 ) -> None:
     """Generate a Folium map with a time slider showing eVTOL positions."""
 
@@ -596,7 +599,7 @@ def build_folium_map(
             "folium is required for the folium backend. Install it with `pip install folium`."
         )
 
-    df, nodes, _, _ = _prepare_snapshot_data(snapshot_csv, infrastructure_csv)
+    df, nodes, _, _ = _prepare_snapshot_data(snapshot_csv)
 
     # Prefer already-processed interpolated coords when available.
     x_col = "anim_x" if "anim_x" in df.columns else "x"
@@ -838,12 +841,6 @@ def parse_args() -> argparse.Namespace:
         help="Base timestamp used for folium timeline (time=0 corresponds to this).",
     )
     parser.add_argument(
-        "--infrastructure",
-        type=Path,
-        default=Path(__file__).with_name("infrastructure.csv"),
-        help="Path to infrastructure CSV with columns: node, lat, lon. Shows all vertiports even if not used in solution.",
-    )
-    parser.add_argument(
         "--time-unit",
         type=str,
         default="s",
@@ -856,7 +853,7 @@ def parse_args() -> argparse.Namespace:
 if __name__ == "__main__":
     args = parse_args()
     if args.backend == "plotly":
-        build_animation(args.input, args.output, title=args.title, fps=args.fps, subframes=args.subframes, infrastructure_csv=args.infrastructure)
+        build_animation(args.input, args.output, title=args.title, fps=args.fps, subframes=args.subframes)
     else:
         build_folium_map(
             args.input,
@@ -864,5 +861,4 @@ if __name__ == "__main__":
             title=args.title,
             start_time=args.start_time,
             time_unit=args.time_unit,
-            infrastructure_csv=args.infrastructure,
         )
