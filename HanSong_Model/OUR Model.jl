@@ -102,8 +102,8 @@ function load_data(excel_file::String)
     # Read sheets
     ###########################################################################
     infra = read_sheet(excel_file, "Infrastructure (3)")
-    pax   = read_sheet(excel_file, "PassengerGroups")
-    plane = read_sheet_any(excel_file, ["PlaneData"])
+    pax   = read_sheet(excel_file, "PassengerGroups (3)")
+    plane = read_sheet_any(excel_file, ["PlaneData (2)"])
 
     ###########################################################################
     # Infrastructure columns
@@ -478,13 +478,13 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
     )
 
     # (6.10) Layover path existence lower bound using m and m+1
-    @constraint(model, [a in A, m in M_no_last, n in N],
+    @constraint(model, [a in A, m in M_mid, n in N],
         s[a,m,n] >=
         sum(x[op[a], k_node, m, n] + x[k_node, dp[a], m+1, n] for k_node in V) - 1 - (1 - z[a]) * M1
     )
 
     # (6.11) Same as above, using m-1 and m
-    @constraint(model, [a in A, m in M_no0, n in N],
+    @constraint(model, [a in A, m in 2:maximum(M), n in N],
         s[a,m,n] >=
         sum(x[op[a], k_node, m-1, n] + x[k_node, dp[a], m, n] for k_node in V) - 1 - (1 - z[a]) * M1
     )
