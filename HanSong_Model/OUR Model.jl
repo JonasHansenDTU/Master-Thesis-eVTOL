@@ -102,7 +102,7 @@ function load_data(excel_file::String)
     # Read sheets
     ###########################################################################
     infra = read_sheet(excel_file, "Infrastructure (3)")
-    pax   = read_sheet(excel_file, "PassengerGroups")
+    pax   = read_sheet(excel_file, "PassengerGroups (4)")
     plane = read_sheet_any(excel_file, ["PlaneData (2)"])
 
     ###########################################################################
