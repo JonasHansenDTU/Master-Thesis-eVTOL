@@ -103,7 +103,7 @@ function load_data(excel_file::String)
     ###########################################################################
     infra = read_sheet(excel_file, "Infrastructure (3)")
     pax   = read_sheet(excel_file, "PassengerGroups")
-    plane = read_sheet_any(excel_file, ["PlaneData (2)"])
+    plane = read_sheet_any(excel_file, ["PlaneData"])
 
     ###########################################################################
     # Infrastructure columns
@@ -223,9 +223,11 @@ function load_data(excel_file::String)
     te                    = params["te"]
     w                     = params["w"]
     ET                    = params["ET"]
-    L1                    = 1
-    L2                    = bmax*2
-    L3                    = ET
+    M1                    = 1
+    M2a                   = 0
+    M2b                   = bmax
+    M2c                   = bmax + ec * ET
+    M3                    = ET
 
 
     ###########################################################################
@@ -311,7 +313,7 @@ function load_data(excel_file::String)
         dist = dist, fd = fd, fs = fs, c = c, e = e, rt = rt,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
         cap_node = cap_node, cap_flt = cap_flt, cap_u = cap_u,
-        bmax = bmax, bmin = bmin, ec = ec, te = te, w = w, ET = ET, L1 = L1, L2 = L2, L3 = L3
+        bmax = bmax, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3
     )
 end
 
@@ -355,9 +357,11 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
     ec       = data.ec
     te       = data.te
     w        = data.w
-    L1        = data.L1
-    L2        = data.L2
-    L3        = data.L3
+    M1        = data.M1
+    M2a       = data.M2a
+    M2b       = data.M2b
+    M2c       = data.M2c
+    M3        = data.M3
 
     ###########################################################################
     # Solver
@@ -462,7 +466,7 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
 
     # (6.8) Direct connection if z[a] = 0
     @constraint(model, [a in A, m in M, n in N],
-        s[a,m,n] <= x[op[a], dp[a], m, n] + z[a] * L1
+        s[a,m,n] <= x[op[a], dp[a], m, n] + z[a] * M1
     )
 
     # (6.9) Layover path existence upper bound
@@ -470,19 +474,19 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
         s[a,m,n] <=
         sum(x[op[a], k_node, m, n] for k_node in V) +
         sum(x[k_node, dp[a], m, n] for k_node in V) +
-        (1 - z[a]) * L1
+        (1 - z[a]) * M1
     )
 
     # (6.10) Layover path existence lower bound using m and m+1
     @constraint(model, [a in A, m in M_no_last, n in N],
         s[a,m,n] >=
-        sum(x[op[a], k_node, m, n] + x[k_node, dp[a], m+1, n] for k_node in V) - 1 - (1 - z[a]) * L1
+        sum(x[op[a], k_node, m, n] + x[k_node, dp[a], m+1, n] for k_node in V) - 1 - (1 - z[a]) * M1
     )
 
     # (6.11) Same as above, using m-1 and m
     @constraint(model, [a in A, m in M_no0, n in N],
         s[a,m,n] >=
-        sum(x[op[a], k_node, m-1, n] + x[k_node, dp[a], m, n] for k_node in V) - 1 - (1 - z[a]) * L1
+        sum(x[op[a], k_node, m-1, n] + x[k_node, dp[a], m, n] for k_node in V) - 1 - (1 - z[a]) * M1
     )
 
     # (6.12) If passenger group does not allow layovers, then z[a] must be 0
@@ -503,15 +507,19 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
         sum(k[a,i,j,m,n] for i in V, j in V) >= s[a,m,n]
     )
 
+    @constraint(model, [a in A],
+        sum(k[a,i,j,m,n] for m in M, i in V, j in V, n in N) <= 1 + z[a]
+    )
+
     # (6.16) Direct service linkage
     @constraint(model, [a in A, i in V, j in V, m in M_no0, n in N],
-        2 * k[a,i,j,m,n] <= d[(a,i,j)] + x[i,j,m,n] + z[a] * L1
+        2 * k[a,i,j,m,n] <= d[(a,i,j)] + x[i,j,m,n] + z[a] * M1
     )
 
     # (6.17) Layover service linkage
     @constraint(model, [a in A, i in V, k_node in V, j in V, m in M_no_last, n in N],
         k[a,i,k_node,m,n] + k[a,k_node,j,m+1,n] <=
-        d[(a,i,j)] + x[i,k_node,m,n] + x[k_node,j,m+1,n] + (1 - z[a]) * L1
+        d[(a,i,j)] + x[i,k_node,m,n] + x[k_node,j,m+1,n] + (1 - z[a]) * M1
     )
 
     # (6.18) Seat capacity
@@ -530,24 +538,24 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
 
     # (6.22) First operation from a vertiport only reflects energy consumption
     @constraint(model, [i in V, j in V, n in N],
-        u[1,n] <= u[0,n] - e[(i,j)] * x[i,j,1,n] + (1 - x[i,j,1,n]) * L2
+        u[1,n] <= u[0,n] - e[(i,j)] * x[i,j,1,n] + (1 - x[i,j,1,n]) * M2a
     )
 
     @constraint(model, [i in V, j in V, n in N],
-        u[1,n] >= u[0,n] - e[(i,j)] * x[i,j,1,n] - (1 - x[i,j,1,n]) * L2
+        u[1,n] >= u[0,n] - e[(i,j)] * x[i,j,1,n] - (1 - x[i,j,1,n]) * M2b
     )
 
     # (6.23) Battery update between operations
     @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
         u[m,n] <= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                   ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) +
-                  (1 - x[i,j,m,n]) * L2
+                  (1 - x[i,j,m,n]) * M2c
     )
 
     @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
         u[m,n] >= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                   ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) -
-                  (1 - x[i,j,m,n]) * L2
+                  (1 - x[i,j,m,n]) * M2c
     )
 
     # (6.24) Operation 0 starts at time 0
@@ -565,18 +573,18 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
 
     # (6.27) Minimum layover time
     @constraint(model, [a in A, n in N, m in M_no_last],
-        dep[m+1,n] <= arr[m,n] + te + (2 - s[a,m,n] - s[a,m+1,n]) * L3
+        dep[m+1,n] <= arr[m,n] + te + (2 - s[a,m,n] - s[a,m+1,n]) * M3
     )
 
     # (6.28) eVTOL must arrive before passenger group arrives for boarding
     @constraint(model, [a in A, m in M_no0, n in N],
         arr[m-1,n] <= sum(d[(a,i,j)] * dt[a] for i in V, j in V) +
-                      (1 - (s[a,m,n] - s[a,m-1,n])) * L3
+                      (1 - (s[a,m,n] - s[a,m-1,n])) * M3
     )
 
     # (6.29) Earliest arrival time at destination
     @constraint(model, [a in A, i in V, j in V, m in M_no0, n in N],
-        d[(a,i,j)] * dt[a] - (1 - (s[a,m,n] - s[a,m-1,n])) * L3 <=
+        d[(a,i,j)] * dt[a] - (1 - (s[a,m,n] - s[a,m-1,n])) * M3 <=
         arr[m,n] - sum(rt[(i,k_node)] * x[i,k_node,m,n] for k_node in V)
     )
 
@@ -585,7 +593,7 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
         arr[m,n]
         - sum(rt[(i,j)] * x[i,j,m,n] for i in V, j in V)
         - sum(d[(a,i,j)] * dt[a] * s[a,m,n] for i in V, j in V)
-        - (1 - (s[a,m,n] - s[a,m-1,n])) * L3 <= w
+        - (1 - (s[a,m,n] - s[a,m-1,n])) * M3 <= w
     )
 
     # (6.31) eVTOL is either parked or flying at each time t
@@ -601,12 +609,12 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
 
     # (6.33) Departure time bound from occupancy
     @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
-        dep[m,n] <= t + L3 * (1 - is_o[i,j,m,n,t]) - 1
+        dep[m,n] <= t + M3 * (1 - is_o[i,j,m,n,t]) - 1
     )
 
     # (6.34) Arrival time bound from occupancy
     @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
-        arr[m,n] >= t - L3 * (1 - is_o[i,j,m,n,t])
+        arr[m,n] >= t - M3 * (1 - is_o[i,j,m,n,t])
     )
 
     # (6.35) Parking state propagation
@@ -883,9 +891,11 @@ function print_results_pretty(model::Model, data)
     te = data.te
     w = data.w
     ET = data.ET
-    L1 = data.L1
-    L2 = data.L2
-    L3 = data.L3
+    M1 = data.M1
+    M2a = data.M2a
+    M2b = data.M2b
+    M2c = data.M2c
+    M3 = data.M3
     fd = data.fd
     fs = data.fs
     c = data.c
