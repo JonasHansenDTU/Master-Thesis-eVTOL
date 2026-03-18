@@ -31,7 +31,90 @@ def _nearest_valid(values: list[float], idx: int, direction: int) -> float | Non
     return None
 
 
-def _prepare_snapshot_data(snapshot_csv: Path) -> tuple[pd.DataFrame, pd.DataFrame, list[int], list[int]]:
+def _coerce_float(value) -> float | None:
+    if value is None or pd.isna(value):
+        return None
+    text = str(value).strip().replace(",", ".")
+    if text == "":
+        return None
+    try:
+        return float(text)
+    except ValueError:
+        return None
+
+
+def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    r = 6371.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = phi2 - phi1
+    dlambda = math.radians(lon2 - lon1)
+    a = math.sin(dphi / 2.0) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2.0) ** 2
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return r * c
+
+
+def _clamp(value: float, lo: float, hi: float) -> float:
+    return max(lo, min(hi, value))
+
+
+def _load_battery_params(
+    params_excel: Path | None,
+    battery_per_km: float | None,
+    charge_rate_per_step: float | None,
+    bmin: float | None,
+    bmax: float | None,
+) -> tuple[float, float, float, float]:
+    params: dict[str, float] = {}
+
+    if params_excel is not None and params_excel.exists():
+        try:
+            raw = pd.read_excel(params_excel, sheet_name="Parameters", header=None)
+            for _, row in raw.iterrows():
+                if len(row) < 2:
+                    continue
+                key = str(row.iloc[0]).strip()
+                if not key or key.lower() == "nan":
+                    continue
+                val = _coerce_float(row.iloc[1])
+                if val is not None:
+                    params[key] = val
+        except Exception as exc:
+            print(f"Warning: could not read parameters from {params_excel}: {exc}")
+
+    resolved_bpk = battery_per_km if battery_per_km is not None else params.get("battery_per_km")
+    resolved_ec = charge_rate_per_step if charge_rate_per_step is not None else params.get("ec")
+    resolved_bmin = bmin if bmin is not None else params.get("bmin")
+    resolved_bmax = bmax if bmax is not None else params.get("bmax")
+
+    if resolved_bpk is None:
+        resolved_bpk = 0.0
+        print("Warning: battery_per_km missing; defaulting to 0.0")
+    if resolved_ec is None:
+        resolved_ec = 0.0
+        print("Warning: ec (charge rate) missing; defaulting to 0.0")
+    if resolved_bmin is None:
+        resolved_bmin = 0.0
+        print("Warning: bmin missing; defaulting to 0.0")
+    if resolved_bmax is None:
+        resolved_bmax = 100.0
+        print("Warning: bmax missing; defaulting to 100.0")
+
+    if resolved_bmax < resolved_bmin:
+        resolved_bmin, resolved_bmax = resolved_bmax, resolved_bmin
+
+    return float(resolved_bpk), float(resolved_ec), float(resolved_bmin), float(resolved_bmax)
+
+
+def _prepare_snapshot_data(
+    snapshot_csv: Path,
+    *,
+    params_excel: Path | None = None,
+    battery_per_km: float | None = None,
+    charge_rate_per_step: float | None = None,
+    bmin: float | None = None,
+    bmax: float | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, list[int], list[int]]:
     """Read and normalize snapshot CSV into a dataframe ready for visualization.
 
     Returns:
@@ -95,11 +178,18 @@ def _prepare_snapshot_data(snapshot_csv: Path) -> tuple[pd.DataFrame, pd.DataFra
     if "onboard_groups" not in df.columns:
         df["onboard_groups"] = ""
 
-    # Build a smoothed battery series at integer times under a linear assumption:
-    # - flying segments: linear decrease
-    # - ground segments (parked/inactive): linear increase or flat
-    # This removes staircase artifacts from operation-level battery reporting.
+    # Build a physics-based battery series at integer times:
+    # - flying segments: distance-based discharge
+    # - non-flying segments: charging with ec per time step
     df["battery_smooth"] = df["battery_level"]
+
+    bpk, ec, battery_min, battery_max = _load_battery_params(
+        params_excel=params_excel,
+        battery_per_km=battery_per_km,
+        charge_rate_per_step=charge_rate_per_step,
+        bmin=bmin,
+        bmax=bmax,
+    )
 
     df["time"] = df["time"].astype("Int64")
     df["evtol_id"] = df["evtol_id"].astype("Int64")
@@ -207,60 +297,118 @@ def _prepare_snapshot_data(snapshot_csv: Path) -> tuple[pd.DataFrame, pd.DataFra
 
             k = j
 
-        # 2) Battery smoothing across mode segments.
-        batt_raw = [float(df.loc[i, "battery_level"]) if pd.notna(df.loc[i, "battery_level"]) else float("nan") for i in idx]
+        # 2) Physics-based battery update across contiguous mode segments.
+        if not idx:
+            continue
 
-        # Fill hard NaNs by nearest values so interpolation has anchors.
-        for p in range(len(batt_raw)):
-            if math.isnan(batt_raw[p]):
-                left = _nearest_valid(batt_raw, p - 1, -1)
-                right = _nearest_valid(batt_raw, p + 1, +1)
-                if left is not None and right is not None:
-                    batt_raw[p] = 0.5 * (left + right)
-                elif left is not None:
-                    batt_raw[p] = left
-                elif right is not None:
-                    batt_raw[p] = right
+        for row_idx in idx:
+            df.loc[row_idx, "battery_segment_start_time"] = df.loc[row_idx, "time"]
+            df.loc[row_idx, "battery_segment_end_time"] = df.loc[row_idx, "time"]
 
-        mode = []
-        for i in idx:
-            is_o = float(df.loc[i, "is_o"] if pd.notna(df.loc[i, "is_o"]) else 0.0)
-            mode.append("flying" if is_o > 0.5 else "ground")
+        seg_start = 0
+        segment_counter = 0
+        segment_rate_per_step: dict[int, float] = {}
 
-        s = 0
-        while s < len(idx):
-            e = s
-            while e + 1 < len(idx) and mode[e + 1] == mode[s]:
-                e += 1
+        while seg_start < len(idx):
+            start_idx = idx[seg_start]
+            start_row = df.loc[start_idx]
+            start_time = int(start_row["time"])
+            is_flying = float(start_row.get("is_o", 0.0) or 0.0) > 0.5
+            mode = "flying" if is_flying else "ground"
+            trip_key = (
+                start_row.get("op"),
+                start_row.get("node_from"),
+                start_row.get("node_to"),
+            ) if is_flying else None
 
-            # Segment anchors from neighboring points when possible.
-            prev_b = batt_raw[s - 1] if s - 1 >= 0 else batt_raw[s]
-            next_b = batt_raw[e + 1] if e + 1 < len(idx) else batt_raw[e]
+            seg_end = seg_start
+            while seg_end + 1 < len(idx):
+                i_cur = idx[seg_end]
+                i_next = idx[seg_end + 1]
+                t_cur = int(df.loc[i_cur, "time"])
+                t_next = int(df.loc[i_next, "time"])
+                if t_next != t_cur + 1:
+                    break
 
-            if mode[s] == "flying":
-                # For flying segments, use actual segment boundaries in raw data
-                b0 = batt_raw[s]
-                b1 = batt_raw[e]
-                
-                # If battery didn't decrease during flight (data issue), estimate consumption
-                # Assume ~5% consumption per time step of flying
-                if b1 >= b0:
-                    seg_len = e - s + 1
-                    b1 = max(0, b0 - 5 * seg_len)
+                row_next = df.loc[i_next]
+                next_flying = float(row_next.get("is_o", 0.0) or 0.0) > 0.5
+                next_mode = "flying" if next_flying else "ground"
+                if next_mode != mode:
+                    break
+
+                if mode == "flying":
+                    next_key = (row_next.get("op"), row_next.get("node_from"), row_next.get("node_to"))
+                    if next_key != trip_key:
+                        break
+
+                seg_end += 1
+
+            seg_indices = idx[seg_start:seg_end + 1]
+            seg_start_time = int(df.loc[seg_indices[0], "time"])
+            seg_end_time = int(df.loc[seg_indices[-1], "time"])
+
+            for row_idx in seg_indices:
+                df.loc[row_idx, "battery_segment_id"] = segment_counter
+                df.loc[row_idx, "battery_segment_mode"] = mode
+                df.loc[row_idx, "battery_segment_start_time"] = seg_start_time
+                df.loc[row_idx, "battery_segment_end_time"] = seg_end_time
+
+            if mode == "flying":
+                ref_row = df.loc[seg_indices[0]]
+                distance_km = 0.0
+                valid_trip_coords = (
+                    pd.notna(ref_row.get("x_from"))
+                    and pd.notna(ref_row.get("y_from"))
+                    and pd.notna(ref_row.get("x_to"))
+                    and pd.notna(ref_row.get("y_to"))
+                )
+                if valid_trip_coords:
+                    # x=lon, y=lat in snapshot export
+                    distance_km = _haversine_km(
+                        float(ref_row["y_from"]),
+                        float(ref_row["x_from"]),
+                        float(ref_row["y_to"]),
+                        float(ref_row["x_to"]),
+                    )
+
+                duration_steps = max(1, len(seg_indices))
+                total_discharge = bpk * distance_km
+                segment_rate_per_step[segment_counter] = total_discharge / duration_steps
             else:
-                b0 = prev_b
-                b1 = next_b
-                # Ground charging should not decrease under linear assumption.
-                if b1 < b0:
-                    b1 = b0
+                segment_rate_per_step[segment_counter] = ec
 
-            seg_len = e - s + 1
-            for k_seg in range(seg_len):
-                frac = 0.0 if seg_len == 1 else k_seg / (seg_len - 1)
-                b = (1.0 - frac) * b0 + frac * b1
-                df.loc[idx[s + k_seg], "battery_smooth"] = b
+            segment_counter += 1
+            seg_start = seg_end + 1
 
-            s = e + 1
+        batt_raw = [float(df.loc[i, "battery_level"]) if pd.notna(df.loc[i, "battery_level"]) else float("nan") for i in idx]
+        seed = batt_raw[0]
+        if math.isnan(seed):
+            seed = _nearest_valid(batt_raw, 1, +1)
+        if seed is None or math.isnan(seed):
+            seed = battery_max
+        current_battery = _clamp(float(seed), battery_min, battery_max)
+
+        for p, row_idx in enumerate(idx):
+            df.loc[row_idx, "battery_smooth"] = current_battery
+            if p == len(idx) - 1:
+                continue
+
+            next_idx = idx[p + 1]
+            t_now = int(df.loc[row_idx, "time"])
+            t_next = int(df.loc[next_idx, "time"])
+            dt = max(0, t_next - t_now)
+            if dt == 0:
+                continue
+
+            seg_id = int(df.loc[row_idx, "battery_segment_id"])
+            mode = str(df.loc[row_idx, "battery_segment_mode"])
+            rate = segment_rate_per_step.get(seg_id, 0.0)
+            if mode == "flying":
+                current_battery -= rate * dt
+            else:
+                current_battery += rate * dt
+
+            current_battery = _clamp(current_battery, battery_min, battery_max)
 
     return df, nodes, times, evtols
 
@@ -271,6 +419,11 @@ def build_animation(
     title: str = "eVTOL Solution Animation",
     fps: float = 12.0,
     subframes: int = 1,
+    params_excel: Path | None = None,
+    battery_per_km: float | None = None,
+    charge_rate_per_step: float | None = None,
+    bmin: float | None = None,
+    bmax: float | None = None,
 ) -> None:
     if fps <= 0:
         raise ValueError("fps must be > 0")
@@ -282,7 +435,14 @@ def build_animation(
     base_frame_duration_ms = max(1, int(round(1000.0 / fps)))
     frame_duration_ms = max(1, int(round(base_frame_duration_ms / subframes)))
 
-    df, nodes, times, evtols = _prepare_snapshot_data(snapshot_csv)
+    df, nodes, times, evtols = _prepare_snapshot_data(
+        snapshot_csv,
+        params_excel=params_excel,
+        battery_per_km=battery_per_km,
+        charge_rate_per_step=charge_rate_per_step,
+        bmin=bmin,
+        bmax=bmax,
+    )
 
     color_cycle = [
         "#1f77b4",
@@ -445,8 +605,7 @@ def build_animation(
             current_batt = snap["battery"]
             batt_txt = "-" if math.isnan(current_batt) else f"{current_batt:.1f}%"
             
-            # Find battery bounds for the current operation phase
-            # Look backward to find the start of the current operation, and forward to find the end
+            # Find battery bounds for the current contiguous battery segment.
             t_floor = math.floor(tau)
             t_ceil = math.ceil(tau)
             
@@ -455,65 +614,13 @@ def build_animation(
             if main_row is None:
                 main_row = row_lookup.get((n, t_ceil))
             
-            # For flying segments: show battery at start of flight → battery at end of flight
-            # For charging segments: show battery at start of charge → battery at end of charge
-            # For parked: show current battery → current battery
             op_end_batt = "-"
             
             if main_row is not None:
-                is_o = float(main_row.get("is_o", 0.0) or 0.0)
-                is_p = float(main_row.get("is_p", 0.0) or 0.0)
-                
-                # Find the segment this row belongs to (same operation, consecutive times)
-                current_op = main_row.get("op")
-                current_from = main_row.get("node_from")
-                current_to = main_row.get("node_to")
-                
-                # Find segment boundaries
-                seg_start_idx = t_floor
-                seg_end_idx = t_floor
-                
-                # Look backward for segment start
-                search_t = t_floor - 1
-                while search_t >= 0:
-                    alt_row = row_lookup.get((n, search_t))
-                    if alt_row is not None:
-                        alt_is_o = float(alt_row.get("is_o", 0.0) or 0.0)
-                        alt_is_p = float(alt_row.get("is_p", 0.0) or 0.0)
-                        same_mode = (is_o > 0.5 and alt_is_o > 0.5) or (is_p > 0.5 and alt_is_p > 0.5)
-                        same_arc = (
-                            same_mode and 
-                            alt_row.get("op") == current_op and 
-                            alt_row.get("node_from") == current_from and 
-                            alt_row.get("node_to") == current_to
-                        )
-                        if not same_arc:
-                            break
-                        seg_start_idx = search_t
-                    search_t -= 1
-                
-                # Look forward for segment end
-                search_t = t_floor + 1
-                while search_t <= max(times) if times else False:
-                    alt_row = row_lookup.get((n, search_t))
-                    if alt_row is not None:
-                        alt_is_o = float(alt_row.get("is_o", 0.0) or 0.0)
-                        alt_is_p = float(alt_row.get("is_p", 0.0) or 0.0)
-                        same_mode = (is_o > 0.5 and alt_is_o > 0.5) or (is_p > 0.5 and alt_is_p > 0.5)
-                        same_arc = (
-                            same_mode and 
-                            alt_row.get("op") == current_op and 
-                            alt_row.get("node_from") == current_from and 
-                            alt_row.get("node_to") == current_to
-                        )
-                        if not same_arc:
-                            break
-                        seg_end_idx = search_t
-                    search_t += 1
-                
-                # Get battery at segment boundaries
-                start_row = row_lookup.get((n, seg_start_idx))
-                end_row = row_lookup.get((n, seg_end_idx))
+                seg_start_t = int(main_row.get("battery_segment_start_time", t_floor))
+                seg_end_t = int(main_row.get("battery_segment_end_time", t_floor))
+                start_row = row_lookup.get((n, seg_start_t))
+                end_row = row_lookup.get((n, seg_end_t))
                 
                 if start_row is not None and end_row is not None:
                     start_batt = float(start_row.get("battery_smooth", float("nan"))) if pd.notna(start_row.get("battery_smooth")) else float("nan")
@@ -678,6 +785,11 @@ def build_folium_map(
     title: str = "eVTOL Solution Map",
     start_time: str = "2020-01-01T00:00:00Z",
     time_unit: str = "s",
+    params_excel: Path | None = None,
+    battery_per_km: float | None = None,
+    charge_rate_per_step: float | None = None,
+    bmin: float | None = None,
+    bmax: float | None = None,
 ) -> None:
     """Generate a Folium map with a time slider showing eVTOL positions."""
 
@@ -686,7 +798,14 @@ def build_folium_map(
             "folium is required for the folium backend. Install it with `pip install folium`."
         )
 
-    df, nodes, _, _ = _prepare_snapshot_data(snapshot_csv)
+    df, nodes, _, _ = _prepare_snapshot_data(
+        snapshot_csv,
+        params_excel=params_excel,
+        battery_per_km=battery_per_km,
+        charge_rate_per_step=charge_rate_per_step,
+        bmin=bmin,
+        bmax=bmax,
+    )
 
     # Prefer already-processed interpolated coords when available.
     x_col = "anim_x" if "anim_x" in df.columns else "x"
@@ -934,13 +1053,54 @@ def parse_args() -> argparse.Namespace:
         choices=["s", "m", "h", "d"],
         help="Unit of the numeric 'time' column when generating folium timestamps (s=seconds, m=minutes, h=hours, d=days).",
     )
+    parser.add_argument(
+        "--params-excel",
+        type=Path,
+        default=Path(__file__).with_name("inputData.xlsx"),
+        help="Excel file containing the Parameters sheet used for battery rates and bounds.",
+    )
+    parser.add_argument(
+        "--battery-per-km",
+        type=float,
+        default=None,
+        help="Override battery_per_km from parameters sheet.",
+    )
+    parser.add_argument(
+        "--charge-rate",
+        type=float,
+        default=None,
+        help="Override charging rate ec per time step.",
+    )
+    parser.add_argument(
+        "--bmin",
+        type=float,
+        default=None,
+        help="Override minimum battery bound.",
+    )
+    parser.add_argument(
+        "--bmax",
+        type=float,
+        default=None,
+        help="Override maximum battery bound.",
+    )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
     if args.backend == "plotly":
-        build_animation(args.input, args.output, title=args.title, fps=args.fps, subframes=args.subframes)
+        build_animation(
+            args.input,
+            args.output,
+            title=args.title,
+            fps=args.fps,
+            subframes=args.subframes,
+            params_excel=args.params_excel,
+            battery_per_km=args.battery_per_km,
+            charge_rate_per_step=args.charge_rate,
+            bmin=args.bmin,
+            bmax=args.bmax,
+        )
     else:
         build_folium_map(
             args.input,
@@ -948,4 +1108,9 @@ if __name__ == "__main__":
             title=args.title,
             start_time=args.start_time,
             time_unit=args.time_unit,
+            params_excel=args.params_excel,
+            battery_per_km=args.battery_per_km,
+            charge_rate_per_step=args.charge_rate,
+            bmin=args.bmin,
+            bmax=args.bmax,
         )
