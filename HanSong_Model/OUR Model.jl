@@ -103,7 +103,7 @@ function load_data(excel_file::String)
     ###########################################################################
     infra = read_sheet(excel_file, "Infrastructure (3)")
     pax   = read_sheet(excel_file, "PassengerGroups")
-    plane = read_sheet_any(excel_file, ["PlaneData (2)"])
+    plane = read_sheet_any(excel_file, ["PlaneData"])
 
     ###########################################################################
     # Infrastructure columns
@@ -501,6 +501,10 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
     # (6.15) If s[a,m,n] = 1, then at least one arc serving that passenger must exist
     @constraint(model, [a in A, m in M_no0, n in N],
         sum(k[a,i,j,m,n] for i in V, j in V) >= s[a,m,n]
+    )
+
+    @constraint(model, [a in A],
+        sum(k[a,i,j,m,n] for m in M, i in V, j in V, n in N) <= 1 + z[a]
     )
 
     # (6.16) Direct service linkage
