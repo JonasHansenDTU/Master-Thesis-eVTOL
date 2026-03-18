@@ -168,6 +168,7 @@ function load_data(excel_file::String)
         vb[n] = b
     end
 
+    
     bad_bases = sort([b for b in values(vb) if !(b in V)])
     if !isempty(bad_bases)
         error("PlaneData has invalid Base Vertiport values $(bad_bases). Valid vertiports from Infrastructure are $(V).")
