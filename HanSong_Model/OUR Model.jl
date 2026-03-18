@@ -96,13 +96,13 @@ Expected sheets:
     - PassengerGroups (3)
     - PlaneData
 """
-function load_data(excel_file::String)
+function load_data(excel_file::String) 
 
     ###########################################################################
     # Read sheets
     ###########################################################################
     infra = read_sheet(excel_file, "Infrastructure (3)")
-    pax   = read_sheet(excel_file, "PassengerGroups (3)")
+    pax   = read_sheet(excel_file, "PassengerGroups")
     plane = read_sheet_any(excel_file, ["PlaneData (2)"])
 
     ###########################################################################
@@ -178,8 +178,6 @@ function load_data(excel_file::String)
     M_mid = 1:(maximum(M)-1)
     M_no_last = 0:(maximum(M)-1)
 
-    T = 0:120
-    T_no0 = 1:maximum(T)
 
     # Passenger groups
     A = sort(Int.(pax[!, group_col]))
@@ -227,6 +225,9 @@ function load_data(excel_file::String)
     L2b                   = bmax
     L2c                   = bmax + ec * ET
     L3                    = ET
+
+    T = 0:ET
+    T_no0 = 1:maximum(T)
 
 
     ###########################################################################
