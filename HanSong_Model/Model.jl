@@ -229,6 +229,13 @@ function load_data(excel_file::String)
         end
     end
 
+    # Export all infrastructure nodes to CSV for animation
+    infra_export = DataFrame(node=Int[], lat=Float64[], lon=Float64[])
+    for (j, la) in lat
+        push!(infra_export, (node=j, lat=la, lon=lon[j]))
+    end
+    CSV.write(joinpath(@__DIR__, "infrastructure.csv"), infra_export)
+
     ###########################################################################
     # Derived arc parameters: distance, fd, fs, c, e, rt
     ###########################################################################
