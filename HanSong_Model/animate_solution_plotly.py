@@ -268,11 +268,11 @@ def build_animation(
 
     color_cycle = [
         "#1f77b4",
-        "#d62728",
+        "#cb2020",
         "#2ca02c",
         "#ff7f0e",
         "#9467bd",
-        "#8c564b",
+        "#ffe100",
         "#e377c2",
         "#17becf",
     ]
