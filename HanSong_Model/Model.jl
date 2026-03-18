@@ -229,6 +229,13 @@ function load_data(excel_file::String)
         end
     end
 
+    # Export all infrastructure nodes to CSV for animation
+    infra_export = DataFrame(node=Int[], lat=Float64[], lon=Float64[])
+    for (j, la) in lat
+        push!(infra_export, (node=j, lat=la, lon=lon[j]))
+    end
+    CSV.write(joinpath(@__DIR__, "infrastructure.csv"), infra_export)
+
     ###########################################################################
     # Derived arc parameters: distance, fd, fs, c, e, rt
     ###########################################################################
@@ -592,47 +599,47 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
         - (1 - (s[a,m,n] - s[a,m-1,n])) * L <= w
     )
 
-    # (6.37) eVTOL is either parked or flying at each time t
-    @constraint(model, [n in N, t in T],
-        sum(is_p[j,n,t] for j in V) +
-        sum(is_o[i,j,m,n,t] for i in V, j in V, m in M) == 1
-    )
+    # # (6.37) eVTOL is either parked or flying at each time t
+    # @constraint(model, [n in N, t in T],
+    #     sum(is_p[j,n,t] for j in V) +
+    #     sum(is_o[i,j,m,n,t] for i in V, j in V, m in M) == 1
+    # )
 
-    # (6.38) Travel time occupancy relation
-    @constraint(model, [i in V, j in V, m in M, n in N],
-        rt[(i,j)] * x[i,j,m,n] == sum(is_o[i,j,m,n,t] for t in T)
-    )
+    # # (6.38) Travel time occupancy relation
+    # @constraint(model, [i in V, j in V, m in M, n in N],
+    #     rt[(i,j)] * x[i,j,m,n] == sum(is_o[i,j,m,n,t] for t in T)
+    # )
 
-    # (6.39) Departure time bound from occupancy
-    @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
-        dep[m,n] <= t + L * (1 - is_o[i,j,m,n,t]) - 1
-    )
+    # # (6.39) Departure time bound from occupancy
+    # @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
+    #     dep[m,n] <= t + L * (1 - is_o[i,j,m,n,t]) - 1
+    # )
 
-    # (6.40) Arrival time bound from occupancy
-    @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
-        arr[m,n] >= t - L * (1 - is_o[i,j,m,n,t])
-    )
+    # # (6.40) Arrival time bound from occupancy
+    # @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
+    #     arr[m,n] >= t - L * (1 - is_o[i,j,m,n,t])
+    # )
 
-    # (6.41) Parking state propagation
-    @constraint(model, [j in V, n in N, t in T_no0],
-        is_p[j,n,t] <= is_p[j,n,t-1] +
-                       sum(is_o[i,j,m,n,t-1] for i in V, m in M)
-    )
+    # # (6.41) Parking state propagation
+    # @constraint(model, [j in V, n in N, t in T_no0],
+    #     is_p[j,n,t] <= is_p[j,n,t-1] +
+    #                    sum(is_o[i,j,m,n,t-1] for i in V, m in M)
+    # )
 
-    # (6.42) Parking capacity at vertiports
-    @constraint(model, [j in VP, t in T],
-        sum(is_p[j,n,t] for n in N) <= cap_node[j]
-    )
+    # # (6.42) Parking capacity at vertiports
+    # @constraint(model, [j in VP, t in T],
+    #     sum(is_p[j,n,t] for n in N) <= cap_node[j]
+    # )
 
-    # (6.43) Parking capacity at vertistops
-    @constraint(model, [j in VS, t in T],
-        sum(is_p[j,n,t] for n in N) <= cap_node[j]
-    )
+    # # (6.43) Parking capacity at vertistops
+    # @constraint(model, [j in VS, t in T],
+    #     sum(is_p[j,n,t] for n in N) <= cap_node[j]
+    # )
 
-    # (6.44) Air corridor capacity
-    @constraint(model, [i in V, j in V, t in T],
-        sum(is_o[i,j,m,n,t] for m in M, n in N) <= cap_flt
-    )
+    # # (6.44) Air corridor capacity
+    # @constraint(model, [i in V, j in V, t in T],
+    #     sum(is_o[i,j,m,n,t] for m in M, n in N) <= cap_flt
+    # )
 
     # (6.45) Initial parking at base vertiport
     @constraint(model, [n in N],
@@ -814,6 +821,33 @@ function export_solution_snapshots(model::Model, data; out_csv::String = joinpat
     end
 
     snapshots = DataFrame(rows)
+    
+    # Append infrastructure nodes as vertiport markers
+    for j in V
+        push!(snapshots, (
+            time = -1,
+            evtol_id = -1,
+            state = "vertiport",
+            node_from = j,
+            node_to = j,
+            op = -1,
+            is_p = 0.0,
+            is_o = 0.0,
+            battery_level = NaN,
+            battery_after_op = -1,
+            onboard_passenger_count = 0,
+            onboard_groups = "",
+            onboard_group_sizes = "",
+            served_groups_evtol = "",
+            x = lon[j],
+            y = lat[j],
+            x_from = lon[j],
+            y_from = lat[j],
+            x_to = lon[j],
+            y_to = lat[j]
+        ))
+    end
+    
     CSV.write(out_csv, snapshots)
     println("Snapshot export written: ", out_csv, " (rows=", nrow(snapshots), ")")
     return snapshots

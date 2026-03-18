@@ -96,13 +96,13 @@ Expected sheets:
     - PassengerGroups (3)
     - PlaneData
 """
-function load_data(excel_file::String) 
+function load_data(excel_file::String)
 
     ###########################################################################
     # Read sheets
     ###########################################################################
     infra = read_sheet(excel_file, "Infrastructure (3)")
-    pax   = read_sheet(excel_file, "PassengerGroups (4)")
+    pax   = read_sheet(excel_file, "PassengerGroups")
     plane = read_sheet_any(excel_file, ["PlaneData (2)"])
 
     ###########################################################################
@@ -168,6 +168,7 @@ function load_data(excel_file::String)
         vb[n] = b
     end
 
+    
     bad_bases = sort([b for b in values(vb) if !(b in V)])
     if !isempty(bad_bases)
         error("PlaneData has invalid Base Vertiport values $(bad_bases). Valid vertiports from Infrastructure are $(V).")
@@ -178,6 +179,8 @@ function load_data(excel_file::String)
     M_mid = 1:(maximum(M)-1)
     M_no_last = 0:(maximum(M)-1)
 
+    T = 0:120
+    T_no0 = 1:maximum(T)
 
     # Passenger groups
     A = sort(Int.(pax[!, group_col]))
@@ -221,13 +224,8 @@ function load_data(excel_file::String)
     w                     = params["w"]
     ET                    = params["ET"]
     L1                    = 1
-    L2a                   = 0
-    L2b                   = bmax
-    L2c                   = bmax + ec * ET
+    L2                    = bmax*2
     L3                    = ET
-
-    T = 0:ET
-    T_no0 = 1:maximum(T)
 
 
     ###########################################################################
@@ -313,7 +311,7 @@ function load_data(excel_file::String)
         dist = dist, fd = fd, fs = fs, c = c, e = e, rt = rt,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
         cap_node = cap_node, cap_flt = cap_flt, cap_u = cap_u,
-        bmax = bmax, bmin = bmin, ec = ec, te = te, w = w, ET = ET, L1 = L1, L2a = L2a, L2b = L2b, L2c = L2c, L3 = L3
+        bmax = bmax, bmin = bmin, ec = ec, te = te, w = w, ET = ET, L1 = L1, L2 = L2, L3 = L3
     )
 end
 
@@ -357,11 +355,9 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
     ec       = data.ec
     te       = data.te
     w        = data.w
-    L1       = data.L1
-    L2a      = data.L2a
-    L2b      = data.L2b
-    L2c      = data.L2c
-    L3       = data.L3
+    L1        = data.L1
+    L2        = data.L2
+    L3        = data.L3
 
     ###########################################################################
     # Solver
@@ -534,24 +530,24 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
 
     # (6.22) First operation from a vertiport only reflects energy consumption
     @constraint(model, [i in V, j in V, n in N],
-        u[1,n] <= u[0,n] - e[(i,j)] * x[i,j,1,n] + (1 - x[i,j,1,n]) * L2a
+        u[1,n] <= u[0,n] - e[(i,j)] * x[i,j,1,n] + (1 - x[i,j,1,n]) * L2
     )
 
     @constraint(model, [i in V, j in V, n in N],
-        u[1,n] >= u[0,n] - e[(i,j)] * x[i,j,1,n] - (1 - x[i,j,1,n]) * L2b
+        u[1,n] >= u[0,n] - e[(i,j)] * x[i,j,1,n] - (1 - x[i,j,1,n]) * L2
     )
 
     # (6.23) Battery update between operations
     @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
         u[m,n] <= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                   ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) +
-                  (1 - x[i,j,m,n]) * L2c
+                  (1 - x[i,j,m,n]) * L2
     )
 
     @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
         u[m,n] >= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                   ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) -
-                  (1 - x[i,j,m,n]) * L2c
+                  (1 - x[i,j,m,n]) * L2
     )
 
     # (6.24) Operation 0 starts at time 0
@@ -812,6 +808,33 @@ function export_solution_snapshots(model::Model, data; out_csv::String = joinpat
     end
 
     snapshots = DataFrame(rows)
+    
+    # Append infrastructure nodes as vertiport markers
+    for j in V
+        push!(snapshots, (
+            time = -1,
+            evtol_id = -1,
+            state = "vertiport",
+            node_from = j,
+            node_to = j,
+            op = -1,
+            is_p = 0.0,
+            is_o = 0.0,
+            battery_level = NaN,
+            battery_after_op = -1,
+            onboard_passenger_count = 0,
+            onboard_groups = "",
+            onboard_group_sizes = "",
+            served_groups_evtol = "",
+            x = lon[j],
+            y = lat[j],
+            x_from = lon[j],
+            y_from = lat[j],
+            x_to = lon[j],
+            y_to = lat[j]
+        ))
+    end
+    
     CSV.write(out_csv, snapshots)
     println("Snapshot export written: ", out_csv, " (rows=", nrow(snapshots), ")")
     return snapshots
@@ -861,9 +884,7 @@ function print_results_pretty(model::Model, data)
     w = data.w
     ET = data.ET
     L1 = data.L1
-    L2a = data.L2a
-    L2b = data.L2b
-    L2c = data.L2c
+    L2 = data.L2
     L3 = data.L3
     fd = data.fd
     fs = data.fs
@@ -1090,4 +1111,4 @@ t_pretty = @elapsed Base.invokelatest(print_results_pretty, model, data)
 timings["Pretty printing"] = t_pretty
 timings["Total script"] = time() - total_start
 
-print_timing_summary(timings) 
+print_timing_summary(timings)

@@ -4,6 +4,7 @@ import argparse
 import math
 from pathlib import Path
 
+
 import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -103,19 +104,31 @@ def _prepare_snapshot_data(snapshot_csv: Path) -> tuple[pd.DataFrame, pd.DataFra
     df["time"] = df["time"].astype("Int64")
     df["evtol_id"] = df["evtol_id"].astype("Int64")
 
-    # Build static node layer from any known node endpoint coordinate
-    node_points_a = df[["node_from", "x_from", "y_from"]].rename(
-        columns={"node_from": "node", "x_from": "x", "y_from": "y"}
-    )
-    node_points_b = df[["node_to", "x_to", "y_to"]].rename(
-        columns={"node_to": "node", "x_to": "x", "y_to": "y"}
-    )
-    nodes = (
-        pd.concat([node_points_a, node_points_b], ignore_index=True)
-        .dropna(subset=["node", "x", "y"])
-        .drop_duplicates(subset=["node"])
-        .sort_values("node")
-    )
+    # Build static node layer - extract vertiports and solution nodes
+    # Vertiports are stored as special rows with state="vertiport", evtol_id=-1, time=-1
+    vertiport_rows = df[df["state"] == "vertiport"].copy()
+    if not vertiport_rows.empty:
+        # Use vertiport rows for node coordinates
+        nodes = vertiport_rows[["node_from", "x", "y"]].rename(
+            columns={"node_from": "node"}
+        ).drop_duplicates(subset=["node"]).sort_values("node")
+    else:
+        # Fallback: build from snapshot data
+        node_points_a = df[["node_from", "x_from", "y_from"]].rename(
+            columns={"node_from": "node", "x_from": "x", "y_from": "y"}
+        )
+        node_points_b = df[["node_to", "x_to", "y_to"]].rename(
+            columns={"node_to": "node", "x_to": "x", "y_to": "y"}
+        )
+        nodes = (
+            pd.concat([node_points_a, node_points_b], ignore_index=True)
+            .dropna(subset=["node", "x", "y"])
+            .drop_duplicates(subset=["node"])
+            .sort_values("node")
+        )
+    
+    # Filter out vertiport rows from the main dataframe for processing
+    df = df[df["state"] != "vertiport"].copy()
 
     times = sorted(df["time"].dropna().astype(int).unique().tolist())
     if not times:
@@ -136,6 +149,7 @@ def _prepare_snapshot_data(snapshot_csv: Path) -> tuple[pd.DataFrame, pd.DataFra
     df.loc[parked_mask, "anim_x"] = df.loc[parked_mask, "x_from"]
     df.loc[parked_mask, "anim_y"] = df.loc[parked_mask, "y_from"]
 
+    
     for n in evtols:
         dn = df[df["evtol_id"] == n].copy().sort_values("time")
         idx = dn.index.to_list()
@@ -268,11 +282,11 @@ def build_animation(
 
     color_cycle = [
         "#1f77b4",
-        "#d62728",
+        "#cb2020",
         "#2ca02c",
         "#ff7f0e",
         "#9467bd",
-        "#8c564b",
+        "#ffe100",
         "#e377c2",
         "#17becf",
     ]
