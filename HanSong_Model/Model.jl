@@ -229,6 +229,13 @@ function load_data(excel_file::String)
         end
     end
 
+    # Export all infrastructure nodes to CSV for animation
+    infra_export = DataFrame(node=Int[], lat=Float64[], lon=Float64[])
+    for (j, la) in lat
+        push!(infra_export, (node=j, lat=la, lon=lon[j]))
+    end
+    CSV.write(joinpath(@__DIR__, "infrastructure.csv"), infra_export)
+
     ###########################################################################
     # Derived arc parameters: distance, fd, fs, c, e, rt
     ###########################################################################
@@ -814,6 +821,33 @@ function export_solution_snapshots(model::Model, data; out_csv::String = joinpat
     end
 
     snapshots = DataFrame(rows)
+    
+    # Append infrastructure nodes as vertiport markers
+    for j in V
+        push!(snapshots, (
+            time = -1,
+            evtol_id = -1,
+            state = "vertiport",
+            node_from = j,
+            node_to = j,
+            op = -1,
+            is_p = 0.0,
+            is_o = 0.0,
+            battery_level = NaN,
+            battery_after_op = -1,
+            onboard_passenger_count = 0,
+            onboard_groups = "",
+            onboard_group_sizes = "",
+            served_groups_evtol = "",
+            x = lon[j],
+            y = lat[j],
+            x_from = lon[j],
+            y_from = lat[j],
+            x_to = lon[j],
+            y_to = lat[j]
+        ))
+    end
+    
     CSV.write(out_csv, snapshots)
     println("Snapshot export written: ", out_csv, " (rows=", nrow(snapshots), ")")
     return snapshots
