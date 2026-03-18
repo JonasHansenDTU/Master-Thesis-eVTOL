@@ -223,9 +223,11 @@ function load_data(excel_file::String)
     te                    = params["te"]
     w                     = params["w"]
     ET                    = params["ET"]
-    L1                    = 1
-    L2                    = bmax*2
-    L3                    = ET
+    M1                    = 1
+    M2a                   = 0
+    M2b                   = bmax
+    M2c                   = bmax + ec * ET
+    M3                    = ET
 
 
     ###########################################################################
@@ -534,24 +536,24 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
 
     # (6.22) First operation from a vertiport only reflects energy consumption
     @constraint(model, [i in V, j in V, n in N],
-        u[1,n] <= u[0,n] - e[(i,j)] * x[i,j,1,n] + (1 - x[i,j,1,n]) * L2
+        u[1,n] <= u[0,n] - e[(i,j)] * x[i,j,1,n] + (1 - x[i,j,1,n]) * L2a
     )
 
     @constraint(model, [i in V, j in V, n in N],
-        u[1,n] >= u[0,n] - e[(i,j)] * x[i,j,1,n] - (1 - x[i,j,1,n]) * L2
+        u[1,n] >= u[0,n] - e[(i,j)] * x[i,j,1,n] - (1 - x[i,j,1,n]) * L2b
     )
 
     # (6.23) Battery update between operations
     @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
         u[m,n] <= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                   ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) +
-                  (1 - x[i,j,m,n]) * L2
+                  (1 - x[i,j,m,n]) * L2c
     )
 
     @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
         u[m,n] >= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                   ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) -
-                  (1 - x[i,j,m,n]) * L2
+                  (1 - x[i,j,m,n]) * L2c
     )
 
     # (6.24) Operation 0 starts at time 0
