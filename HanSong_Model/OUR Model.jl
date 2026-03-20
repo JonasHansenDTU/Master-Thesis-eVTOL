@@ -444,7 +444,7 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
     @constraint(model, [n in N], sum(x[vb[n], j, 1, n] for j in V) == y[n])
 
     #(6.2b) eVTOL 
-    @constraint(model, [m in 2:maximum(M), n in N], sum(x[i,j,m,n] for i in V, j in V) <= y[n] )
+    @constraint(model, [m in 1:maximum(M), n in N], sum(x[i,j,m,n] for i in V, j in V) <= y[n] )
 
     # (6.3) eVTOL returns to its base vertiport
     @constraint(model, [n in N],
@@ -1018,6 +1018,15 @@ function print_results_pretty(model::Model, data)
     end
     if count == 0
         println("(all zeros)")
+    end
+
+    section("DECISION VAR: y[n] (eVTOL In Use)")
+    println(lpad("eVTOL", 8) * " | " * lpad("Value", 8) * " | " * lpad("In Use", 8))
+    println("-" ^ 32)
+    for n in N
+        yval = value(model[:y][n])
+        in_use = yval > 0.5 ? "Yes" : "No"
+        println(lpad(string(n), 8) * " | " * lpad(@sprintf("%.2f", yval), 8) * " | " * lpad(in_use, 8))
     end
 
     section("DECISION VAR: s[a,m,n] (Service per Operation)")
