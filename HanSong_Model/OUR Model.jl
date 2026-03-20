@@ -381,6 +381,9 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
     # x[i,j,m,n] = 1 if eVTOL n travels from i to j in operation m
     @variable(model, x[i in V, j in V, m in M, n in N], Bin)
 
+    # y[n] = 1 if eVTOL n is in use
+    @variable(model, y[n in N], Bin)
+
     # s[a,m,n] = 1 if eVTOL n serves passenger group a in operation m
     @variable(model, s[a in A, m in M, n in N], Bin)
 
@@ -428,15 +431,20 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
         model, Max,
         sum(d[(a,i,j)] * ss[a,n] * (fd[i,j]*(1 - so[a])+ fs[i,j]* so[a]) for a in A, i in V, j in V, n in N) -
         sum(c[(i,j)] * x[i,j,m,n] for i in V, j in V, m in M, n in N) -
-        sum(p[a] * (1 - sum(ss[a,n] for n in N)) for a in A)
+        sum(p[a] * (1 - sum(ss[a,n] for n in N)) for a in A) 
+        - sum(400*y[n] for n in N)
     )
 
     ###########################################################################
     # Constraints
     ###########################################################################
 
-    # (6.2) eVTOL leaves base vertiport at time/operation 1
-    @constraint(model, [n in N], sum(x[vb[n], j, 1, n] for j in V) == 1)
+    # (6.2) eVTOL leaves base vertiport at time/operation 1 if it is being used
+    # @constraint(model, [n in N], sum(x[vb[n], j, 1, n] for j in V) == 1)
+    @constraint(model, [n in N], sum(x[vb[n], j, 1, n] for j in V) == y[n])
+
+    #(6.2b) eVTOL 
+    @constraint(model, [m in 2:maximum(M), n in N], sum(x[i,j,m,n] for i in V, j in V) <= y[n] )
 
     # (6.3) eVTOL returns to its base vertiport
     @constraint(model, [n in N],
@@ -454,10 +462,10 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
         sum(x[i,j,m,n] for i in V)  >= sum(x[j,i2,m+1,n] for i2 in V)
     )
 
-    # (6.6) One eVTOL can only contain 2 different passenger groups at the same time
-    @constraint(model, [m in M_no0, n in N],
-        sum(s[a,m,n] for a in A) <= 2
-    )
+    # # (6.6) One eVTOL can only contain 2 different passenger groups at the same time
+    # @constraint(model, [m in M_no0, n in N],
+    #     sum(s[a,m,n] for a in A) <= 2
+    # )
 
     # (6.7) Number of flight leg assigned to passenger group a = service indicator + stop indicator 
     @constraint(model, [a in A],
@@ -516,10 +524,21 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
         2 * k[a,i,j,m,n] <= d[(a,i,j)] + x[i,j,m,n] + z[a] * M1
     )
 
-    # (6.17) Layover service linkage
+    # # (6.17) Layover service linkage
+    # @constraint(model, [a in A, i in V, k_node in V, j in V, m in M_no_last, n in N],
+    #     k[a,i,k_node,m,n] + k[a,k_node,j,m+1,n] <=
+    #     d[(a,i,j)] + x[i,k_node,m,n] + x[k_node,j,m+1,n] + (1 - z[a]) * M1
+    # )
+
+    # (6.17) Layover service linkage (alternative version)
     @constraint(model, [a in A, i in V, k_node in V, j in V, m in M_no_last, n in N],
         k[a,i,k_node,m,n] + k[a,k_node,j,m+1,n] <=
-        d[(a,i,j)] + x[i,k_node,m,n] + x[k_node,j,m+1,n] + (1 - z[a]) * M1
+        x[i,k_node,m,n] + x[k_node,j,m+1,n] + (1 - z[a]) * M1
+    )
+
+    # (6.17b) Layover service linkage
+    @constraint(model, [a in A, i in V, k_node in V, j in V, m in M_no_last, n in N],
+        k[a,i,k_node,m,n] + k[a,k_node,j,m+1,n] <= d[(a,i,j)] + 1
     )
 
     # (6.18) Seat capacity
@@ -576,11 +595,11 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
         dep[m+1,n] <= arr[m,n] + te + (2 - s[a,m,n] - s[a,m+1,n]) * M3
     )
 
-    # (6.28) eVTOL must arrive before passenger group arrives for boarding
-    @constraint(model, [a in A, m in M_no0, n in N],
-        arr[m-1,n] <= sum(d[(a,i,j)] * dt[a] for i in V, j in V) +
-                      (1 - (s[a,m,n] - s[a,m-1,n])) * M3
-    )
+    # # (6.28) eVTOL must arrive before passenger group arrives for boarding
+    # @constraint(model, [a in A, m in M_no0, n in N],
+    #     arr[m-1,n] <= sum(d[(a,i,j)] * dt[a] for i in V, j in V) +
+    #                   (1 - (s[a,m,n] - s[a,m-1,n])) * M3
+    # )
 
     # (6.29) Earliest arrival time at destination
     @constraint(model, [a in A, i in V, j in V, m in M_no0, n in N],
