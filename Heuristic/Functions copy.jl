@@ -308,6 +308,9 @@ mutable struct planeSolution
     turnaroundTime::Array{Int32,1}
 end
 
+mutable struct allPlaneSolution
+    planes::Vector{planeSolution}
+end
 
 function BatteryNeeded(TravelLength::Float32, battery_per_km::Float32)
     return TravelLength * battery_per_km
@@ -328,24 +331,200 @@ function FeasibleBattery(evtol::planeSolution, bmax::Float32, bmin::Float32, dis
         TravelLength = dist[(from,to)]
 
         BatteryLevel[i] = BatteryLevel[i-1] - BatteryNeeded(TravelLength, battery_per_km) + BatteryCharged(evtol.turnaroundTime[i], ec)
-    
 
     end
 
 end
 
+function FeasibleCompletionTime(evtols::allPlaneSolution, rt::Matrix{Int}, ET::Int)
+    for plane in evtols.planes
+        travelTime = 0
 
+        for i in 1:plane.flightLegs
+            from = plane.route[i]
+            to = plane.route[i+1]
+
+            travelTime += plane.turnaroundTime[i] + rt[from, to]
+
+            if travelTime > ET
+                return false
+            end
+        end
+    end
+
+    return true
+end
+
+function FeasibleVertiportCapacity(evtols::allPlaneSolution, rt::Matrix{Int}, T::Int, V::Int, cap_v::Array{Int,1})
+    parkingTimes = zeros(Int, V, T)
+
+    for plane in evtols.planes
+        travelTime = 0
+
+        for i in 1:plane.flightLegs
+            from = plane.route[i]
+            to = plane.route[i+1]
+
+            startTime = travelTime
+            endTime = travelTime + plane.turnaroundTime[i]
+
+            for t in startTime:endTime
+                if t >= 1
+                    parkingTimes[from, t] += 1
+                    if parkingTimes[from, t] > cap_v[from]
+                        return false
+                    end
+                end
+            end
+
+            travelTime += plane.turnaroundTime[i] + rt[from, to]
+        end
+    end
+
+    return true
+end
+
+function FeasibleCorridor(evtols::allPlaneSolution, rt::Matrix{Int}, T::Int, V::Int, cap_flt::Int)
+    destinationTimes = zeros(Int, V, V, T)
+
+    for plane in evtols.planes
+        travelTime = 0
+
+        for i in 1:plane.flightLegs
+            from = plane.route[i]
+            to = plane.route[i+1]
+
+            startTime = travelTime + plane.turnaroundTime[i]
+            endTime = travelTime + plane.turnaroundTime[i] + rt[from, to]
+
+            for t in startTime:endTime
+                if t >= 1
+                    destinationTimes[from, to, t] += 1
+                    if destinationTimes[from, to, t] > cap_flt 
+                        return false
+                    end
+                end
+            end
+
+            travelTime += plane.turnaroundTime[i] + rt[from, to]
+        end
+    end
+
+    return true
+end
+
+function FeasibilityCheck(bmax::Float32, bmin::Float32, dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32, evtols::allPlaneSolution, rt::Matrix{Int}, ET::Int,  T::Int, V::Int, cap_flt::Int, cap_v::Array{Int,1})
+    P = zeros(Int32, 4)
+
+    if FeasibleBattery(evtol, bmax, bmin, dist, ec, battery_per_km) == false
+        P[1] = 1
+    end
+
+    if FeasibleCompletionTime(evtols, rt, ET) == false
+        P[2] = 1
+    end
+
+    if FeasibleVertiportCapacity(evtols, rt, T, V, cap_v) == false
+        P[3] = 1
+    end
+
+    if FeasibleCorridor(evtols, rt, T, V, cap_flt) == false
+        P[4] = 1
+    end
+
+    return P
+end
 
 
 ### ------- TESTING AREA !!! --------------###
 # Test if the current version of FeasibleBattery battery works 
-excel_file = joinpath(@__DIR__, "inputData.xlsx")
-data = load_data(excel_file)
+# excel_file = joinpath(@__DIR__, "inputData.xlsx")
+# data = load_data(excel_file)
 
-evtol1 = planeSolution
+# evtol1 = planeSolution
 
-evtol1.flightLegs = 2
+# evtol1.flightLegs = 2
 
-evtol1.route = [1, 2, 1]
+# evtol1.route = [1, 2, 1]
 
-evtol.turnaroundTime = [30, 10]
+# evtol.turnaroundTime = [30, 10]
+
+#Test if this current version of completion time works
+# V = 3
+# rt = [
+#     0 2 1;
+#     2 0 3;
+#     1 3 0
+# ]
+# ET = 10
+
+# # false example
+# p1 = planeSolution(Int32(2), Int32[1, 2, 3], Int32[5, 5])
+# evtols1 = allPlaneSolution([p1])
+
+# println("False example (should be false):")
+# println(FeasibleCompletionTime(evtols1, rt, ET))   # false
+
+# # true example
+# p2 = planeSolution(Int32(1), Int32[1, 2], Int32[5])
+# evtols2 = allPlaneSolution([p2])
+
+# println("True example (should be true):")
+# println(FeasibleCompletionTime(evtols2, rt, ET))   # true
+
+
+#Test if the current version of vertiport capacity works
+# V = 3
+# T = 20
+
+# rt = [
+#     0 2 1;
+#     2 0 3;
+#     1 3 0
+# ]
+
+# cap_v = [1, 2, 2]
+
+# p1 = planeSolution(Int32(1), Int32[1, 2], Int32[5])
+# p2 = planeSolution(Int32(1), Int32[1, 3], Int32[5])
+
+# evtols_false = allPlaneSolution([p1, p2])
+
+# println("False example (should be false):")
+# println(FeasibleVertiportCapacity(evtols_false, rt, T, V, cap_v))
+
+# p3 = planeSolution(Int32(1), Int32[1, 2], Int32[5])
+# p4 = planeSolution(Int32(1), Int32[1, 3], Int32[0])
+
+# evtols_true = allPlaneSolution([p3, p4])
+
+# println("True example (should be true):")
+# println(FeasibleVertiportCapacity(evtols_true, rt, T, V, cap_v))
+
+
+#Test if the current version of corridor works
+# V = 3
+# T = 20
+# cap = 1
+
+# rt = [
+#     0 2 1;
+#     2 0 3;
+#     1 3 0
+# ]
+
+# p1 = planeSolution(Int32(1), Int32[1, 2], Int32[1])
+# p2 = planeSolution(Int32(1), Int32[1, 2], Int32[1])
+
+# evtols_false = allPlaneSolution([p1, p2])
+
+# println("False example (should be false):")
+# println(FeasibleCorridor(evtols_false, rt, T, V, cap))
+
+# p3 = planeSolution(Int32(1), Int32[1, 2], Int32[1])
+# p4 = planeSolution(Int32(1), Int32[1, 2], Int32[5])
+
+# evtols_true = allPlaneSolution([p3, p4])
+
+# println("True example (should be true):")
+# println(FeasibleCorridor(evtols_true, rt, T, V, cap))

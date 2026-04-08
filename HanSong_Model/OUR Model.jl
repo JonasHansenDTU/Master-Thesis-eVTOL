@@ -640,8 +640,6 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
         sum(is_o[i,j,m,n,t] for m in M, n in N) <= cap_flt
     )
 
-
-
     return model, data
 end
 
