@@ -1,6 +1,24 @@
+###############################################################################
+# UAM / eVTOL optimization model in Julia + JuMP
+#
+# Reads input from one Excel file with two sheets:
+#   1) "Infrastructure"
+#   2) "PassengerGroups"
+
+using JuMP
+using Gurobi
 using XLSX
 using DataFrames
+using CSV
+using MathOptInterface
+using Printf
+const MOI = MathOptInterface
 
+###############################################################################
+# Helpers
+###############################################################################
+
+"Normalize column names: lowercase, strip spaces, replace spaces with underscores."
 function normalize_name(x)
     s = lowercase(strip(String(x)))
     s = replace(s, " " => "_")
@@ -83,9 +101,9 @@ function load_data(excel_file::String)
     ###########################################################################
     # Read sheets
     ###########################################################################
-    infra = read_sheet(excel_file, "Infrastructure")
-    pax   = read_sheet(excel_file, "PassengerGroups")
-    plane = read_sheet_any(excel_file, ["PlaneData"])
+    infra = read_sheet(excel_file, "Infrastructure (3)")
+    pax   = read_sheet(excel_file, "PassengerGroups (3)")
+    plane = read_sheet_any(excel_file, ["PlaneData (2)"])
 
     ###########################################################################
     # Infrastructure columns
@@ -95,8 +113,8 @@ function load_data(excel_file::String)
 
     # Coordinates can be either one string column "coordinates"
     # or two numeric columns such as "latitude", "longitude".
-    coord_col = if any(Symbol(String(n)) == :coordinates for n in names(infra))
-        find_col(infra, [:coordinates])
+    coord_col = if any(Symbol(String(n)) == :coordinates_kbh for n in names(infra))
+        find_col(infra, [:coordinates_kbh])
     else
         nothing
     end
@@ -161,7 +179,7 @@ function load_data(excel_file::String)
     M_mid = 1:(maximum(M)-1)
     M_no_last = 0:(maximum(M)-1)
 
-    T = 0:ET
+    T = 0:120
     T_no0 = 1:maximum(T)
 
     # Passenger groups
@@ -217,11 +235,11 @@ function load_data(excel_file::String)
     ###########################################################################
     lat = Dict{Int,Float64}()
     lon = Dict{Int,Float64}()
-    cap_node = Dict{Int,Int}()
+    cap_v = Dict{Int,Int}()
 
     for r in eachrow(infra)
         j = Int(r[id_col])
-        cap_node[j] = Int(r[pads_col])
+        cap_v[j] = Int(r[pads_col])
 
         if coord_col !== nothing
             lat[j], lon[j] = parse_coordinate_string(r[coord_col])
@@ -294,250 +312,10 @@ function load_data(excel_file::String)
         lat = lat, lon = lon,
         dist = dist, fd = fd, fs = fs, c = c, e = e, rt = rt,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
-        cap_node = cap_node, cap_flt = cap_flt, cap_u = cap_u,
+        cap_v = cap_v, cap_flt = cap_flt, cap_u = cap_u,
         bmax = bmax, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3
     )
 end
-
-mutable struct planeSolution
-    flightLegs::Int32
-
-    route::Array{Int32,1}
-
-    turnaroundTime::Array{Int32,1}
-end
-
-mutable struct allPlaneSolution
-    planes::Vector{planeSolution}
-end
-
-function BatteryNeeded(TravelLength::Float32, battery_per_km::Float32)
-    return TravelLength * battery_per_km
-end
-
-function BatteryCharged(turnaroundTime::Float16, ec::Float32)
-    return turnaroundTime*ec
-end
-
-function FeasibleBattery(evtol::planeSolution, bmax::Float32, bmin::Float32, dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32)
-
-    BatteryLevel = zeros(Float16, evtol.flightLegs)
-    BatteryLevel[1] = bmax
-
-    for i in 2:(evtol.flightLegs)
-        from = evtol.route[i-1]
-        to = evtol.route[i]
-        TravelLength = dist[(from,to)]
-
-        BatteryLevel[i] = BatteryLevel[i-1] - BatteryNeeded(TravelLength, battery_per_km) + BatteryCharged(evtol.turnaroundTime[i], ec)
-    end
-
-    for i in 1:(evtol.flightLegs)
-        if BatteryLevel[i] < bmin
-            return false
-        end
-    end
-
-    return true
-end
-
-function FeasibleCompletionTime(evtols::allPlaneSolution, rt::Matrix{Int}, ET::Int)
-    for plane in evtols.planes
-        travelTime = 0
-
-        for i in 1:plane.flightLegs
-            from = plane.route[i]
-            to = plane.route[i+1]
-
-            travelTime += plane.turnaroundTime[i] + rt[from, to]
-
-            if travelTime > ET
-                return false
-            end
-        end
-    end
-
-    return true
-end
-
-function FeasibleVertiportCapacity(evtols::allPlaneSolution, rt::Matrix{Int}, T::Int, V::Int, cap_v::Array{Int,1})
-    parkingTimes = zeros(Int, V, T)
-
-    for plane in evtols.planes
-        travelTime = 0
-
-        for i in 1:plane.flightLegs
-            from = plane.route[i]
-            to = plane.route[i+1]
-
-            startTime = travelTime
-            endTime = travelTime + plane.turnaroundTime[i]
-
-            for t in startTime:endTime
-                if t >= 1
-                    parkingTimes[from, t] += 1
-                    if parkingTimes[from, t] > cap_v[from]
-                        return false
-                    end
-                end
-            end
-
-            travelTime += plane.turnaroundTime[i] + rt[from, to]
-        end
-    end
-
-    return true
-end
-
-function FeasibleCorridor(evtols::allPlaneSolution, rt::Matrix{Int}, T::Int, V::Int, cap_flt::Int)
-    destinationTimes = zeros(Int, V, V, T)
-
-    for plane in evtols.planes
-        travelTime = 0
-
-        for i in 1:plane.flightLegs
-            from = plane.route[i]
-            to = plane.route[i+1]
-
-            startTime = travelTime + plane.turnaroundTime[i]
-            endTime = travelTime + plane.turnaroundTime[i] + rt[from, to]
-
-            for t in startTime:endTime
-                if t >= 1
-                    destinationTimes[from, to, t] += 1
-                    if destinationTimes[from, to, t] > cap_flt 
-                        return false
-                    end
-                end
-            end
-
-            travelTime += plane.turnaroundTime[i] + rt[from, to]
-        end
-    end
-
-    return true
-end
-
-function FeasibilityCheck(bmax::Float32, bmin::Float32, dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32, evtols::allPlaneSolution, rt::Matrix{Int}, ET::Int,  T::Int, V::Int, cap_flt::Int, cap_v::Array{Int,1})
-    P = zeros(Int32, 3)
-
-    if FeasibleBattery(evtol, bmax, bmin, dist, ec, battery_per_km) == false
-        P[1] = 1
-    end
-
-    if FeasibleVertiportCapacity(evtols, rt, T, V, cap_v) == false
-        P[2] = 1
-    end
-
-    if FeasibleCorridor(evtols, rt, T, V, cap_flt) == false
-        P[3] = 1
-    end
-
-    # if FeasibleCompletionTime(evtols, rt, ET) == false
-    #   P[2] = 1
-    # end
-
-    return P
-end
-
-
-### ------- TESTING AREA !!! --------------###
-# Test if the current version of FeasibleBattery battery works 
-# excel_file = joinpath(@__DIR__, "inputData.xlsx")
-# data = load_data(excel_file)
-
-# evtol1 = planeSolution
-
-# evtol1.flightLegs = 2
-
-# evtol1.route = [1, 2, 1]
-
-# evtol.turnaroundTime = [30, 10]
-
-p1 = planeSolution(Int32(2), Int32[1, 2, 3], Int32[5, 5])
-
-println("False example (should be false):")
-println(FeasibleBattery(p1, bmax, bmin, dist, ec, battery_per_km)) 
-
-#Test if this current version of completion time works
-# V = 3
-# rt = [
-#     0 2 1;
-#     2 0 3;
-#     1 3 0
-# ]
-# ET = 10
-
-# # false example
-# p1 = planeSolution(Int32(2), Int32[1, 2, 3], Int32[5, 5])
-# evtols1 = allPlaneSolution([p1])
-
-# println("False example (should be false):")
-# println(FeasibleCompletionTime(evtols1, rt, ET))   # false
-
-# # true example
-# p2 = planeSolution(Int32(1), Int32[1, 2], Int32[5])
-# evtols2 = allPlaneSolution([p2])
-
-# println("True example (should be true):")
-# println(FeasibleCompletionTime(evtols2, rt, ET))   # true
-
-
-#Test if the current version of vertiport capacity works
-# V = 3
-# T = 20
-
-# rt = [
-#     0 2 1;
-#     2 0 3;
-#     1 3 0
-# ]
-
-# cap_v = [1, 2, 2]
-
-# p1 = planeSolution(Int32(1), Int32[1, 2], Int32[5])
-# p2 = planeSolution(Int32(1), Int32[1, 3], Int32[5])
-
-# evtols_false = allPlaneSolution([p1, p2])
-
-# println("False example (should be false):")
-# println(FeasibleVertiportCapacity(evtols_false, rt, T, V, cap_v))
-
-# p3 = planeSolution(Int32(1), Int32[1, 2], Int32[5])
-# p4 = planeSolution(Int32(1), Int32[1, 3], Int32[0])
-
-# evtols_true = allPlaneSolution([p3, p4])
-
-# println("True example (should be true):")
-# println(FeasibleVertiportCapacity(evtols_true, rt, T, V, cap_v))
-
-
-#Test if the current version of corridor works
-# V = 3
-# T = 20
-# cap = 1
-
-# rt = [
-#     0 2 1;
-#     2 0 3;
-#     1 3 0
-# ]
-
-# p1 = planeSolution(Int32(1), Int32[1, 2], Int32[1])
-# p2 = planeSolution(Int32(1), Int32[1, 2], Int32[1])
-
-# evtols_false = allPlaneSolution([p1, p2])
-
-# println("False example (should be false):")
-# println(FeasibleCorridor(evtols_false, rt, T, V, cap))
-
-# p3 = planeSolution(Int32(1), Int32[1, 2], Int32[1])
-# p4 = planeSolution(Int32(1), Int32[1, 2], Int32[5])
-
-# evtols_true = allPlaneSolution([p3, p4])
-
-# println("True example (should be true):")
-# println(FeasibleCorridor(evtols_true, rt, T, V, cap))
 
 ###############################################################################
 # Model builder
@@ -762,7 +540,7 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
     @constraint(model, [m in M, n in N], u[m,n] <= bmax)
 
     # (6.21) Battery must stay above minimum
-    #@constraint(model, [m in M, n in N], u[m,n] >= bmin)
+    @constraint(model, [m in M, n in N], u[m,n] >= bmin)
 
     # (6.22a) First operation from a vertiport only reflects energy consumption
     @constraint(model, [i in V, j in V, n in N],
@@ -852,18 +630,22 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
                        sum(is_o[i,j,m,n,t-1] for i in V, m in M)
     )
 
-    # # (6.36) Parking capacity at vertiports
-    # @constraint(model, [j in V, t in T],
-    #     sum(is_p[j,n,t] for n in N) <= cap_v[j]
-    # )
+    # (6.36) Parking capacity at vertiports
+    @constraint(model, [j in V, t in T],
+        sum(is_p[j,n,t] for n in N) <= cap_v[j]
+    )
 
     # (6.37) Air corridor capacity
-    # @constraint(model, [i in V, j in V, t in T],
-    #     sum(is_o[i,j,m,n,t] for m in M, n in N) <= cap_flt
-    # )
+    @constraint(model, [i in V, j in V, t in T],
+        sum(is_o[i,j,m,n,t] for m in M, n in N) <= cap_flt
+    )
 
     return model, data
 end
+
+###############################################################################
+# Solve + simple reporting
+###############################################################################
 
 function solve_instance(excel_file::String; show_progress::Bool = true, display_interval_sec::Int = 5)
     timings = Dict{String,Float64}()
@@ -890,3 +672,461 @@ function solve_instance(excel_file::String; show_progress::Bool = true, display_
 
     return model, data, timings
 end
+
+function print_timing_summary(timings::Dict{String,Float64})
+    println("\n")
+    println("=" ^ 80)
+    println("RUNTIME SUMMARY")
+    println("=" ^ 80)
+    println(lpad("Program Part", 38) * " | " * lpad("Seconds", 10))
+    println("-" ^ 53)
+
+    measured_parts = [
+        "Build model (incl. data load)",
+        "Optimization",
+        "Snapshot export",
+        "Pretty printing"
+    ]
+
+    subtotal = 0.0
+    for part in measured_parts
+        if haskey(timings, part)
+            v = timings[part]
+            subtotal += v
+            println(lpad(part, 38) * " | " * lpad(@sprintf("%.3f", v), 10))
+        end
+    end
+
+    if haskey(timings, "Total script")
+        total = timings["Total script"]
+        overhead = total - subtotal
+        println("-" ^ 53)
+        println(lpad("Measured subtotal", 38) * " | " * lpad(@sprintf("%.3f", subtotal), 10))
+        println(lpad("Unaccounted overhead", 38) * " | " * lpad(@sprintf("%.3f", overhead), 10))
+        println(lpad("Total script", 38) * " | " * lpad(@sprintf("%.3f", total), 10))
+    end
+end
+
+function export_solution_snapshots(model::Model, data; out_csv::String = joinpath(@__DIR__, "solution_snapshots.csv"))
+    if !has_values(model)
+        println("No primal solution available; skipping snapshot export.")
+        return nothing
+    end
+
+    V = data.V
+    A = data.A
+    N = data.N
+    M = data.M
+    T = data.T
+    q = data.q
+    lat = data.lat
+    lon = data.lon
+
+    # Precompute passenger groups served by each eVTOL (global assignment).
+    served_groups_by_evtol = Dict{Int,Vector{Int}}()
+    for n in N
+        served_groups_by_evtol[n] = [a for a in A if value(model[:ss][a, n]) > 0.5]
+    end
+
+    rows = NamedTuple[]
+
+    for n in N, t in T
+        # Best parked state at (n, t)
+        best_p = 0.0
+        park_node = missing
+        for j in V
+            pv = value(model[:is_p][j, n, t])
+            if pv > best_p
+                best_p = pv
+                park_node = j
+            end
+        end
+
+        # Best flying state at (n, t)
+        best_o = 0.0
+        fly_i = missing
+        fly_j = missing
+        fly_m = missing
+        for i in V, j in V, m in M
+            ov = value(model[:is_o][i, j, m, n, t])
+            if ov > best_o
+                best_o = ov
+                fly_i = i
+                fly_j = j
+                fly_m = m
+            end
+        end
+
+        state = best_o > 0.5 ? "flying" : (best_p > 0.5 ? "parked" : "inactive")
+
+        node_from = state == "flying" ? fly_i : (state == "parked" ? park_node : missing)
+        node_to = state == "flying" ? fly_j : (state == "parked" ? park_node : missing)
+        op = state == "flying" ? fly_m : missing
+
+        x_from = (node_from === missing) ? missing : lon[node_from]
+        y_from = (node_from === missing) ? missing : lat[node_from]
+        x_to = (node_to === missing) ? missing : lon[node_to]
+        y_to = (node_to === missing) ? missing : lat[node_to]
+
+        x = (x_from === missing || x_to === missing) ? missing : (x_from + x_to) / 2
+        y = (y_from === missing || y_to === missing) ? missing : (y_from + y_to) / 2
+
+        # Battery estimate at time t: use battery level after latest arrived operation.
+        latest_completed_m = minimum(M)
+        for m in sort(M)
+            if value(model[:arr][m, n]) <= t + 1e-6
+                latest_completed_m = m
+            end
+        end
+        battery_level = value(model[:u][latest_completed_m, n])
+
+        # Passenger load at time t: if flying in op m, use groups served in that op.
+        onboard_groups = Int[]
+        if state == "flying" && fly_m !== missing
+            onboard_groups = [a for a in A if value(model[:s][a, fly_m, n]) > 0.5]
+        end
+        onboard_passenger_count = sum((q[a] for a in onboard_groups); init=0)
+        onboard_group_sizes = isempty(onboard_groups) ? "" : join(["$(a):$(q[a])" for a in onboard_groups], ";")
+
+        served_groups_evtol = served_groups_by_evtol[n]
+
+        push!(rows, (
+            time = t,
+            evtol_id = n,
+            state = state,
+            node_from = node_from,
+            node_to = node_to,
+            op = op,
+            is_p = best_p,
+            is_o = best_o,
+            battery_level = battery_level,
+            battery_after_op = latest_completed_m,
+            onboard_passenger_count = onboard_passenger_count,
+            onboard_groups = isempty(onboard_groups) ? "" : join(onboard_groups, ";"),
+            onboard_group_sizes = onboard_group_sizes,
+            served_groups_evtol = isempty(served_groups_evtol) ? "" : join(served_groups_evtol, ";"),
+            x = x,
+            y = y,
+            x_from = x_from,
+            y_from = y_from,
+            x_to = x_to,
+            y_to = y_to
+        ))
+    end
+
+    snapshots = DataFrame(rows)
+    
+    # Append infrastructure nodes as vertiport markers
+    for j in V
+        push!(snapshots, (
+            time = -1,
+            evtol_id = -1,
+            state = "vertiport",
+            node_from = j,
+            node_to = j,
+            op = -1,
+            is_p = 0.0,
+            is_o = 0.0,
+            battery_level = NaN,
+            battery_after_op = -1,
+            onboard_passenger_count = 0,
+            onboard_groups = "",
+            onboard_group_sizes = "",
+            served_groups_evtol = "",
+            x = lon[j],
+            y = lat[j],
+            x_from = lon[j],
+            y_from = lat[j],
+            x_to = lon[j],
+            y_to = lat[j]
+        ))
+    end
+    
+    CSV.write(out_csv, snapshots)
+    println("Snapshot export written: ", out_csv, " (rows=", nrow(snapshots), ")")
+    return snapshots
+end
+
+###############################################################################
+# Usage
+###############################################################################
+
+excel_file = joinpath(@__DIR__, "inputData.xlsx")
+println("Using Excel file: ", excel_file)
+total_start = time()
+model, data, timings = solve_instance(excel_file)
+
+t_export = @elapsed export_solution_snapshots(model, data)
+timings["Snapshot export"] = t_export
+
+###############################################################################
+# Pretty result printing - ALL VARIABLES
+###############################################################################
+
+function print_results_pretty(model::Model, data)
+    divider(w=80) = println("=" ^ w)
+    section(title) = begin
+        println("\n")
+        divider()
+        println(title)
+        divider()
+    end
+
+    A = data.A
+    V = data.V
+    N = data.N
+    M = data.M
+    M_no0 = data.M_no0
+    M_mid = data.M_mid
+    T = data.T
+    T_no0 = data.T_no0
+    bv = data.bv
+    cap_v = data.cap_v
+    cap_flt = data.cap_flt
+    cap_u = data.cap_u
+    bmax = data.bmax
+    bmin = data.bmin
+    ec = data.ec
+    te = data.te
+    w = data.w
+    ET = data.ET
+    M1 = data.M1
+    M2a = data.M2a
+    M2b = data.M2b
+    M2c = data.M2c
+    M3 = data.M3
+    fd = data.fd
+    fs = data.fs
+    c = data.c
+    e = data.e
+    rt = data.rt
+    rt_int = hasproperty(data, :rt_int) ? data.rt_int : Dict((i, j) => Int(ceil(rt[(i, j)])) for i in V, j in V)
+    op = data.op
+    dp = data.dp
+    dt = data.dt
+    q = data.q
+    so = data.so
+    p = data.p
+    d = data.d
+    dist = data.dist
+
+    section("SETS")
+    println("Vertices (V): ", V)
+    println("Passenger groups (A): ", A)
+    println("eVTOLs (N): ", N)
+    println("Operations (M): ", M)
+    println("Operations (M_no0): ", M_no0)
+    println("Operations (M_mid): ", M_mid)
+    println("Time periods (T): 0 to ", maximum(T))
+    println("Time periods (T_no0): 1 to ", maximum(T_no0))
+    println("Base vertiports (bv): ", bv)
+
+    section("SYSTEM PARAMETERS")
+    println(lpad("Battery capacity (bmax)", 35) * ": " * @sprintf("%.2f", bmax) * " %")
+    println(lpad("Battery minimum (bmin)", 35) * ": " * @sprintf("%.2f", bmin) * " %")
+    println(lpad("Charging rate (ec)", 35) * ": " * @sprintf("%.2f", ec) * " %/unit")
+    println(lpad("Turnaround time (te)", 35) * ": " * @sprintf("%.2f", te) * " min")
+    println(lpad("Maximum waiting time (w)", 35) * ": " * @sprintf("%.2f", w) * " min")
+    println(lpad("End time (ET)", 35) * ": " * @sprintf("%.2f", ET))
+    println(lpad("eVTOL seat capacity (cap_u)", 35) * ": " * string(Int(cap_u)))
+    println(lpad("Air corridor capacity (cap_flt)", 35) * ": " * string(Int(cap_flt)))
+
+    section("INFRASTRUCTURE NODES & PARKING CAPACITY")
+    println(lpad("Node", 6) * " | " * lpad("Type", 11) * " | " * lpad("Capacity", 10))
+    println("-" ^ 32)
+
+    section("DISTANCES (dist[i,j])")
+    println(lpad("From", 6) * " | " * lpad("To", 6) * " | " * lpad("Distance (km)", 15))
+    println("-" ^ 32)
+    for i in V, j in V
+        if i <= j
+            println(lpad(string(i), 6) * " | " * lpad(string(j), 6) * " | " * lpad(@sprintf("%.2f", dist[(i,j)]), 15))
+        end
+    end
+
+    section("ARC PARAMETERS: fd, fs, c, e, rt, rt_int")
+    println(lpad("i->j", 5) * " | " * lpad("Fare Direct", 14) * " | " * lpad("Fare Stop", 12) *
+            " | " * lpad("Cost", 7) * " | " * lpad("Battery", 9) * " | " * lpad("Time", 7) * " | " * lpad("Time_int", 9))
+    println("-" ^ 85)
+    for i in V, j in V
+        if i != j
+            println(lpad("$i->$j", 5) * " | " * lpad(@sprintf("%.2f", fd[(i,j)]), 14) * " | " *
+                    lpad(@sprintf("%.2f", fs[(i,j)]), 12) * " | " * lpad(@sprintf("%.2f", c[(i,j)]), 7) *
+                    " | " * lpad(@sprintf("%.2f", e[(i,j)]), 9) * " | " * lpad(@sprintf("%.2f", rt[(i,j)]), 7) *
+                    " | " * lpad(string(rt_int[(i,j)]), 9))
+        end
+    end
+
+    section("PASSENGER GROUPS: op, dp, dt, q, so, p")
+    println(lpad("G", 4) * " | " * lpad("Origin", 8) * " | " * lpad("Dest", 6) * " | " *
+            lpad("Time", 8) * " | " * lpad("Pax", 5) * " | " * lpad("Stopover", 10) * " | " * lpad("Penalty", 9))
+    println("-" ^ 68)
+    for a in A
+        println(lpad(string(a), 4) * " | " * lpad(string(op[a]), 8) * " | " * lpad(string(dp[a]), 6) * " | " *
+                lpad(@sprintf("%.0f", dt[a]), 8) * " | " * lpad(string(q[a]), 5) * " | " *
+                lpad(so[a] > 0.5 ? "Yes" : "No", 10) * " | " * lpad(@sprintf("%.2f", p[a]), 9))
+    end
+
+    section("DESTINATION INDICATOR: d[a,i,j]")
+    println(lpad("Group", 6) * " | " * lpad("Origin", 8) * " | " * lpad("Dest", 6) * " | " * lpad("d[a,i,j]", 10))
+    println("-" ^ 35)
+    for a in A, i in V, j in V
+        if d[(a,i,j)] > 0
+            println(lpad(string(a), 6) * " | " * lpad(string(i), 8) * " | " * lpad(string(j), 6) * " | " * lpad(string(d[(a,i,j)]), 10))
+        end
+    end
+
+    if !has_values(model)
+        println("\n")
+        divider()
+        println("No solution available - skipping decision variables")
+        divider()
+        return
+    end
+
+    section("DECISION VAR: x[i,j,m,n] (Flight Arcs)")
+    count = 0
+    for n in N, m in M, i in V, j in V
+        if value(model[:x][i,j,m,n]) > 0.5
+            if count == 0
+                println(lpad("eVTOL", 8) * " | " * lpad("Op", 5) * " | " * lpad("From", 6) * " | " * lpad("To", 6) * " | " * lpad("Value", 8))
+                println("-" ^ 42)
+            end
+            println(lpad(string(n), 8) * " | " * lpad(string(m), 5) * " | " * lpad(string(i), 6) * " | " * lpad(string(j), 6) * " | " * lpad(@sprintf("%.2f", value(model[:x][i,j,m,n])), 8))
+            count += 1
+        end
+    end
+    if count == 0
+        println("(all zeros)")
+    end
+
+    section("DECISION VAR: y[n] (eVTOL In Use)")
+    println(lpad("eVTOL", 8) * " | " * lpad("Value", 8) * " | " * lpad("In Use", 8))
+    println("-" ^ 32)
+    for n in N
+        yval = value(model[:y][n])
+        in_use = yval > 0.5 ? "Yes" : "No"
+        println(lpad(string(n), 8) * " | " * lpad(@sprintf("%.2f", yval), 8) * " | " * lpad(in_use, 8))
+    end
+
+    section("DECISION VAR: s[a,m,n] (Service per Operation)")
+    println(lpad("Group", 6) * " | " * lpad("Op", 5) * " | " * lpad("eVTOL", 8) * " | " * lpad("Value", 8))
+    println("-" ^ 35)
+    for a in A, m in M_no0, n in N
+        sval = value(model[:s][a,m,n])
+        if sval > 0.01
+            println(lpad(string(a), 6) * " | " * lpad(string(m), 5) * " | " * lpad(string(n), 8) * " | " * lpad(@sprintf("%.2f", sval), 8))
+        end
+    end
+
+    section("DECISION VAR: ss[a,n] (Service by eVTOL)")
+    println(lpad("Group", 6) * " | " * lpad("eVTOL", 8) * " | " * lpad("Value", 8))
+    println("-" ^ 28)
+    for a in A, n in N
+        sval = value(model[:ss][a,n])
+        if sval > 0.01
+            println(lpad(string(a), 6) * " | " * lpad(string(n), 8) * " | " * lpad(@sprintf("%.2f", sval), 8))
+        end
+    end
+
+    section("DECISION VAR: z[a] (Direct=0, Layover=1)")
+    println(lpad("Group", 6) * " | " * lpad("Value", 8) * " | " * lpad("Type", 12))
+    println("-" ^ 32)
+    for a in A
+        zval = value(model[:z][a])
+        ztype = zval > 0.5 ? "Layover" : "Direct"
+        println(lpad(string(a), 6) * " | " * lpad(@sprintf("%.2f", zval), 8) * " | " * lpad(ztype, 12))
+    end
+
+    section("DECISION VAR: k[a,i,j,m,n] (Service Arc)")
+    count = 0
+    for a in A, i in V, j in V, m in M_no0, n in N
+        kval = value(model[:k][a,i,j,m,n])
+        if kval > 0.5
+            if count == 0
+                println(lpad("Group", 6) * " | " * lpad("i->j", 5) * " | " * lpad("Op", 5) * " | " * lpad("eVTOL", 8) * " | " * lpad("Value", 8))
+                println("-" ^ 42)
+            end
+            println(lpad(string(a), 6) * " | " * lpad("$i->$j", 5) * " | " * lpad(string(m), 5) * " | " * lpad(string(n), 8) * " | " * lpad(@sprintf("%.2f", kval), 8))
+            count += 1
+        end
+    end
+    if count == 0
+        println("(all zeros)")
+    end
+
+    section("DECISION VAR: u[m,n] (Battery Level %)")
+    println(lpad("eVTOL", 8) * " | " * lpad("Op", 5) * " | " * lpad("Battery %", 12))
+    println("-" ^ 32)
+    for n in N, m in M
+        u_val = value(model[:u][m,n])
+        println(lpad(string(n), 8) * " | " * lpad(string(m), 5) * " | " * lpad(@sprintf("%.2f", u_val), 12))
+    end
+
+    section("DECISION VAR: dep[m,n] and arr[m,n] (Times)")
+    println(lpad("eVTOL", 8) * " | " * lpad("Op", 5) * " | " * lpad("Dep (min)", 12) * " | " * lpad("Arr (min)", 12))
+    println("-" ^ 48)
+    for n in N, m in M
+        dep_val = value(model[:dep][m,n])
+        arr_val = value(model[:arr][m,n])
+        println(lpad(string(n), 8) * " | " * lpad(string(m), 5) * " | " * lpad(@sprintf("%.2f", dep_val), 12) * " | " * lpad(@sprintf("%.2f", arr_val), 12))
+    end
+
+    section("DECISION VAR: is_p[j,n,t] and is_o[i,j,m,n,t] (Occupancy States)")
+    println(lpad("eVTOL", 8) * " | " * lpad("Time", 6) * " | " * lpad("Park Node", 10) * " | " * lpad("Travel Arc", 10) * " | " * lpad("Op", 5) * " | " * lpad("is_p", 8) * " | " * lpad("is_o", 8))
+    println("-" ^ 73)
+
+    shown = 0
+    p_count = 0
+    o_count = 0
+
+    for n in N, t in T
+        p_node = "-"
+        check = 0.5
+        p_val = 0.0
+        for j in V
+            pv = value(model[:is_p][j,n,t])
+            if pv > check
+                p_val = pv
+                p_node = string(j)
+            end
+        end
+
+        o_arc = "-"
+        o_op = "-"
+        o_val = 0.0
+        for i in V, j in V, m in M
+            ov = value(model[:is_o][i,j,m,n,t])
+            if ov > check
+                o_val = ov
+                o_arc = "$i->$j"
+                o_op = string(m)
+            end
+        end
+
+        if p_val > 0.01 || o_val > 0.01
+            println(lpad(string(n), 8) * " | " * lpad(string(t), 6) * " | " * lpad(p_node, 10) * " | " * lpad(o_arc, 10) * " | " * lpad(o_op, 5) * " | " * lpad(@sprintf("%.2f", p_val), 8) * " | " * lpad(@sprintf("%.2f", o_val), 8))
+            shown += 1
+            if p_val > 0.5
+                p_count += 1
+            end
+            if o_val > 0.5
+                o_count += 1
+            end
+        end
+    end
+
+    if shown == 0
+        println("(all or mostly zeros)")
+    end
+    println("Summary: rows shown = $(shown), active is_p = $(p_count), active is_o = $(o_count)")
+
+    divider()
+    println()
+end
+
+t_pretty = @elapsed Base.invokelatest(print_results_pretty, model, data)
+timings["Pretty printing"] = t_pretty
+timings["Total script"] = time() - total_start
+
+print_timing_summary(timings)
