@@ -1057,3 +1057,105 @@ for (rank, sol) in enumerate(best_solutions)
     print_assignments(sol.assignments, data)
     println()
 end
+
+
+function insert(plane::allPlaneSolution, data; maxTurnaround=30)
+    planeidx = rand(1:length(plane.planes))
+    p = plane.planes[planeidx]
+
+    route = p.route
+
+    # Need at least 2 nodes to insert between
+    if length(route) < 2
+        return false
+    end
+
+    # Choose insertion index (not first or last)
+    idx = rand(2:length(route))
+
+    prev = Int(route[idx - 1])
+    next = Int(route[idx])
+
+    # Exclude neighbors
+    forbidden = [prev, next]
+    candidates = [v for v in data.V if !(v in forbidden)]
+
+    if isempty(candidates)
+        return false
+    end
+
+    newvertiport = rand(candidates)
+    newturnaround = rand(Int(round(data.te)):maxTurnaround)
+
+    insert!(p.route, idx, Int32(newvertiport))
+    insert!(p.turnaroundTime, idx - 1, Int32(newturnaround))
+
+    p.flightLegs += 1
+
+    return true
+end
+
+println("\n===== TEST INSERT FUNCTION =====")
+
+# Create one random solution
+evtols = deepcopy(best_solutions[1].evtols)
+println("\n--- BEFORE ---")
+print_chromosome_table(evtols)
+
+# Copy for comparison (important!)
+evtols_before = deepcopy(evtols)
+
+# Apply insert
+success = insert(evtols, data)
+
+println("\nInsert success: ", success)
+
+println("\n--- AFTER ---")
+print_chromosome_table(evtols)
+
+function delete(population::allPlaneSolution, data)
+
+    # Only consider planes that actually have removable stops
+    candidates = [
+        i for i in 1:length(population.planes)
+        if length(population.planes[i].route) > 2
+    ]
+
+    if isempty(candidates)
+        return false
+    end
+
+    # Pick a random plane
+    pidx = rand(candidates)
+    p = population.planes[pidx]
+
+    # Pick a random intermediate node (not start or end)
+    idx = rand(2:length(p.route)-1)
+
+    # Remove that stop and its associated turnaround time
+    deleteat!(p.route, idx)
+    deleteat!(p.turnaroundTime, idx-1)
+
+    # Keep metadata consistent
+    p.flightLegs = length(p.route) - 1
+
+    return true
+end
+
+println("\n===== TEST DELETE FUNCTION =====")
+
+evtols = deepcopy(best_solutions[1].evtols)
+
+println("\n--- BEFORE ---")
+print_chromosome_table(evtols)
+
+delete(evtols, data)
+
+println("\n--- AFTER ---")
+print_chromosome_table(evtols)
+
+for p in evtols.planes
+    println("route length = ", length(p.route),
+            " | legs = ", p.flightLegs,
+            " | turnaround = ", length(p.turnaroundTime))
+end
