@@ -1059,7 +1059,6 @@ for (rank, sol) in enumerate(best_solutions)
     println()
 end
 
-
 function insert(plane::allPlaneSolution, data; maxTurnaround=30)
     planeidx = rand(1:length(plane.planes))
     p = plane.planes[planeidx]
