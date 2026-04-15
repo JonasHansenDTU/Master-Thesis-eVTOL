@@ -1059,8 +1059,6 @@ for (rank, sol) in enumerate(best_solutions)
     println()
 end
 
-<<<<<<<< HEAD:Heuristic/Functions copy Jonas.jl
-# ---------------------------------------------- #
 
 function Change(planes::allPlaneSolution, te::Int, maxTurnaround::Int, schedule::Vector{ScheduledLeg}, ET::Int)
 
@@ -1092,7 +1090,7 @@ function Change(planes::allPlaneSolution, te::Int, maxTurnaround::Int, schedule:
     println(maxtime)
 end
 
-========
+
 function insert(plane::allPlaneSolution, data; maxTurnaround=30)
     planeidx = rand(1:length(plane.planes))
     p = plane.planes[planeidx]
@@ -1204,4 +1202,3 @@ for p in evtols.planes
             " | legs = ", p.flightLegs,
             " | turnaround = ", length(p.turnaroundTime))
 end
->>>>>>>> 8bbc04b93060ad9cb9995282f599bfa743a18edb:Heuristic/Functions_ASBB.jl
