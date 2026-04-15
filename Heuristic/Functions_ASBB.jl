@@ -1060,37 +1060,6 @@ for (rank, sol) in enumerate(best_solutions)
 end
 
 
-function Change(planes::allPlaneSolution, te::Int, maxTurnaround::Int, schedule::Vector{ScheduledLeg}, ET::Int)
-
-    plane_idx = rand(1:length(planes.planes))
-    plane = planes.planes[plane_idx]
-
-    turnaround_idx = rand(1:length(plane.turnaroundTime))
-
-    m = plane.flightLegs
-    
-    tft = 0
-
-    for leg in schedule
-        if leg.plane == plane_idx && leg.leg_index == m
-            tft = leg.arr
-            break
-        end
-    end
-
-    println(tft)
-    maxtime = maximum([ET-tft,plane.turnaroundTime[m]])
-
-    t = rand(te:maxtime)
-
-    plane.turnaroundTime[turnaround_idx] = t
-
-    println(te)
-    println(t)
-    println(maxtime)
-end
-
-
 function insert(plane::allPlaneSolution, data; maxTurnaround=30)
     planeidx = rand(1:length(plane.planes))
     p = plane.planes[planeidx]
