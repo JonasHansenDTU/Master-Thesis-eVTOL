@@ -101,8 +101,8 @@ function load_data(excel_file::String)
 
     # Coordinates can be either one string column "coordinates"
     # or two numeric columns such as "latitude", "longitude".
-    coord_col = if any(Symbol(String(n)) == :coordinates_kbh for n in names(infra))
-        find_col(infra, [:coordinates_kbh])
+    coord_col = if any(Symbol(String(n)) == :coordinates for n in names(infra))
+        find_col(infra, [:coordinates])
     else
         nothing
     end
