@@ -622,7 +622,8 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
         base = bv[n]
 
         # choose number of legs
-        flightLegs = rand(0:maxLegs)
+        allowed_legs = [i for i in 0:maxLegs if i != 1]
+        flightLegs = rand(allowed_legs)
 
         # route always starts at base
         route = Int32[base]
@@ -1058,7 +1059,6 @@ for (rank, sol) in enumerate(best_solutions)
     println()
 end
 
-
 function insert(plane::allPlaneSolution, data; maxTurnaround=30)
     planeidx = rand(1:length(plane.planes))
     p = plane.planes[planeidx]
@@ -1115,7 +1115,7 @@ print_chromosome_table(evtols)
 
 function delete(population::allPlaneSolution, data)
 
-    # Only consider planes that actually have removable stops
+    # Only planes with removable intermediate nodes, route length > 2
     candidates = [
         i for i in 1:length(population.planes)
         if length(population.planes[i].route) > 2
@@ -1125,21 +1125,32 @@ function delete(population::allPlaneSolution, data)
         return false
     end
 
-    # Pick a random plane
-    pidx = rand(candidates)
-    p = population.planes[pidx]
+    # Try until we find a valid deletion
+    for _ in 1:10  # small retry loop to avoid infinite failure
+        pidx = rand(candidates)
+        p = population.planes[pidx]
 
-    # Pick a random intermediate node (not start or end)
-    idx = rand(2:length(p.route)-1)
+        # do not dele in the first or last leg 
+        idx = rand(2:length(p.route)-1)
 
-    # Remove that stop and its associated turnaround time
-    deleteat!(p.route, idx)
-    deleteat!(p.turnaroundTime, idx-1)
+        prev = p.route[idx - 1]
+        next = p.route[idx + 1]
 
-    # Keep metadata consistent
-    p.flightLegs = length(p.route) - 1
+        # Do not delete if it creates a degenerate edge (prev -> same -> next)
+        if prev == next
+            continue
+        end
 
-    return true
+        deleteat!(p.route, idx)
+        deleteat!(p.turnaroundTime, idx - 1)
+
+        # updatte flight legs count
+        p.flightLegs = length(p.route) - 1
+
+        return true
+    end
+
+    return false
 end
 
 println("\n===== TEST DELETE FUNCTION =====")
