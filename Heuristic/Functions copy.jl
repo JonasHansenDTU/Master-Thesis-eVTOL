@@ -1,5 +1,11 @@
 using XLSX
 using DataFrames
+using JuMP
+using Gurobi
+using CSV
+using MathOptInterface
+using Printf
+const MOI = MathOptInterface
 
 function normalize_name(x)
     s = lowercase(strip(String(x)))
@@ -83,9 +89,9 @@ function load_data(excel_file::String)
     ###########################################################################
     # Read sheets
     ###########################################################################
-    infra = read_sheet(excel_file, "Infrastructure")
-    pax   = read_sheet(excel_file, "PassengerGroups")
-    plane = read_sheet_any(excel_file, ["PlaneData"])
+    infra = read_sheet(excel_file, "Infrastructure (3)")
+    pax   = read_sheet(excel_file, "PassengerGroups (3)")
+    plane = read_sheet_any(excel_file, ["PlaneData (2)"])
 
     ###########################################################################
     # Infrastructure columns
@@ -95,8 +101,8 @@ function load_data(excel_file::String)
 
     # Coordinates can be either one string column "coordinates"
     # or two numeric columns such as "latitude", "longitude".
-    coord_col = if any(Symbol(String(n)) == :coordinates for n in names(infra))
-        find_col(infra, [:coordinates])
+    coord_col = if any(Symbol(String(n)) == :coordinates_kbh for n in names(infra))
+        find_col(infra, [:coordinates_kbh])
     else
         nothing
     end
@@ -161,7 +167,7 @@ function load_data(excel_file::String)
     M_mid = 1:(maximum(M)-1)
     M_no_last = 0:(maximum(M)-1)
 
-    T = 0:ET
+    T = 0:120
     T_no0 = 1:maximum(T)
 
     # Passenger groups
@@ -217,11 +223,11 @@ function load_data(excel_file::String)
     ###########################################################################
     lat = Dict{Int,Float64}()
     lon = Dict{Int,Float64}()
-    cap_node = Dict{Int,Int}()
+    cap_v = Dict{Int,Int}()
 
     for r in eachrow(infra)
         j = Int(r[id_col])
-        cap_node[j] = Int(r[pads_col])
+        cap_v[j] = Int(r[pads_col])
 
         if coord_col !== nothing
             lat[j], lon[j] = parse_coordinate_string(r[coord_col])
@@ -294,8 +300,8 @@ function load_data(excel_file::String)
         lat = lat, lon = lon,
         dist = dist, fd = fd, fs = fs, c = c, e = e, rt = rt,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
-        cap_node = cap_node, cap_flt = cap_flt, cap_u = cap_u,
-        bmax = bmax, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3
+        cap_v = cap_v, cap_flt = cap_flt, cap_u = cap_u,
+        bmax = bmax, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3, battery_per_km = battery_per_km
     )
 end
 
@@ -319,37 +325,38 @@ function BatteryCharged(turnaroundTime::Float16, ec::Float32)
     return turnaroundTime*ec
 end
 
-function FeasibleBattery(evtol::planeSolution, bmax::Float32, bmin::Float32, dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32)
+function FeasibleBattery(evtols::allPlaneSolution, bmax::Float32, bmin::Float32, dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32)
+    for evtol in evtols.planes
+        BatteryLevel = zeros(Float32, evtol.flightLegs + 1)
+        BatteryLevel[1] = bmax
 
-    BatteryLevel = zeros(Float16, evtol.flightLegs)
-    BatteryLevel[1] = bmax
+        for i in 1:evtol.flightLegs
+            from = evtol.route[i]
+            to = evtol.route[i + 1]
+            TravelLength = Float32(dist[(from, to)])
 
-    for i in 2:(evtol.flightLegs)
-        from = evtol.route[i-1]
-        to = evtol.route[i]
-        TravelLength = dist[(from,to)]
+            BatteryLevel[i + 1] =
+                min(BatteryLevel[i] + BatteryCharged(Float16(evtol.turnaroundTime[i]), ec), bmax) -
+                BatteryNeeded(TravelLength, battery_per_km)
 
-        BatteryLevel[i] = BatteryLevel[i-1] - BatteryNeeded(TravelLength, battery_per_km) + BatteryCharged(evtol.turnaroundTime[i], ec)
-    end
-
-    for i in 1:(evtol.flightLegs)
-        if BatteryLevel[i] < bmin
-            return false
+            if BatteryLevel[i + 1] < bmin
+                return false
+            end
         end
-    end
+    end 
 
     return true
 end
 
 function FeasibleCompletionTime(evtols::allPlaneSolution, rt::Matrix{Int}, ET::Int)
-    for plane in evtols.planes
+    for evtol in evtols.planes
         travelTime = 0
 
-        for i in 1:plane.flightLegs
-            from = plane.route[i]
-            to = plane.route[i+1]
+        for i in 1:evtol.flightLegs
+            from = evtol.route[i]
+            to = evtol.route[i+1]
 
-            travelTime += plane.turnaroundTime[i] + rt[from, to]
+            travelTime += evtol.turnaroundTime[i] + rt[from, to]
 
             if travelTime > ET
                 return false
@@ -360,18 +367,22 @@ function FeasibleCompletionTime(evtols::allPlaneSolution, rt::Matrix{Int}, ET::I
     return true
 end
 
-function FeasibleVertiportCapacity(evtols::allPlaneSolution, rt::Matrix{Int}, T::Int, V::Int, cap_v::Array{Int,1})
+function FeasibleVertiportCapacity(evtols::allPlaneSolution, rt::Matrix{Int}, T::Int, V::Int, cap_v::Dict{Int64, Int64}, ET::Int)
     parkingTimes = zeros(Int, V, T)
 
-    for plane in evtols.planes
+    for evtol in evtols.planes
         travelTime = 0
 
-        for i in 1:plane.flightLegs
-            from = plane.route[i]
-            to = plane.route[i+1]
+        for i in 1:evtol.flightLegs
+            from = evtol.route[i]
+            to = evtol.route[i+1]
 
             startTime = travelTime
-            endTime = travelTime + plane.turnaroundTime[i]
+            endTime = travelTime + evtol.turnaroundTime[i]
+
+            if endTime > ET 
+                endTime = ET
+            end
 
             for t in startTime:endTime
                 if t >= 1
@@ -382,25 +393,29 @@ function FeasibleVertiportCapacity(evtols::allPlaneSolution, rt::Matrix{Int}, T:
                 end
             end
 
-            travelTime += plane.turnaroundTime[i] + rt[from, to]
+            travelTime += evtol.turnaroundTime[i] + rt[from, to]
         end
     end
 
     return true
 end
 
-function FeasibleCorridor(evtols::allPlaneSolution, rt::Matrix{Int}, T::Int, V::Int, cap_flt::Int)
+function FeasibleCorridor(evtols::allPlaneSolution, rt::Matrix{Int}, T::Int, V::Int, cap_flt::Int, ET::Int)
     destinationTimes = zeros(Int, V, V, T)
 
-    for plane in evtols.planes
+    for evtol in evtols.planes
         travelTime = 0
 
-        for i in 1:plane.flightLegs
-            from = plane.route[i]
-            to = plane.route[i+1]
+        for i in 1:evtol.flightLegs
+            from = evtol.route[i]
+            to = evtol.route[i+1]
 
-            startTime = travelTime + plane.turnaroundTime[i]
-            endTime = travelTime + plane.turnaroundTime[i] + rt[from, to]
+            startTime = travelTime + evtol.turnaroundTime[i]
+            endTime = travelTime + evtol.turnaroundTime[i] + rt[from, to]
+
+            if endTime > ET 
+                endTime = ET
+            end
 
             for t in startTime:endTime
                 if t >= 1
@@ -411,31 +426,37 @@ function FeasibleCorridor(evtols::allPlaneSolution, rt::Matrix{Int}, T::Int, V::
                 end
             end
 
-            travelTime += plane.turnaroundTime[i] + rt[from, to]
+            travelTime += evtol.turnaroundTime[i] + rt[from, to]
         end
     end
 
     return true
 end
 
-function FeasibilityCheck(bmax::Float32, bmin::Float32, dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32, evtols::allPlaneSolution, rt::Matrix{Int}, ET::Int,  T::Int, V::Int, cap_flt::Int, cap_v::Array{Int,1})
-    P = zeros(Int32, 3)
+function FeasibilityCheck(bmax::Float32, bmin::Float32,
+    dist::Dict{Tuple{Int,Int},Float64},
+    ec::Float32, battery_per_km::Float32,
+    evtols::allPlaneSolution,
+    rt::Matrix{Int}, ET::Int, T::Int, V::Int,
+    cap_flt::Int, cap_v::Dict{})
 
-    if FeasibleBattery(evtol, bmax, bmin, dist, ec, battery_per_km) == false
+    P = zeros(Int32, 4)
+
+    if FeasibleBattery(evtols, bmax, bmin, dist, ec, battery_per_km) == false
         P[1] = 1
     end
 
-    if FeasibleVertiportCapacity(evtols, rt, T, V, cap_v) == false
+    if FeasibleCompletionTime(evtols, rt, ET) == false
         P[2] = 1
     end
 
-    if FeasibleCorridor(evtols, rt, T, V, cap_flt) == false
+    if FeasibleVertiportCapacity(evtols, rt, T, V, cap_v, ET) == false
         P[3] = 1
     end
 
-    # if FeasibleCompletionTime(evtols, rt, ET) == false
-    #   P[2] = 1
-    # end
+    if FeasibleCorridor(evtols, rt, T, V, cap_flt, ET) == false
+        P[4] = 1
+    end
 
     return P
 end
@@ -443,21 +464,34 @@ end
 
 ### ------- TESTING AREA !!! --------------###
 # Test if the current version of FeasibleBattery battery works 
-# excel_file = joinpath(@__DIR__, "inputData.xlsx")
-# data = load_data(excel_file)
+# dist = Dict{Tuple{Int,Int},Float64}()
+# dist[(1,5)] = 10.0
+# dist[(5,3)] = 8.0
 
-# evtol1 = planeSolution
+# bmax = Float32(100.0)
+# bmin = Float32(20.0)
+# ec = Float32(1.0)
+# battery_per_km = Float32(5.0)
 
-# evtol1.flightLegs = 2
+# # true example
+# evtol_true = planeSolution(
+#     Int32(2),
+#     Int32[1, 5, 3],
+#     Int32[10, 10]
+# )
 
-# evtol1.route = [1, 2, 1]
+# # false example
+# evtol_false = planeSolution(
+#     Int32(2),
+#     Int32[1, 5, 3],
+#     Int32[0, 0]
+# )
 
-# evtol.turnaroundTime = [30, 10]
+# println("True example (should be true):")
+# println(FeasibleBattery(evtol_true, bmax, bmin, dist, ec, battery_per_km))
 
-p1 = planeSolution(Int32(2), Int32[1, 2, 3], Int32[5, 5])
-
-println("False example (should be false):")
-println(FeasibleBattery(p1, bmax, bmin, dist, ec, battery_per_km)) 
+# println("False example (should be false):")
+# println(FeasibleBattery(evtol_false, bmax, bmin, dist, ec, battery_per_km))
 
 #Test if this current version of completion time works
 # V = 3
@@ -539,354 +573,488 @@ println(FeasibleBattery(p1, bmax, bmin, dist, ec, battery_per_km))
 # println("True example (should be true):")
 # println(FeasibleCorridor(evtols_true, rt, T, V, cap))
 
-###############################################################################
-# Model builder
-###############################################################################
+function weighted_choice(items::Vector{Int}, weights::Vector{Float64})
+    #vertiports with higher demand weight are picked more often, while still keeping some randomness
 
-function build_model(excel_file::String; show_progress::Bool = true, display_interval_sec::Int = 5)
+    s = sum(weights)
+    r = rand() * s
+    cum = 0.0
+    for (item, w) in zip(items, weights)
+        cum += w
+        if r <= cum
+            return item
+        end
+    end
+    return items[end]
+end
 
-    data = load_data(excel_file)
+function build_vertiport_weights(V, op, dp, A)
+    #builds a vector of demand-based probabilities so that vertiports that appear often in passenger requests are more likely to be chosen 
+    #when generating the initial chromosome
 
-    A = data.A
+    counts = Dict(v => 1.0 for v in V)  # small base weight so every node is possible
+
+    for a in A
+        counts[op[a]] += 1.0
+        counts[dp[a]] += 1.0
+    end
+
+    return [counts[v] for v in V]
+end
+
+function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30)
+    #creates a random initial route plan for each plane, starting and ending at its base, 
+    #with demand-biased intermediate vertiports and random flight legs and turnaround times, then packs everything into your chromosome structure.
+
     V = data.V
     N = data.N
-    M = data.M
-    M_no0 = data.M_no0
-    M_mid = data.M_mid
-    M_no_last = data.M_no_last
-    T = data.T
-    T_no0 = data.T_no0
-
+    A = data.A
     bv = data.bv
-    fd = data.fd
-    fs = data.fs
-    c  = data.c
-    e  = data.e
-    rt = data.rt
-    d  = data.d
+    op = data.op
+    dp = data.dp
+    te = data.te
+
+    weights = build_vertiport_weights(V, op, dp, A)
+
+    planes = planeSolution[]
+
+    for n in N
+        base = bv[n]
+
+        # choose number of legs
+        flightLegs = rand(0:maxLegs)
+
+        # route always starts at base
+        route = Int32[base]
+
+        if flightLegs > 0
+            # choose intermediate nodes for first (flightLegs-1) legs
+            current = base
+            for k in 1:(flightLegs - 1)
+                candidates = [v for v in V if v != current]
+                cand_weights = [weights[findfirst(==(v), V)] for v in candidates]
+                nxt = weighted_choice(candidates, cand_weights)
+                push!(route, Int32(nxt))
+                current = nxt
+            end
+
+            # final node forced back to base
+            if current == base
+                # if already at base, pick another node first when possible
+                candidates = [v for v in V if v != base]
+                if !isempty(candidates)
+                    nxt = rand(candidates)
+                    route[end] = Int32(nxt)
+                end
+            end
+            push!(route, Int32(base))
+        end
+
+        turnaroundTime = Int32[]
+        for k in 1:flightLegs
+            push!(turnaroundTime, Int32(rand(te:maxTurnaround)))
+        end
+
+        push!(planes, planeSolution(
+            Int32(flightLegs),
+            route,
+            turnaroundTime
+        ))
+    end
+
+    return allPlaneSolution(planes)
+end
+
+function print_chromosome_table(evtols::allPlaneSolution)
+    println("Chromosome table:")
+    println("-----------------")
+
+    for (n, plane) in enumerate(evtols.planes)
+        print("eVTOL", n, ": ")
+        print(plane.flightLegs, " | ")
+
+        for v in plane.route
+            print(v, " ")
+        end
+
+        print("| ")
+
+        for t in plane.turnaroundTime
+            print(t, " ")
+        end
+
+        println()
+    end
+end
+
+mutable struct ScheduledLeg
+    plane::Int
+    leg_index::Int
+    from::Int
+    to::Int
+    dep::Int
+    arr::Int
+    remaining_capacity::Int
+end
+
+function build_scheduled_legs(evtols::allPlaneSolution, rt::Matrix{Int}, cap_u::Int)
+    scheduled = ScheduledLeg[]
+
+    for (pidx, plane) in enumerate(evtols.planes)
+        current_time = 0
+
+        for i in 1:plane.flightLegs
+            from = Int(plane.route[i])
+            to = Int(plane.route[i + 1])
+
+            dep = current_time + Int(plane.turnaroundTime[i])
+            arr = dep + rt[from, to]
+
+            push!(scheduled, ScheduledLeg(
+                pidx,
+                i,
+                from,
+                to,
+                dep,
+                arr,
+                cap_u
+            ))
+
+            current_time = arr
+        end
+    end
+
+    return scheduled
+end
+
+mutable struct PassengerAssignment
+    group::Int
+    plane::Int
+    legs::Vector{Int}
+end
+
+function find_direct_leg!(scheduled::Vector{ScheduledLeg}, a::Int, op, dp, dt, q, w)
+    candidates = ScheduledLeg[]
+
+    earliest = Int(round(dt[a]))
+    latest = earliest + Int(round(w))
+
+    for leg in scheduled
+        if leg.from == op[a] &&
+           leg.to == dp[a] &&
+           earliest <= leg.dep <= latest &&
+           leg.remaining_capacity >= q[a]
+            push!(candidates, leg)
+        end
+    end
+
+    if isempty(candidates)
+        return nothing
+    end
+
+    best = candidates[argmin([leg.arr for leg in candidates])]
+    best.remaining_capacity -= q[a]
+
+    return PassengerAssignment(a, best.plane, [best.leg_index])
+end
+
+function find_one_stop_assignment!(scheduled::Vector{ScheduledLeg},
+                                   a::Int, op, dp, dt, q, w)
+    best_pair = nothing
+    best_arrival = typemax(Int)
+
+    earliest = Int(round(dt[a]))
+    latest = earliest + Int(round(w))
+
+    for leg1 in scheduled
+        if leg1.from != op[a]
+            continue
+        end
+        if !(earliest <= leg1.dep <= latest)
+            continue
+        end
+        if leg1.remaining_capacity < q[a]
+            continue
+        end
+
+        for leg2 in scheduled
+            if leg2.plane != leg1.plane
+                continue
+            end
+            if leg2.leg_index <= leg1.leg_index
+                continue
+            end
+            if leg2.from != leg1.to
+                continue
+            end
+            if leg2.to != dp[a]
+                continue
+            end
+            if leg2.remaining_capacity < q[a]
+                continue
+            end
+            if leg2.dep < leg1.arr
+                continue
+            end
+
+            if leg2.arr < best_arrival
+                best_arrival = leg2.arr
+                best_pair = (leg1, leg2)
+            end
+        end
+    end
+
+    if best_pair === nothing
+        return nothing
+    end
+
+    leg1, leg2 = best_pair
+    leg1.remaining_capacity -= q[a]
+    leg2.remaining_capacity -= q[a]
+
+    return PassengerAssignment(a, leg1.plane, [leg1.leg_index, leg2.leg_index])
+end
+
+function assign_passengers(evtols::allPlaneSolution, data, rt::Matrix{Int})
+    A = data.A
     op = data.op
     dp = data.dp
     dt = data.dt
-    q  = data.q
+    q = data.q
+    so = data.so
+    w = data.w
+    cap_u = Int(round(data.cap_u))
+
+    scheduled = build_scheduled_legs(evtols, rt, cap_u)
+    assignments = PassengerAssignment[]
+    assigned_groups = Set{Int}()
+
+    # Step 1: non-stopover passengers -> direct only
+    direct_only = sort([a for a in A if so[a] == 0], by = a -> (dt[a], -q[a]))
+    for a in direct_only
+        ass = find_direct_leg!(scheduled, a, op, dp, dt, q, w)
+        if ass !== nothing
+            push!(assignments, ass)
+            push!(assigned_groups, a)
+        end
+    end
+
+    # Step 2: stopover-allowed passengers -> direct first
+    stopover_ok = sort([a for a in A if so[a] == 1], by = a -> (dt[a], -q[a]))
+    for a in stopover_ok
+        if a in assigned_groups
+            continue
+        end
+        ass = find_direct_leg!(scheduled, a, op, dp, dt, q, w)
+        if ass !== nothing
+            push!(assignments, ass)
+            push!(assigned_groups, a)
+        end
+    end
+
+    # Step 3: remaining stopover-allowed passengers -> one-stop
+    for a in stopover_ok
+        if a in assigned_groups
+            continue
+        end
+        ass = find_one_stop_assignment!(scheduled, a, op, dp, dt, q, w)
+        if ass !== nothing
+            push!(assignments, ass)
+            push!(assigned_groups, a)
+        end
+    end
+
+    return assignments, scheduled
+end
+
+function print_assignments(assignments::Vector{PassengerAssignment}, data)
+    println("Passenger assignments:")
+    println("----------------------")
+
+    for ass in assignments
+        println(
+            "Group ", ass.group,
+            " | plane ", ass.plane,
+            " | legs ", ass.legs,
+            " | ", data.op[ass.group], " -> ", data.dp[ass.group],
+            " | q=", data.q[ass.group],
+            " | dt=", data.dt[ass.group]
+        )
+    end
+end
+
+function fitnessFunction(
+    evtols::allPlaneSolution,
+    assignments::Vector{PassengerAssignment},
+    bmax::Float32,
+    bmin::Float32,
+    dist::Dict{Tuple{Int,Int},Float64},
+    ec::Float32,
+    battery_per_km::Float32,
+    rt::Matrix{Int},
+    ET::Int,
+    T::Int,
+    V::Int,
+    cap_flt::Int,
+    cap_v::Dict{},
+    data
+)
+    P = FeasibilityCheck(
+        bmax,
+        bmin,
+        dist,
+        ec,
+        battery_per_km,
+        evtols,
+        rt,
+        ET,
+        T,
+        V,
+        cap_flt,
+        cap_v
+    )
+
+    A  = data.A
+    op = data.op
+    dp = data.dp
+    fd = data.fd
+    fs = data.fs
+    c  = data.c
     so = data.so
     p  = data.p
 
-    cap_v = data.cap_v
-    cap_flt  = data.cap_flt
-    cap_u    = data.cap_u
-    bmax     = data.bmax
-    bmin     = data.bmin
-    ec       = data.ec
-    te       = data.te
-    w        = data.w
-    M1        = data.M1
-    M2a       = data.M2a
-    M2b       = data.M2b
-    M2c       = data.M2c
-    M3        = data.M3
+    fitnessvalue = 0.0
 
-    ###########################################################################
-    # Solver
-    ###########################################################################
-
-    model = Model(Gurobi.Optimizer)
-    # Show Gurobi MIP progress (incumbent, bound, gap, nodes, time).
-    set_optimizer_attribute(model, "OutputFlag", show_progress ? 1 : 0)
-    if show_progress
-        set_optimizer_attribute(model, "DisplayInterval", max(1, display_interval_sec))
+    # 1. Revenue from assigned passenger groups
+    for ass in assignments
+        a = ass.group
+        i = op[a]
+        j = dp[a]
+        fitnessvalue += fd[(i, j)] * (1 - so[a]) + fs[(i, j)] * so[a]
     end
 
-    ###########################################################################
-    # Decision variables
-    ###########################################################################
-
-    # x[i,j,m,n] = 1 if eVTOL n travels from i to j in operation m
-    @variable(model, x[i in V, j in V, m in M, n in N], Bin)
-
-    # y[n] = 1 if eVTOL n is in use
-    @variable(model, y[n in N], Bin)
-
-    # s[a,m,n] = 1 if eVTOL n serves passenger group a in operation m
-    @variable(model, s[a in A, m in M, n in N], Bin)
-
-    # s[a,n] = 1 if eVTOL n serves passenger group a
-    @variable(model, ss[a in A, n in N], Bin)
-
-    # is_p[j,n,t] = 1 if eVTOL n is parking at vertiport/vertistop j at time t
-    @variable(model, is_p[j in V, n in N, t in T], Bin)
-
-    # is_o[i,j,m,n,t] = 1 if eVTOL n is traveling from i to j in operation m at time t
-    @variable(model, is_o[i in V, j in V, m in M, n in N, t in T], Bin)
-
-    # z[a] = 1 if passenger group a is served by a direct route 1, otherwise 0
-    @variable(model, z[a in A], Bin)
-
-    # k[a,i,j,m,n] = 1 if eVTOL n travels from i to j in operation m and serves passenger group a
-    @variable(model, k[a in A, i in V, j in V, m in M, n in N], Bin)
-
-    # u[m,n] = battery level of eVTOL n after operation m
-    @variable(model, u[m in M, n in N] >= 0)
-
-    # dep[m,n] = departure time of operation m of eVTOL n
-    @variable(model, dep[m in M, n in N] >= 0)
-
-    # arr[m,n] = arrival time of operation m of eVTOL n
-    @variable(model, arr[m in M, n in N] >= 0)
-
-    ###########################################################################
-    # Initialization helpers (operation 0 should not be an actual flown trip)
-    ###########################################################################
-    for i in V, j in V, n in N
-        fix(x[i,j,0,n], 0.0; force=true)
-        for a in A
-            fix(k[a,i,j,0,n], 0.0; force=true)
+    # 2. Operating cost of all flown legs
+    for plane in evtols.planes
+        for k in 1:plane.flightLegs
+            from = Int(plane.route[k])
+            to   = Int(plane.route[k + 1])
+            fitnessvalue -= c[(from, to)]
         end
     end
-    for a in A, n in N
-        fix(s[a,0,n], 0.0; force=true)
-    end
-    
-    ###########################################################################
-    # Objective (6.1)
-    ###########################################################################
-    @objective(
-        model, Max,
-        sum(d[(a,i,j)] * ss[a,n] * (fd[i,j]*(1 - so[a])+ fs[i,j]* so[a]) for a in A, i in V, j in V, n in N) -
-        sum(c[(i,j)] * x[i,j,m,n] for i in V, j in V, m in M, n in N) -
-        sum(p[a] * (1 - sum(ss[a,n] for n in N)) for a in A) -
-        sum(400*y[n] for n in N)
-    )
 
-    ###########################################################################
-    # Constraints
-    ###########################################################################
-
-    # (6.2) eVTOL leaves base vertiport at time/operation 1 if it is being used
-    @constraint(model, [n in N], sum(x[bv[n], j, 1, n] for j in V) == y[n])
-
-    # (6.3) eVTOL returns to its base vertiport
-    @constraint(model, [n in N],
-        sum(x[bv[n], j, m, n] for j in V, m in M_no0) ==
-        sum(x[j, bv[n], m, n] for j in V, m in M_no0)
-    )
-
-    # (6.4) eVTOL 
-    @constraint(model, [m in 1:maximum(M), n in N], sum(x[i,j,m,n] for i in V, j in V) <= y[n] )
-
-    # (6.5) 
-    @constraint(model, [i in V, m in M_no0, n in N], x[i,i,m,n] <= 0)
-
-    # (6.6) Flow consistency between operation m and m+1
-    @constraint(model, [j in V, m in M_mid, n in N],
-        sum(x[i,j,m,n] for i in V)  >= sum(x[j,i2,m+1,n] for i2 in V)
-    )
-
-    # (6.7) Number of flight leg assigned to passenger group a = service indicator + stop indicator 
-    @constraint(model, [a in A],
-        sum(s[a,m,n] for m in M_no0, n in N) == sum(ss[a,n] for n in N) + z[a]
-    )
-
-    # (6.8) Direct connection if z[a] = 0
-    @constraint(model, [a in A, m in M, n in N],
-        s[a,m,n] <= x[op[a], dp[a], m, n] + z[a] * M1
-    )
-
-    # (6.9) Layover path existence upper bound
-    @constraint(model, [a in A, m in M, n in N],
-        s[a,m,n] <=
-        sum(x[op[a], k_node, m, n] for k_node in V) +
-        sum(x[k_node, dp[a], m, n] for k_node in V) +
-        (1 - z[a]) * M1
-    )
-
-    # (6.10a) Layover path existence lower bound using m and m+1
-    @constraint(model, [a in A, m in M_mid, n in N],
-        s[a,m,n] >=
-        sum(x[op[a], k_node, m, n] + x[k_node, dp[a], m+1, n] for k_node in V) - 1 - (1 - z[a]) * M1
-    )
-
-    # (6.10b) Same as above, using m-1 and m
-    @constraint(model, [a in A, m in 2:maximum(M), n in N],
-        s[a,m,n] >=
-        sum(x[op[a], k_node, m-1, n] + x[k_node, dp[a], m, n] for k_node in V) - 1 - (1 - z[a]) * M1
-    )
-
-    # (6.11) If passenger group does not allow layovers, then z[a] must be 0
-    @constraint(model, [a in A], z[a] <= so[a])
-
-    # (6.12) If passenger group a is not served by eVTOL n, it cannot be served in any operation m
-    @constraint(model, [a in A, m in M, n in N],
-        s[a,m,n] <= ss[a,n]
-    )
-
-    # (6.13) Each passenger group can only be served by one eVTOL
-    @constraint(model, [a in A],
-        sum(ss[a,n] for n in N) <= 1
-    )
-
-    # (6.14) If s[a,m,n] = 1, then at least one arc serving that passenger must exist
-    @constraint(model, [a in A, m in M_no0, n in N],
-        sum(k[a,i,j,m,n] for i in V, j in V) >= s[a,m,n]
-    )
-
-    # (6.15) Direct service linkage
-    @constraint(model, [a in A, i in V, j in V, m in M_no0, n in N],
-        2 * k[a,i,j,m,n] <= d[(a,i,j)] + x[i,j,m,n] + z[a] * M1
-    )
-
-    # (6.16)
-    @constraint(model, [a in A],
-        sum(k[a,i,j,m,n] for m in M, i in V, j in V, n in N) <= 1 + z[a]
-    )
-
-    # (6.17a) Layover service linkage (alternative version)
-    @constraint(model, [a in A, i in V, k_node in V, j in V, m in M_no_last, n in N],
-        k[a,i,k_node,m,n] + k[a,k_node,j,m+1,n] <=
-        x[i,k_node,m,n] + x[k_node,j,m+1,n] + (1 - z[a]) * M1
-    )
-
-    # (6.17b) Layover service linkage
-    @constraint(model, [a in A, i in V, k_node in V, j in V, m in M_no_last, n in N],
-        k[a,i,k_node,m,n] + k[a,k_node,j,m+1,n] <= d[(a,i,j)] + 1
-    )
-
-    # (6.18) Seat capacity
-    @constraint(model, [m in M, n in N],
-        sum(s[a,m,n] * q[a] for a in A) <= cap_u
-    )
-
-    # (6.19) eVTOL starts with max battery
-    @constraint(model, [n in N], u[0,n] == bmax)
-
-    # (6.20) Battery cannot exceed max
-    @constraint(model, [m in M, n in N], u[m,n] <= bmax)
-
-    # (6.21) Battery must stay above minimum
-    #@constraint(model, [m in M, n in N], u[m,n] >= bmin)
-
-    # (6.22a) First operation from a vertiport only reflects energy consumption
-    @constraint(model, [i in V, j in V, n in N],
-        u[1,n] <= u[0,n] - e[(i,j)] * x[i,j,1,n] + (1 - x[i,j,1,n]) * M2a
-    )
-
-    # (6.22b)
-    @constraint(model, [i in V, j in V, n in N],
-        u[1,n] >= u[0,n] - e[(i,j)] * x[i,j,1,n] - (1 - x[i,j,1,n]) * M2b
-    )
-
-    # (6.23a) Battery update between operations
-    @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
-        u[m,n] <= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
-                  ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) +
-                  (1 - x[i,j,m,n]) * M2c
-    )
-
-    # (6.23b)
-    @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
-        u[m,n] >= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
-                  ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) -
-                  (1 - x[i,j,m,n]) * M2c
-    )
-
-    # (6.24) Operation 0 starts at time 0
-    @constraint(model, [n in N], arr[0,n] == 0)
-
-    # (6.25) Arrival time lower bound
-    @constraint(model, [m in M_no0, n in N],
-    arr[m,n] >= arr[m-1,n] + sum((te + rt[(i,j)]) * x[i,j,m,n] for i in V, j in V)
-    )
-
-    # (6.26) Departure time = arrival time - travel time
-    @constraint(model, [m in M, n in N],
-    arr[m,n] == dep[m,n] + sum(rt[(i,j)] * x[i,j,m,n] for i in V, j in V)
-    )
-
-    # (6.27) Minimum layover time
-    @constraint(model, [a in A, n in N, m in M_no_last],
-        dep[m+1,n] <= arr[m,n] + te + (2 - s[a,m,n] - s[a,m+1,n]) * M3
-    )
-
-    # (6.28) Earliest arrival time at destination
-    @constraint(model, [a in A, i in V, j in V, m in M_no0, n in N],
-        d[(a,i,j)] * dt[a] - (1 - (s[a,m,n] - s[a,m-1,n])) * M3 <=
-        arr[m,n] - sum(rt[(i,k_node)] * x[i,k_node,m,n] for k_node in V)
-    )
-
-    # (6.29) Maximum waiting time
-    @constraint(model, [a in A, m in M_no0, n in N],
-        arr[m,n]
-        - sum(rt[(i,j)] * x[i,j,m,n] for i in V, j in V)
-        - sum(d[(a,i,j)] * dt[a] * s[a,m,n] for i in V, j in V)
-        - (1 - (s[a,m,n] - s[a,m-1,n])) * M3 <= w
-    )
-
-    # (6.30) eVTOL is either parked or flying at each time t
-    @constraint(model, [n in N, t in T],
-        sum(is_p[j,n,t] for j in V) +
-        sum(is_o[i,j,m,n,t] for i in V, j in V, m in M) == 1
-    )
-
-    # (6.31) Travel time occupancy relation
-    @constraint(model, [i in V, j in V, m in M, n in N],
-        rt[(i,j)] * x[i,j,m,n] == sum(is_o[i,j,m,n,t] for t in T)
-    )
-
-    # (6.32) Departure time bound from occupancy
-    @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
-        dep[m,n] <= t + M3 * (1 - is_o[i,j,m,n,t]) - 1
-    )
-
-    # (6.33) Arrival time bound from occupancy
-    @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
-        arr[m,n] >= t - M3 * (1 - is_o[i,j,m,n,t])
-    )
-
-    # (6.34) Initial parking at base vertiport
-    @constraint(model, [n in N],
-        is_p[bv[n], n, 0] == 1
-    )
-
-    # (6.35) Parking state propagation
-    @constraint(model, [j in V, n in N, t in T_no0],
-        is_p[j,n,t] <= is_p[j,n,t-1] +
-                       sum(is_o[i,j,m,n,t-1] for i in V, m in M)
-    )
-
-    # # (6.36) Parking capacity at vertiports
-    # @constraint(model, [j in V, t in T],
-    #     sum(is_p[j,n,t] for n in N) <= cap_v[j]
-    # )
-
-    # (6.37) Air corridor capacity
-    # @constraint(model, [i in V, j in V, t in T],
-    #     sum(is_o[i,j,m,n,t] for m in M, n in N) <= cap_flt
-    # )
-
-    return model, data
-end
-
-function solve_instance(excel_file::String; show_progress::Bool = true, display_interval_sec::Int = 5)
-    timings = Dict{String,Float64}()
-
-    t_build = @elapsed model, data = build_model(
-        excel_file;
-        show_progress = show_progress,
-        display_interval_sec = display_interval_sec,
-    )
-    timings["Build model (incl. data load)"] = t_build
-
-    t_opt = @elapsed optimize!(model)
-    timings["Optimization"] = t_opt
-
-    term = termination_status(model)
-    primal = primal_status(model)
-
-    println("Termination status: ", term)
-    println("Primal status:      ", primal)
-
-    if term == MOI.OPTIMAL || term == MOI.TIME_LIMIT || term == MOI.FEASIBLE_POINT
-        println("Objective value:    ", objective_value(model))
+    # 3. Penalty for unserved passenger groups
+    assigned_groups = Set(ass.group for ass in assignments)
+    for a in A
+        if !(a in assigned_groups)
+            fitnessvalue -= p[a]
+        end
     end
 
-    return model, data, timings
+    # 4. Fixed cost for each used eVTOL
+    for plane in evtols.planes
+        if plane.flightLegs > 0
+            fitnessvalue -= 400.0
+        end
+    end
+
+    # 5. Large infeasibility penalty
+    fitnessvalue -= sum(P) * 1_000_000.0
+
+    return fitnessvalue
 end
+
+###############################################################################
+# Usage
+###############################################################################
+excel_file = joinpath(@__DIR__, "inputData.xlsx")
+data = load_data(excel_file)
+
+Vmax = maximum(data.V)
+rt = zeros(Int, Vmax, Vmax)
+for i in data.V, j in data.V
+    rt[i, j] = data.rt[(i, j)]
+end
+
+function generate_best_initial_solutions(data, rt; n_runs::Int=1000, top_k::Int=10, maxLegs::Int=5, maxTurnaround::Int=30, print_each::Bool=false)
+    results = NamedTuple[]
+
+    for run in 1:n_runs
+        evtols_init = initial_chromosome_solution(data; maxLegs=maxLegs, maxTurnaround=maxTurnaround)
+
+        assignments, scheduled = assign_passengers(evtols_init, data, rt)
+
+        P = FeasibilityCheck(
+            Float32(data.bmax),
+            Float32(data.bmin),
+            data.dist,
+            Float32(data.ec),
+            Float32(data.battery_per_km),
+            evtols_init,
+            rt,
+            Int(round(data.ET)),
+            maximum(Int.(data.T)),
+            maximum(data.V),
+            Int(round(data.cap_flt)),
+            data.cap_v
+        )
+
+        fitness = fitnessFunction(
+            evtols_init,
+            assignments,
+            Float32(data.bmax),
+            Float32(data.bmin),
+            data.dist,
+            Float32(data.ec),
+            Float32(data.battery_per_km),
+            rt,
+            Int(round(data.ET)),
+            maximum(Int.(data.T)),
+            maximum(data.V),
+            Int(round(data.cap_flt)),
+            data.cap_v,
+            data
+        )
+
+        push!(results, (
+            run = run,
+            fitness = fitness,
+            evtols = evtols_init,
+            assignments = assignments,
+            scheduled = scheduled,
+            P = P
+        ))
+
+        if print_each
+            println("Run $run | fitness = $fitness | P = $P")
+        end
+    end
+
+    # Sort by fitness descending, since higher fitness is better
+    sorted_results = sort(results, by = x -> x.fitness, rev = true)
+
+    # Return only the best top_k results
+    return sorted_results[1:min(top_k, length(sorted_results))]
+end
+
+start_time = time()
+
+best_solutions = generate_best_initial_solutions(data, rt; n_runs=10000, top_k=1, maxLegs=5, maxTurnaround=20)
+
+elapsed_time = time() - start_time
+
+println("Time used: ", round(elapsed_time, digits=3), " seconds")
+
+for (rank, sol) in enumerate(best_solutions)
+    println("====================================")
+    println("Rank: ", rank)
+    println("Run: ", sol.run)
+    println("Fitness: ", sol.fitness)
+    println("P: ", sol.P)
+    println()
+
+    print_chromosome_table(sol.evtols)
+    println()
+    print_assignments(sol.assignments, data)
+    println()
+end
+
