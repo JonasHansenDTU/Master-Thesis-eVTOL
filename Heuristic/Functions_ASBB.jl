@@ -1165,6 +1165,7 @@ delete(evtols, data)
 println("\n--- AFTER ---")
 print_chromosome_table(evtols)
 
+
 for p in evtols.planes
     println("route length = ", length(p.route),
             " | legs = ", p.flightLegs,
