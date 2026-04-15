@@ -1165,7 +1165,7 @@ delete(evtols, data)
 println("\n--- AFTER ---")
 print_chromosome_table(evtols)
 
-
+#test jonas 123
 for p in evtols.planes
     println("route length = ", length(p.route),
             " | legs = ", p.flightLegs,
