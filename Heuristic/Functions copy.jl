@@ -89,9 +89,9 @@ function load_data(excel_file::String)
     ###########################################################################
     # Read sheets
     ###########################################################################
-    infra = read_sheet(excel_file, "Infrastructure (3)")
-    pax   = read_sheet(excel_file, "PassengerGroups (3)")
-    plane = read_sheet_any(excel_file, ["PlaneData (2)"])
+    infra = read_sheet(excel_file, "Infrastructure")
+    pax   = read_sheet(excel_file, "PassengerGroups")
+    plane = read_sheet_any(excel_file, ["PlaneData"])
 
     ###########################################################################
     # Infrastructure columns
@@ -1038,7 +1038,7 @@ end
 
 start_time = time()
 
-best_solutions = generate_best_initial_solutions(data, rt; n_runs=10000, top_k=1, maxLegs=5, maxTurnaround=20)
+best_solutions = generate_best_initial_solutions(data, rt; n_runs=10000, top_k=1, maxLegs=6, maxTurnaround=20)
 
 elapsed_time = time() - start_time
 
@@ -1057,4 +1057,3 @@ for (rank, sol) in enumerate(best_solutions)
     print_assignments(sol.assignments, data)
     println()
 end
-
