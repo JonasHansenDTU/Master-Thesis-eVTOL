@@ -5,6 +5,7 @@ using Gurobi
 using CSV
 using MathOptInterface
 using Printf
+using Random
 const MOI = MathOptInterface
 
 function normalize_name(x)
@@ -80,8 +81,8 @@ end
 """
 Build all sets and parameters from Excel + system parameters.
 Expected sheets:
-    - Infrastructure (3)
-    - PassengerGroups (3)
+    - Infrastructure
+    - PassengerGroups
     - PlaneData
 """
 function load_data(excel_file::String)
@@ -1037,9 +1038,58 @@ function generate_best_initial_solutions(data, rt; n_runs::Int=1000, top_k::Int=
     return sorted_results[1:min(top_k, length(sorted_results))]
 end
 
+function rebookPass(scheduled::Vector{ScheduledLeg}, a::Int, op, dp, dt, q, w; direct=false)
+    earliest = Int(round(dt[a]))
+    latest = earliest + Int(round(w))
+
+    if direct
+        # Direct leg candidates
+        candidates = [leg for leg in scheduled if
+            leg.from == op[a] &&
+            leg.to == dp[a] &&
+            earliest <= leg.dep <= latest &&
+            leg.remaining_capacity >= q[a]
+        ]
+        if length(candidates) <= 1
+            return nothing
+        end
+        # Exclude earliest arrival
+        sorted = sort(candidates, by = x -> x.arr)
+        alternate_candidates = sorted[2:end]
+        chosen = rand(alternate_candidates)
+        chosen.remaining_capacity -= q[a]
+        return PassengerAssignment(a, chosen.plane, [chosen.leg_index])
+    else
+        # One-stop candidates 
+        pairs = []
+        for leg1 in scheduled, leg2 in scheduled
+            if leg1 !== leg2 &&
+               leg1.from == op[a] &&
+               leg2.to == dp[a] &&
+               leg1.to == leg2.from &&
+               earliest <= leg1.dep <= latest &&
+               leg1.arr + 1 <= leg2.dep && # assuming min transfer time = 1
+               leg1.remaining_capacity >= q[a] &&
+               leg2.remaining_capacity >= q[a]
+                push!(pairs, (leg1, leg2))
+            end
+        end
+        if length(pairs) <= 1
+            return nothing
+        end
+        # Exclude pair with earliest arrival
+        sorted = sort(pairs, by = x -> x[2].arr)
+        alternate_pairs = sorted[2:end]
+        chosen = rand(alternate_pairs)
+        chosen[1].remaining_capacity -= q[a]
+        chosen[2].remaining_capacity -= q[a]
+        return PassengerAssignment(a, chosen[1].plane, [chosen[1].leg_index, chosen[2].leg_index])
+    end
+end
+
 start_time = time()
 
-best_solutions = generate_best_initial_solutions(data, rt; n_runs=10000, top_k=1, maxLegs=6, maxTurnaround=20)
+best_solutions = generate_best_initial_solutions(data, rt; n_runs=1000, top_k=1, maxLegs=6, maxTurnaround=20)
 
 elapsed_time = time() - start_time
 
@@ -1057,4 +1107,57 @@ for (rank, sol) in enumerate(best_solutions)
     println()
     print_assignments(sol.assignments, data)
     println()
+end
+
+# num_infeasible = count(sol -> sol.fitness < -1_000_000, best_solutions)
+# println("Number of unfeasible solutions: ", num_infeasible)
+
+x = 1  # Set the number of random solutions you want to process
+random_indices = randperm(length(best_solutions))[1:x]
+
+for idx in random_indices
+    sol = best_solutions[idx]
+    new_assignments = deepcopy(sol.assignments)
+    new_scheduled = deepcopy(sol.scheduled)
+
+    for (i, assign) in enumerate(new_assignments)
+        group_idx = assign.group
+        direct = length(assign.legs) == 1
+
+        alt = rebookPass(
+            new_scheduled,
+            group_idx,
+            data.op, data.dp, data.dt, data.q, data.w;
+            direct = direct
+        )
+        if alt !== nothing
+            println("Passenger group ", group_idx, " rebooked. New assignment: plane=", alt.plane, ", legs=", alt.legs)
+            new_assignments[i] = alt
+
+            new_fitness = fitnessFunction(
+            sol.evtols,
+            new_assignments,
+            Float32(data.bmax),
+            Float32(data.bmin),
+            data.dist,
+            Float32(data.ec),
+            Float32(data.battery_per_km),
+            rt,
+            Int(round(data.ET)),
+            maximum(Int.(data.T)),
+            maximum(data.V),
+            Int(round(data.cap_flt)),
+            data.cap_v,
+            data
+            )
+
+            println("====================================")
+            println("Random Solution Index: ", idx)
+            println("Original Fitness: ", sol.fitness)
+            println("Alternate Assignment Fitness: ", new_fitness)
+        
+        end
+    end
+
+    
 end
