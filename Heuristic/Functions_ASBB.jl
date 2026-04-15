@@ -1060,23 +1060,48 @@ for (rank, sol) in enumerate(best_solutions)
 end
 
 function insert(plane::allPlaneSolution, data; maxTurnaround=30)
+
     planeidx = rand(1:length(plane.planes))
     p = plane.planes[planeidx]
 
     route = p.route
 
-    # Need at least 2 nodes to insert between
+    # Case 1: empty or no meaningful route
+    if length(route) <= 1 || p.flightLegs == 0
+        base = route[1]
+
+        # pick intermediate node
+        candidates = [v for v in data.V if v != base]
+        if isempty(candidates)
+            return false
+        end
+
+        mid = rand(candidates)
+
+        # build: base → mid → base
+        p.route = Int32[base, Int32(mid), base]
+
+        # 2 legs → 2 turnaround times
+        p.turnaroundTime = Int32[
+            rand(Int(round(data.te)):maxTurnaround),
+            rand(Int(round(data.te)):maxTurnaround)
+        ]
+
+        p.flightLegs = 2
+
+        return true
+    end
+
+    # Case 2: normal insertion
     if length(route) < 2
         return false
     end
 
-    # Choose insertion index (not first or last)
     idx = rand(2:length(route))
 
     prev = Int(route[idx - 1])
     next = Int(route[idx])
 
-    # Exclude neighbors
     forbidden = [prev, next]
     candidates = [v for v in data.V if !(v in forbidden)]
 
@@ -1088,7 +1113,7 @@ function insert(plane::allPlaneSolution, data; maxTurnaround=30)
     newturnaround = rand(Int(round(data.te)):maxTurnaround)
 
     insert!(p.route, idx, Int32(newvertiport))
-    insert!(p.turnaroundTime, idx - 1, Int32(newturnaround))
+    insert!(p.turnaroundTime, idx, Int32(newturnaround))
 
     p.flightLegs += 1
 
@@ -1142,7 +1167,7 @@ function delete(population::allPlaneSolution, data)
         end
 
         deleteat!(p.route, idx)
-        deleteat!(p.turnaroundTime, idx - 1)
+        deleteat!(p.turnaroundTime, idx)
 
         # updatte flight legs count
         p.flightLegs = length(p.route) - 1
@@ -1153,21 +1178,21 @@ function delete(population::allPlaneSolution, data)
     return false
 end
 
-println("\n===== TEST DELETE FUNCTION =====")
+# println("\n===== TEST DELETE FUNCTION =====")
 
-evtols = deepcopy(best_solutions[1].evtols)
+# evtols = deepcopy(best_solutions[1].evtols)
 
-println("\n--- BEFORE ---")
-print_chromosome_table(evtols)
+# println("\n--- BEFORE ---")
+# print_chromosome_table(evtols)
 
-delete(evtols, data)
+# delete(evtols, data)
 
-println("\n--- AFTER ---")
-print_chromosome_table(evtols)
+# println("\n--- AFTER ---")
+# print_chromosome_table(evtols)
 
-#test jonas 123
-for p in evtols.planes
-    println("route length = ", length(p.route),
-            " | legs = ", p.flightLegs,
-            " | turnaround = ", length(p.turnaroundTime))
-end
+# #test jonas 123
+# for p in evtols.planes
+#     println("route length = ", length(p.route),
+#             " | legs = ", p.flightLegs,
+#             " | turnaround = ", length(p.turnaroundTime))
+# end
