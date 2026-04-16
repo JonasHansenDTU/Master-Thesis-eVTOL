@@ -916,7 +916,7 @@ def build_folium_map(
             <th style="text-align:left; padding:2px 4px;">Status</th>
             <th style="text-align:right; padding:2px 4px;">Battery%</th>
             <th style="text-align:left; padding:2px 4px;">PassengerGr.</th>
-            <th style="text-align:right; padding:2px 4px;">No Passengers</th>
+            <th style="text-align:right; padding:2px 4px;">No. Passengers</th>
           </tr>
         </thead>
         <tbody id="evtol-status-table-body">
