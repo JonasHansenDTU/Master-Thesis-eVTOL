@@ -641,7 +641,7 @@ def build_animation(
 
         return go.Table(
             header=dict(
-                values=["eVTOL", "State", "Pax", "Battery (now)", "Battery (operation)", "Groups"],
+                values=["eVTOL", "State", "Pax", "Battery (now)", "Battery (operation)", "Passagerer"],
                 fill_color="#e9eef5",
                 align="left",
                 font=dict(size=11),
@@ -908,15 +908,15 @@ def build_folium_map(
     evtol_ids = sorted({int(k) for t in status_by_time.values() for k in t.keys()})
     status_table_html = """
     <div id="evtol-status" style="position:absolute; top:10px; left:10px; z-index:9999; background:rgba(255,255,255,0.85); padding:10px; border-radius:8px; max-height:240px; overflow:auto; font-size:12px;">
-      <div style="font-weight:bold; margin-bottom:6px;">eVTOL status</div>
+      <div style="font-weight:bold; margin-bottom:6px;">Fleet Management</div>
       <table style="border-collapse:collapse; width:100%;">
         <thead>
           <tr>
             <th style="text-align:left; padding:2px 4px;">eVTOL</th>
-            <th style="text-align:left; padding:2px 4px;">State</th>
-            <th style="text-align:right; padding:2px 4px;">Pax</th>
-            <th style="text-align:right; padding:2px 4px;">Battery</th>
-            <th style="text-align:left; padding:2px 4px;">Groups</th>
+            <th style="text-align:left; padding:2px 4px;">Status</th>
+            <th style="text-align:right; padding:2px 4px;">Battery%</th>
+            <th style="text-align:left; padding:2px 4px;">PassengerGr.</th>
+            <th style="text-align:right; padding:2px 4px;">No. Passengers</th>
           </tr>
         </thead>
         <tbody id="evtol-status-table-body">
@@ -959,9 +959,9 @@ def build_folium_map(
           `<tr>` +
             `<td style="padding:2px 4px;">${id}</td>` +
             `<td style="padding:2px 4px;">${s.state}</td>` +
-            `<td style="padding:2px 4px; text-align:right;">${s.pax}</td>` +
             `<td style="padding:2px 4px; text-align:right;">${s.battery}</td>` +
             `<td style="padding:2px 4px;">${s.groups}</td>` +
+            `<td style="padding:2px 4px; text-align:right;">${s.pax}</td>` +
           `</tr>`
         );
       }
