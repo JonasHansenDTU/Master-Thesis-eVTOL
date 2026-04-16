@@ -1088,7 +1088,7 @@ function insert(plane::allPlaneSolution, data; maxTurnaround=30)
     newturnaround = rand(Int(round(data.te)):maxTurnaround)
 
     insert!(p.route, idx, Int32(newvertiport))
-    insert!(p.turnaroundTime, idx - 1, Int32(newturnaround))
+    insert!(p.turnaroundTime, idx, Int32(newturnaround))
 
     p.flightLegs += 1
 
