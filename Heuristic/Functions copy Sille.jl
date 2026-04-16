@@ -735,7 +735,16 @@ mutable struct PassengerAssignment
     legs::Vector{Int}
 end
 
-function find_direct_leg!(scheduled::Vector{ScheduledLeg}, a::Int, op, dp, dt, q, w)
+function find_direct_leg!(
+    scheduled::Vector{ScheduledLeg},
+    a::Int,
+    op,
+    dp,
+    dt,
+    q,
+    w;
+    top_k::Int=3
+)
     candidates = ScheduledLeg[]
 
     earliest = Int(round(dt[a]))
@@ -754,16 +763,32 @@ function find_direct_leg!(scheduled::Vector{ScheduledLeg}, a::Int, op, dp, dt, q
         return nothing
     end
 
-    best = candidates[argmin([leg.arr for leg in candidates])]
-    best.remaining_capacity -= q[a]
+    # Better candidates first:
+    # earliest arrival, then earliest departure, then more remaining capacity
+    sorted_candidates = sort(
+        candidates,
+        by = leg -> (leg.arr, leg.dep, -leg.remaining_capacity)
+    )
 
-    return PassengerAssignment(a, best.plane, [best.leg_index])
+    chosen_pool = sorted_candidates[1:min(top_k, length(sorted_candidates))]
+    chosen = rand(chosen_pool)
+
+    chosen.remaining_capacity -= q[a]
+
+    return PassengerAssignment(a, chosen.plane, [chosen.leg_index])
 end
 
-function find_one_stop_assignment!(scheduled::Vector{ScheduledLeg},
-                                   a::Int, op, dp, dt, q, w)
-    best_pair = nothing
-    best_arrival = typemax(Int)
+function find_one_stop_assignment!(
+    scheduled::Vector{ScheduledLeg},
+    a::Int,
+    op,
+    dp,
+    dt,
+    q,
+    w;
+    top_k::Int=3
+)
+    candidate_pairs = Tuple{ScheduledLeg,ScheduledLeg}[]
 
     earliest = Int(round(dt[a]))
     latest = earliest + Int(round(w))
@@ -799,18 +824,33 @@ function find_one_stop_assignment!(scheduled::Vector{ScheduledLeg},
                 continue
             end
 
-            if leg2.arr < best_arrival
-                best_arrival = leg2.arr
-                best_pair = (leg1, leg2)
-            end
+            push!(candidate_pairs, (leg1, leg2))
         end
     end
 
-    if best_pair === nothing
+    if isempty(candidate_pairs)
         return nothing
     end
 
-    leg1, leg2 = best_pair
+    # Sort pairs:
+    # earliest final arrival first,
+    # then earliest first departure,
+    # then smaller transfer wait,
+    # then more remaining capacity
+    sorted_pairs = sort(candidate_pairs, by = pair -> begin
+        leg1, leg2 = pair
+        transfer_wait = leg2.dep - leg1.arr
+        (
+            leg2.arr,
+            leg1.dep,
+            transfer_wait,
+            -(leg1.remaining_capacity + leg2.remaining_capacity)
+        )
+    end)
+
+    chosen_pool = sorted_pairs[1:min(top_k, length(sorted_pairs))]
+    leg1, leg2 = rand(chosen_pool)
+
     leg1.remaining_capacity -= q[a]
     leg2.remaining_capacity -= q[a]
 
@@ -1038,7 +1078,13 @@ function generate_best_initial_solutions(data, rt; n_runs::Int=1000, top_k::Int=
     return sorted_results[1:min(top_k, length(sorted_results))]
 end
 
-function rebookPass(scheduled::Vector{ScheduledLeg}, a::Int, op, dp, dt, q, w; direct=false)
+function rebookPass(
+    scheduled::Vector{ScheduledLeg}, 
+    a::Int, op, dp, dt, q, w; 
+    direct=false, 
+    current_plane=nothing, 
+    current_legs=nothing
+)
     earliest = Int(round(dt[a]))
     latest = earliest + Int(round(w))
 
@@ -1048,15 +1094,14 @@ function rebookPass(scheduled::Vector{ScheduledLeg}, a::Int, op, dp, dt, q, w; d
             leg.from == op[a] &&
             leg.to == dp[a] &&
             earliest <= leg.dep <= latest &&
-            leg.remaining_capacity >= q[a]
+            leg.remaining_capacity >= q[a] &&
+            !(current_plane !== nothing && current_legs !== nothing && 
+              leg.plane == current_plane && [leg.leg_index] == current_legs)
         ]
-        if length(candidates) <= 1
+        if length(candidates) == 0
             return nothing
         end
-        # Exclude earliest arrival
-        sorted = sort(candidates, by = x -> x.arr)
-        alternate_candidates = sorted[2:end]
-        chosen = rand(alternate_candidates)
+        chosen = rand(candidates)
         chosen.remaining_capacity -= q[a]
         return PassengerAssignment(a, chosen.plane, [chosen.leg_index])
     else
@@ -1070,17 +1115,16 @@ function rebookPass(scheduled::Vector{ScheduledLeg}, a::Int, op, dp, dt, q, w; d
                earliest <= leg1.dep <= latest &&
                leg1.arr + 1 <= leg2.dep && # assuming min transfer time = 1
                leg1.remaining_capacity >= q[a] &&
-               leg2.remaining_capacity >= q[a]
+               leg2.remaining_capacity >= q[a] &&
+               !(current_plane !== nothing && current_legs !== nothing &&
+                 leg1.plane == current_plane && [leg1.leg_index, leg2.leg_index] == current_legs)
                 push!(pairs, (leg1, leg2))
             end
         end
-        if length(pairs) <= 1
+        if length(pairs) == 0
             return nothing
         end
-        # Exclude pair with earliest arrival
-        sorted = sort(pairs, by = x -> x[2].arr)
-        alternate_pairs = sorted[2:end]
-        chosen = rand(alternate_pairs)
+        chosen = rand(pairs)
         chosen[1].remaining_capacity -= q[a]
         chosen[2].remaining_capacity -= q[a]
         return PassengerAssignment(a, chosen[1].plane, [chosen[1].leg_index, chosen[2].leg_index])
@@ -1089,7 +1133,7 @@ end
 
 start_time = time()
 
-best_solutions = generate_best_initial_solutions(data, rt; n_runs=1000, top_k=1, maxLegs=6, maxTurnaround=20)
+best_solutions = generate_best_initial_solutions(data, rt; n_runs=10000, top_k=1, maxLegs=6, maxTurnaround=20)
 
 elapsed_time = time() - start_time
 
@@ -1112,52 +1156,54 @@ end
 # num_infeasible = count(sol -> sol.fitness < -1_000_000, best_solutions)
 # println("Number of unfeasible solutions: ", num_infeasible)
 
-x = 1  # Set the number of random solutions you want to process
-random_indices = randperm(length(best_solutions))[1:x]
+# x = 1000  # Set the number of random solutions to be processed from best_solutions
+# random_indices = randperm(length(best_solutions))[1:x]
 
-for idx in random_indices
-    sol = best_solutions[idx]
-    new_assignments = deepcopy(sol.assignments)
-    new_scheduled = deepcopy(sol.scheduled)
+# for idx in random_indices
+#     sol = best_solutions[idx]
+#     new_assignments = deepcopy(sol.assignments)
+#     new_scheduled = deepcopy(sol.scheduled)
 
-    for (i, assign) in enumerate(new_assignments)
-        group_idx = assign.group
-        direct = length(assign.legs) == 1
+#     for (i, assign) in enumerate(new_assignments)
+#         group_idx = assign.group
+#         direct = length(assign.legs) == 1
 
-        alt = rebookPass(
-            new_scheduled,
-            group_idx,
-            data.op, data.dp, data.dt, data.q, data.w;
-            direct = direct
-        )
-        if alt !== nothing
-            println("Passenger group ", group_idx, " rebooked. New assignment: plane=", alt.plane, ", legs=", alt.legs)
-            new_assignments[i] = alt
+#         alt = rebookPass(
+#             new_scheduled,
+#             group_idx,
+#             data.op, data.dp, data.dt, data.q, data.w;
+#             direct = direct,
+#             current_plane = assign.plane,
+#             current_legs = assign.legs
+#         )
+#         if alt !== nothing && (alt.plane != assign.plane || alt.legs != assign.legs)
+#             println("Passenger group ", group_idx, " rebooked.")
+#             println("  Old plane: ", assign.plane, ", Old legs: ", assign.legs)
+#             println("  New plane: ", alt.plane, ", New legs: ", alt.legs)
+#             new_assignments[i] = alt
 
-            new_fitness = fitnessFunction(
-            sol.evtols,
-            new_assignments,
-            Float32(data.bmax),
-            Float32(data.bmin),
-            data.dist,
-            Float32(data.ec),
-            Float32(data.battery_per_km),
-            rt,
-            Int(round(data.ET)),
-            maximum(Int.(data.T)),
-            maximum(data.V),
-            Int(round(data.cap_flt)),
-            data.cap_v,
-            data
-            )
+#             new_fitness = fitnessFunction(
+#             sol.evtols,
+#             new_assignments,
+#             Float32(data.bmax),
+#             Float32(data.bmin),
+#             data.dist,
+#             Float32(data.ec),
+#             Float32(data.battery_per_km),
+#             rt,
+#             Int(round(data.ET)),
+#             maximum(Int.(data.T)),
+#             maximum(data.V),
+#             Int(round(data.cap_flt)),
+#             data.cap_v,
+#             data
+#             )
 
-            println("====================================")
-            println("Random Solution Index: ", idx)
-            println("Original Fitness: ", sol.fitness)
-            println("Alternate Assignment Fitness: ", new_fitness)
+#             println("====================================")
+#             println("Random Solution Index: ", idx)
+#             println("Original Fitness: ", sol.fitness)
+#             println("Alternate Assignment Fitness: ", new_fitness)
         
-        end
-    end
-
-    
-end
+#         end
+#     end
+# end
