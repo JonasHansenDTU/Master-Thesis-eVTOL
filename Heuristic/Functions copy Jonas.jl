@@ -967,14 +967,14 @@ end
 ###############################################################################
 # Usage
 ###############################################################################
-excel_file = joinpath(@__DIR__, "inputData.xlsx")
-data = load_data(excel_file)
+# excel_file = joinpath(@__DIR__, "inputData.xlsx")
+# data = load_data(excel_file)
 
-Vmax = maximum(data.V)
-rt = zeros(Int, Vmax, Vmax)
-for i in data.V, j in data.V
-    rt[i, j] = data.rt[(i, j)]
-end
+# Vmax = maximum(data.V)
+# rt = zeros(Int, Vmax, Vmax)
+# for i in data.V, j in data.V
+#     rt[i, j] = data.rt[(i, j)]
+# end
 
 function generate_best_initial_solutions(data, rt; n_runs::Int=1000, top_k::Int=10, maxLegs::Int=5, maxTurnaround::Int=30, print_each::Bool=false)
     results = NamedTuple[]
@@ -1037,36 +1037,31 @@ function generate_best_initial_solutions(data, rt; n_runs::Int=1000, top_k::Int=
     return sorted_results[1:min(top_k, length(sorted_results))]
 end
 
-start_time = time()
+# start_time = time()
 
-best_solutions = generate_best_initial_solutions(data, rt; n_runs=10000, top_k=1, maxLegs=6, maxTurnaround=20)
+# best_solutions = generate_best_initial_solutions(data, rt; n_runs=10000, top_k=1, maxLegs=6, maxTurnaround=20)
 
-elapsed_time = time() - start_time
+# elapsed_time = time() - start_time
 
-println("Time used: ", round(elapsed_time, digits=3), " seconds")
+# println("Time used: ", round(elapsed_time, digits=3), " seconds")
 
-for (rank, sol) in enumerate(best_solutions)
-    println("====================================")
-    println("Rank: ", rank)
-    println("Run: ", sol.run)
-    println("Fitness: ", sol.fitness)
-    println("P: ", sol.P)
-    println()
+# for (rank, sol) in enumerate(best_solutions)
+#     println("====================================")
+#     println("Rank: ", rank)
+#     println("Run: ", sol.run)
+#     println("Fitness: ", sol.fitness)
+#     println("P: ", sol.P)
+#     println()
 
-    print_chromosome_table(sol.evtols)
-    println()
-    print_assignments(sol.assignments, data)
-    println()
-end
+#     print_chromosome_table(sol.evtols)
+#     println()
+#     print_assignments(sol.assignments, data)
+#     println()
+# end
 
 # ---------------------------------------------- #
 
-function Change(planes::allPlaneSolution, te::Int, maxTurnaround::Int, schedule::Vector{ScheduledLeg}, ET::Int)
-
-    plane_idx = rand(1:length(planes.planes))
-    plane = planes.planes[plane_idx]
-
-    turnaround_idx = rand(1:length(plane.turnaroundTime))
+function Possible_TurnaroundTime(plane::planeSolution, plane_idx::Int, schedule::Vector{ScheduledLeg}, te::Int, maxTurnaround::Int, ET::Int)
 
     m = plane.flightLegs
     
@@ -1079,14 +1074,138 @@ function Change(planes::allPlaneSolution, te::Int, maxTurnaround::Int, schedule:
         end
     end
 
-    println(tft)
-    maxtime = maximum([ET-tft,plane.turnaroundTime[m]])
+    # println(tft)
+    maxtime = minimum([maximum([ET-tft,plane.turnaroundTime[m]]), maxTurnaround])
 
-    t = rand(te:maxtime)
-
-    plane.turnaroundTime[turnaround_idx] = t
-
-    println(te)
-    println(t)
-    println(maxtime)
+    return range(te, maxtime)
 end
+
+
+function Change(plane::planeSolution, new_time::Int, turnaround_idx::Int)
+
+    plane_changed = plane
+
+    plane_changed.turnaroundTime[turnaround_idx] = new_time
+
+    return plane_changed
+
+end
+
+function Best_Change(planes::allPlaneSolution, te::Float64, maxTurnaround::Int, ET::Float64, data, rt)
+
+    temp_sol = 0
+
+    assignment, scheduled = assign_passengers(planes, data, rt)
+
+    best_ass = assignment
+    best_sol = deepcopy(planes)
+    best_obj = fitnessFunction(planes, assignment, Float32(data.bmax), Float32(data.bmin), data.dist, Float32(data.ec), Float32(data.battery_per_km), rt, Int(round(data.ET)), maximum(Int.(data.T)), maximum(data.V), Int(round(data.cap_flt)), data.cap_v, data)
+
+    org_obj = copy(best_obj)
+
+
+    for i in 1:length(best_sol.planes)
+
+        m = best_sol.planes[i].flightLegs
+
+        if m > 1
+
+            turnaroundTimes = Possible_TurnaroundTime(best_sol.planes[i], i, scheduled, Int(te), maxTurnaround, Int(ET))
+               
+            for j in 1:m
+
+                for t in turnaroundTimes
+                    temp_sol = deepcopy(planes)
+                    temp_sol.planes[i] = Change(temp_sol.planes[i], t, j)
+
+                    assignment, scheduled = assign_passengers(temp_sol, data, rt)
+                    temp_obj = fitnessFunction(temp_sol, assignment,  Float32(data.bmax), Float32(data.bmin), data.dist, Float32(data.ec), Float32(data.battery_per_km), rt, Int(round(data.ET)), maximum(Int.(data.T)), maximum(data.V), Int(round(data.cap_flt)), data.cap_v, data)
+
+                    if temp_obj > best_obj
+                        best_ass = copy(assignment)
+                        best_sol = temp_sol
+                        best_obj = temp_obj
+                    end
+                end
+            end
+        end
+
+       
+    end
+
+    println("\nOriginal obj value: $(org_obj)")
+    println("\nNew obj value: $(best_obj)")
+
+
+    return best_sol, best_ass, best_obj
+
+end
+
+###############################################################################
+# Simple test for Best_Change function
+###############################################################################
+function test_best_change()
+    println("\nTesting Best_Change function...")
+    println("-" ^ 60)
+    
+    # # Create a simple test solution
+    # plane1 = planeSolution(Int32(2), Int32[1, 2, 1], Int32[5, 8])
+    # plane2 = planeSolution(Int32(2), Int32[1, 3, 1], Int32[10, 8])
+    # test_solution = allPlaneSolution([plane1, plane2])
+    
+    # # println("Initial solution:")
+    # # print_chromosome_table(test_solution)
+    
+    # # Create a simple scheduled legs list for testing
+    # test_schedule = ScheduledLeg[]
+    # push!(test_schedule, ScheduledLeg(1, 1, 1, 2, 5, 20, 5))
+    # push!(test_schedule, ScheduledLeg(1, 2, 2, 1, 28, 43, 5))
+
+    # push!(test_schedule, ScheduledLeg(2, 1, 1, 3, 10, 17, 5))
+    # push!(test_schedule, ScheduledLeg(2, 2, 3, 1, 25, 32, 5))
+
+    
+    # te = 5
+    # maxTurnaround = 20
+    # ET = 120
+
+    excel_file = joinpath(@__DIR__, "inputData.xlsx")
+    data = load_data(excel_file)
+
+    Vmax = maximum(data.V)
+    rt = zeros(Int, Vmax, Vmax)
+    for i in data.V, j in data.V
+        rt[i, j] = data.rt[(i, j)]
+    end
+
+
+    maxTurnaround=30
+
+    Best_sols = generate_best_initial_solutions(data, rt, top_k = 1)
+
+    evtols_init = Best_sols[1].evtols
+    assignment_init = Best_sols[1].assignments
+
+    println("\nTesting Best Change function")
+    start_time = time()
+    sol_out, ass_out, obj_out = Best_Change(evtols_init, data.te, maxTurnaround, data.ET, data, rt)
+    elapsed_time = time() - start_time
+    println("Best_Change execution time: $(round(elapsed_time, digits=4)) seconds")
+
+
+    println("Initial solution:")
+    print_chromosome_table(evtols_init)
+    print_assignments(assignment_init, data)
+
+
+    println("New solution:")
+    print_chromosome_table(sol_out)
+    print_assignments(ass_out, data)
+
+
+    println("-" ^ 60)
+end
+
+# Uncomment to run the test:
+test_best_change()
+
