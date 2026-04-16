@@ -622,7 +622,8 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
         base = bv[n]
 
         # choose number of legs
-        flightLegs = rand(0:maxLegs)
+        allowed_legs = [i for i in 0:maxLegs if i != 1]
+        flightLegs = rand(allowed_legs)
 
         # route always starts at base
         route = Int32[base]
@@ -1058,25 +1059,49 @@ for (rank, sol) in enumerate(best_solutions)
     println()
 end
 
-
 function insert(plane::allPlaneSolution, data; maxTurnaround=30)
+
     planeidx = rand(1:length(plane.planes))
     p = plane.planes[planeidx]
 
     route = p.route
 
-    # Need at least 2 nodes to insert between
+    # Case 1: empty or no meaningful route
+    if length(route) <= 1 || p.flightLegs == 0
+        base = route[1]
+
+        # pick intermediate node
+        candidates = [v for v in data.V if v != base]
+        if isempty(candidates)
+            return false
+        end
+
+        mid = rand(candidates)
+
+        # build: base → mid → base
+        p.route = Int32[base, Int32(mid), base]
+
+        # 2 legs → 2 turnaround times
+        p.turnaroundTime = Int32[
+            rand(Int(round(data.te)):maxTurnaround),
+            rand(Int(round(data.te)):maxTurnaround)
+        ]
+
+        p.flightLegs = 2
+
+        return true
+    end
+
+    # Case 2: normal insertion
     if length(route) < 2
         return false
     end
 
-    # Choose insertion index (not first or last)
     idx = rand(2:length(route))
 
     prev = Int(route[idx - 1])
     next = Int(route[idx])
 
-    # Exclude neighbors
     forbidden = [prev, next]
     candidates = [v for v in data.V if !(v in forbidden)]
 
@@ -1088,7 +1113,7 @@ function insert(plane::allPlaneSolution, data; maxTurnaround=30)
     newturnaround = rand(Int(round(data.te)):maxTurnaround)
 
     insert!(p.route, idx, Int32(newvertiport))
-    insert!(p.turnaroundTime, idx - 1, Int32(newturnaround))
+    insert!(p.turnaroundTime, idx, Int32(newturnaround))
 
     p.flightLegs += 1
 
@@ -1115,7 +1140,7 @@ print_chromosome_table(evtols)
 
 function delete(population::allPlaneSolution, data)
 
-    # Only consider planes that actually have removable stops
+    # Only planes with removable intermediate nodes, route length > 2
     candidates = [
         i for i in 1:length(population.planes)
         if length(population.planes[i].route) > 2
@@ -1125,37 +1150,49 @@ function delete(population::allPlaneSolution, data)
         return false
     end
 
-    # Pick a random plane
-    pidx = rand(candidates)
-    p = population.planes[pidx]
+    # Try until we find a valid deletion
+    for _ in 1:10  # small retry loop to avoid infinite failure
+        pidx = rand(candidates)
+        p = population.planes[pidx]
 
-    # Pick a random intermediate node (not start or end)
-    idx = rand(2:length(p.route)-1)
+        # do not dele in the first or last leg 
+        idx = rand(2:length(p.route)-1)
 
-    # Remove that stop and its associated turnaround time
-    deleteat!(p.route, idx)
-    deleteat!(p.turnaroundTime, idx-1)
+        prev = p.route[idx - 1]
+        next = p.route[idx + 1]
 
-    # Keep metadata consistent
-    p.flightLegs = length(p.route) - 1
+        # Do not delete if it creates a degenerate edge (prev -> same -> next)
+        if prev == next
+            continue
+        end
 
-    return true
+        deleteat!(p.route, idx)
+        deleteat!(p.turnaroundTime, idx)
+
+        # updatte flight legs count
+        p.flightLegs = length(p.route) - 1
+
+        return true
+    end
+
+    return false
 end
 
-println("\n===== TEST DELETE FUNCTION =====")
+# println("\n===== TEST DELETE FUNCTION =====")
 
-evtols = deepcopy(best_solutions[1].evtols)
+# evtols = deepcopy(best_solutions[1].evtols)
 
-println("\n--- BEFORE ---")
-print_chromosome_table(evtols)
+# println("\n--- BEFORE ---")
+# print_chromosome_table(evtols)
 
-delete(evtols, data)
+# delete(evtols, data)
 
-println("\n--- AFTER ---")
-print_chromosome_table(evtols)
+# println("\n--- AFTER ---")
+# print_chromosome_table(evtols)
 
-for p in evtols.planes
-    println("route length = ", length(p.route),
-            " | legs = ", p.flightLegs,
-            " | turnaround = ", length(p.turnaroundTime))
-end
+# #test jonas 123
+# for p in evtols.planes
+#     println("route length = ", length(p.route),
+#             " | legs = ", p.flightLegs,
+#             " | turnaround = ", length(p.turnaroundTime))
+# end
