@@ -252,6 +252,25 @@ function load_data(excel_file::String)
         end
     end
 
+
+    ###########################################################################
+    # Prices
+    ###########################################################################
+    prices = read_sheet(excel_file, "Prices")
+    from_col = find_col(prices, [:from])
+    to_col   = find_col(prices, [:to])
+    fd_sum_col = find_col(prices, [:fd_sum])
+    fd_lookup = Dict{Tuple{Int,Int}, Float64}()
+
+    for r in eachrow(prices)
+        i = Int(r[from_col])
+        j = Int(r[to_col])
+        fd_lookup[(i,j)] = Float64(r[fd_sum_col])
+    end
+    for (i,j) in collect(keys(fd_lookup))
+        fd_lookup[(j,i)] = fd_lookup[(i,j)]
+    end
+
     ###########################################################################
     # Derived arc parameters: distance, fd, fs, c, e, rt
     ###########################################################################
@@ -266,7 +285,7 @@ function load_data(excel_file::String)
     for i in V, j in V
         dij = haversine_km(lat[i], lon[i], lat[j], lon[j])
         dist[(i,j)] = dij
-        fd[(i,j)] = fare_direct_per_km * dij
+        fd[(i,j)] = get(fd_lookup, (i,j), 0.0)
         fs[(i,j)] = fare_stopover_factor * fd[(i,j)]
         c[(i,j)]  = operating_cost_per_km * dij
         e[(i,j)]  = battery_per_km * dij
@@ -310,7 +329,7 @@ function load_data(excel_file::String)
         T = collect(T), T_no0 = collect(T_no0),
         bv = bv,
         lat = lat, lon = lon,
-        dist = dist, fd = fd, fs = fs, c = c, e = e, rt = rt,
+        dist = dist, fd = fd_lookup, fs = fs, c = c, e = e, rt = rt,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
         cap_v = cap_v, cap_flt = cap_flt, cap_u = cap_u,
         bmax = bmax, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3
