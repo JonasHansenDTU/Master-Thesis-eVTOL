@@ -203,7 +203,6 @@ function load_data(excel_file::String)
     operating_cost_per_km = params["operating_cost_per_km"]
     battery_per_km        = params["battery_per_km"]
     time_per_km           = params["time_per_km"]
-    cap_flt               = params["cap_flt"]
     cap_u                 = params["cap_u"]
     bmax                  = params["bmax"]
     bmin                  = params["bmin"]
@@ -300,7 +299,7 @@ function load_data(excel_file::String)
         lat = lat, lon = lon,
         dist = dist, fd = fd, fs = fs, c = c, e = e, rt = rt,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
-        cap_v = cap_v, cap_flt = cap_flt, cap_u = cap_u,
+        cap_v = cap_v, cap_u = cap_u,
         bmax = bmax, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3, battery_per_km = battery_per_km
     )
 end
@@ -400,45 +399,8 @@ function FeasibleVertiportCapacity(evtols::allPlaneSolution, rt::Matrix{Int}, T:
     return true
 end
 
-function FeasibleCorridor(evtols::allPlaneSolution, rt::Matrix{Int}, T::Int, V::Int, cap_flt::Int, ET::Int)
-    destinationTimes = zeros(Int, V, V, T)
-
-    for evtol in evtols.planes
-        travelTime = 0
-
-        for i in 1:evtol.flightLegs
-            from = evtol.route[i]
-            to = evtol.route[i+1]
-
-            startTime = travelTime + evtol.turnaroundTime[i]
-            endTime = travelTime + evtol.turnaroundTime[i] + rt[from, to]
-
-            if endTime > ET 
-                endTime = ET
-            end
-
-            for t in startTime:endTime
-                if t >= 1
-                    destinationTimes[from, to, t] += 1
-                    if destinationTimes[from, to, t] > cap_flt 
-                        return false
-                    end
-                end
-            end
-
-            travelTime += evtol.turnaroundTime[i] + rt[from, to]
-        end
-    end
-
-    return true
-end
-
-function FeasibilityCheck(bmax::Float32, bmin::Float32,
-    dist::Dict{Tuple{Int,Int},Float64},
-    ec::Float32, battery_per_km::Float32,
-    evtols::allPlaneSolution,
-    rt::Matrix{Int}, ET::Int, T::Int, V::Int,
-    cap_flt::Int, cap_v::Dict{})
+function FeasibilityCheck(bmax::Float32, bmin::Float32, dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32, evtols::allPlaneSolution,
+                            rt::Matrix{Int}, ET::Int, T::Int, V::Int, cap_v::Dict{})
 
     P = zeros(Int32, 4)
 
@@ -452,10 +414,6 @@ function FeasibilityCheck(bmax::Float32, bmin::Float32,
 
     if FeasibleVertiportCapacity(evtols, rt, T, V, cap_v, ET) == false
         P[3] = 1
-    end
-
-    if FeasibleCorridor(evtols, rt, T, V, cap_flt, ET) == false
-        P[4] = 1
     end
 
     return P
@@ -885,8 +843,8 @@ function print_assignments(assignments::Vector{PassengerAssignment}, data)
 end
 
 function fitnessFunction(evtols::allPlaneSolution, assignments::Vector{PassengerAssignment}, bmax::Float32, bmin::Float32, dist::Dict{Tuple{Int,Int},Float64},
-                        ec::Float32, battery_per_km::Float32, rt::Matrix{Int}, ET::Int, T::Int, V::Int, cap_flt::Int, cap_v::Dict{}, data)
-    P = FeasibilityCheck(bmax, bmin, dist, ec, battery_per_km, evtols, rt, ET,T,V,cap_flt,cap_v)
+                        ec::Float32, battery_per_km::Float32, rt::Matrix{Int}, ET::Int, T::Int, V::Int, cap_v::Dict{}, data)
+    P = FeasibilityCheck(bmax, bmin, dist, ec, battery_per_km, evtols, rt, ET,T,V,cap_v)
 
     A  = data.A
     op = data.op
@@ -958,10 +916,10 @@ function generate_best_initial_solutions(data, rt; n_runs::Int=1000, top_k::Int=
         assignments, scheduled = assign_passengers(evtols_init, data, rt)
 
         P = FeasibilityCheck(Float32(data.bmax), Float32(data.bmin), data.dist, Float32(data.ec), Float32(data.battery_per_km), evtols_init, rt, Int(round(data.ET)),
-                            maximum(Int.(data.T)), maximum(data.V), Int(round(data.cap_flt)), data.cap_v)
+                            maximum(Int.(data.T)), maximum(data.V), data.cap_v)
 
         fitness = fitnessFunction(evtols_init, assignments, Float32(data.bmax), Float32(data.bmin), data.dist, Float32(data.ec), Float32(data.battery_per_km),
-                                    rt, Int(round(data.ET)), maximum(Int.(data.T)), maximum(data.V), Int(round(data.cap_flt)), data.cap_v, data)
+                                    rt, Int(round(data.ET)), maximum(Int.(data.T)), maximum(data.V),  data.cap_v, data)
 
         push!(results, (run = run, fitness = fitness, evtols = evtols_init, assignments = assignments, scheduled = scheduled, P = P))
 
