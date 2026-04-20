@@ -884,36 +884,9 @@ function print_assignments(assignments::Vector{PassengerAssignment}, data)
     end
 end
 
-function fitnessFunction(
-    evtols::allPlaneSolution,
-    assignments::Vector{PassengerAssignment},
-    bmax::Float32,
-    bmin::Float32,
-    dist::Dict{Tuple{Int,Int},Float64},
-    ec::Float32,
-    battery_per_km::Float32,
-    rt::Matrix{Int},
-    ET::Int,
-    T::Int,
-    V::Int,
-    cap_flt::Int,
-    cap_v::Dict{},
-    data
-)
-    P = FeasibilityCheck(
-        bmax,
-        bmin,
-        dist,
-        ec,
-        battery_per_km,
-        evtols,
-        rt,
-        ET,
-        T,
-        V,
-        cap_flt,
-        cap_v
-    )
+function fitnessFunction(evtols::allPlaneSolution, assignments::Vector{PassengerAssignment}, bmax::Float32, bmin::Float32, dist::Dict{Tuple{Int,Int},Float64},
+                        ec::Float32, battery_per_km::Float32, rt::Matrix{Int}, ET::Int, T::Int, V::Int, cap_flt::Int, cap_v::Dict{}, data)
+    P = FeasibilityCheck(bmax, bmin, dist, ec, battery_per_km, evtols, rt, ET,T,V,cap_flt,cap_v)
 
     A  = data.A
     op = data.op
@@ -984,46 +957,13 @@ function generate_best_initial_solutions(data, rt; n_runs::Int=1000, top_k::Int=
 
         assignments, scheduled = assign_passengers(evtols_init, data, rt)
 
-        P = FeasibilityCheck(
-            Float32(data.bmax),
-            Float32(data.bmin),
-            data.dist,
-            Float32(data.ec),
-            Float32(data.battery_per_km),
-            evtols_init,
-            rt,
-            Int(round(data.ET)),
-            maximum(Int.(data.T)),
-            maximum(data.V),
-            Int(round(data.cap_flt)),
-            data.cap_v
-        )
+        P = FeasibilityCheck(Float32(data.bmax), Float32(data.bmin), data.dist, Float32(data.ec), Float32(data.battery_per_km), evtols_init, rt, Int(round(data.ET)),
+                            maximum(Int.(data.T)), maximum(data.V), Int(round(data.cap_flt)), data.cap_v)
 
-        fitness = fitnessFunction(
-            evtols_init,
-            assignments,
-            Float32(data.bmax),
-            Float32(data.bmin),
-            data.dist,
-            Float32(data.ec),
-            Float32(data.battery_per_km),
-            rt,
-            Int(round(data.ET)),
-            maximum(Int.(data.T)),
-            maximum(data.V),
-            Int(round(data.cap_flt)),
-            data.cap_v,
-            data
-        )
+        fitness = fitnessFunction(evtols_init, assignments, Float32(data.bmax), Float32(data.bmin), data.dist, Float32(data.ec), Float32(data.battery_per_km),
+                                    rt, Int(round(data.ET)), maximum(Int.(data.T)), maximum(data.V), Int(round(data.cap_flt)), data.cap_v, data)
 
-        push!(results, (
-            run = run,
-            fitness = fitness,
-            evtols = evtols_init,
-            assignments = assignments,
-            scheduled = scheduled,
-            P = P
-        ))
+        push!(results, (run = run, fitness = fitness, evtols = evtols_init, assignments = assignments, scheduled = scheduled, P = P))
 
         if print_each
             println("Run $run | fitness = $fitness | P = $P")
