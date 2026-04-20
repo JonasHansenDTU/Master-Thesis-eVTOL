@@ -652,7 +652,9 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
         end
 
         turnaroundTime = Int32[]
+        current_time = 0
         for k in 1:flightLegs
+            
             push!(turnaroundTime, Int32(rand(te:maxTurnaround)))
         end
 
@@ -759,6 +761,35 @@ function find_direct_leg!(scheduled::Vector{ScheduledLeg}, a::Int, op, dp, dt, q
     return PassengerAssignment(a, best.plane, [best.leg_index])
 end
 
+function find_direct_leg!V2(scheduled::Vector{ScheduledLeg}, a::Int, op, dp, dt, q, w, so)
+    candidates = ScheduledLeg[]
+
+    earliest = Int(round(dt[a]))
+    latest = earliest + Int(round(w))
+
+    for leg in scheduled
+        if leg.from == op[a] &&
+           leg.to == dp[a] &&
+           earliest <= leg.dep <= latest &&
+           leg.remaining_capacity >= q[a]
+            push!(candidates, leg)
+        end
+    end
+
+    if isempty(candidates)
+        return nothing
+    end
+
+    best = candidates[argmin([leg.arr for leg in candidates])]
+    if so == 1
+        best.remaining_capacity -= q[a]
+    else 
+        best.remaining_capacity = 0 #Makes sure that the direct only passengers ride alone
+    end
+
+    return PassengerAssignment(a, best.plane, [best.leg_index])
+end
+
 function find_one_stop_assignment!(scheduled::Vector{ScheduledLeg},
                                    a::Int, op, dp, dt, q, w)
     best_pair = nothing
@@ -778,7 +809,7 @@ function find_one_stop_assignment!(scheduled::Vector{ScheduledLeg},
             continue
         end
 
-        for leg2 in scheduled
+        for leg2 in scheduled  #Kig kun på det næste leg fra leg1
             if leg2.plane != leg1.plane
                 continue
             end
@@ -816,6 +847,45 @@ function find_one_stop_assignment!(scheduled::Vector{ScheduledLeg},
     return PassengerAssignment(a, leg1.plane, [leg1.leg_index, leg2.leg_index])
 end
 
+function find_one_stop_assignment!V2(scheduled::Vector{ScheduledLeg},
+                                   a::Int, op, dp, dt, q, w)
+    best_pair = nothing
+    best_arrival = typemax(Int)
+
+    earliest = Int(round(dt[a]))
+    latest = earliest + Int(round(w))
+
+    for (idx,leg1) in enumerate(scheduled)
+
+        if idx < size(scheduled)[1]
+            if leg1.from == op[a] &&
+                (earliest <= leg1.dep <= latest)&&
+                leg1.remaining_capacity >= q[a]
+
+                leg2 = scheduled[idx+1]
+                if leg2.plane == leg1.plane &&
+                    leg2.to == dp[a]
+
+                    if leg2.arr < best_arrival
+                        best_arrival = leg2.arr
+                        best_pair = (leg1, leg2)
+                    end
+                end
+            end
+        end
+    end
+
+    if best_pair === nothing
+        return nothing
+    end
+
+    leg1, leg2 = best_pair
+    leg1.remaining_capacity -= q[a]
+    leg2.remaining_capacity -= q[a]
+
+    return PassengerAssignment(a, leg1.plane, [leg1.leg_index, leg2.leg_index])
+end
+
 function assign_passengers(evtols::allPlaneSolution, data, rt::Matrix{Int})
     A = data.A
     op = data.op
@@ -833,7 +903,7 @@ function assign_passengers(evtols::allPlaneSolution, data, rt::Matrix{Int})
     # Step 1: non-stopover passengers -> direct only
     direct_only = sort([a for a in A if so[a] == 0], by = a -> (dt[a], -q[a]))
     for a in direct_only
-        ass = find_direct_leg!(scheduled, a, op, dp, dt, q, w)
+        ass = find_direct_leg!V2(scheduled, a, op, dp, dt, q, w, so)
         if ass !== nothing
             push!(assignments, ass)
             push!(assigned_groups, a)
@@ -843,10 +913,10 @@ function assign_passengers(evtols::allPlaneSolution, data, rt::Matrix{Int})
     # Step 2: stopover-allowed passengers -> direct first
     stopover_ok = sort([a for a in A if so[a] == 1], by = a -> (dt[a], -q[a]))
     for a in stopover_ok
-        if a in assigned_groups
+        if a in assigned_groups #Not needed?
             continue
         end
-        ass = find_direct_leg!(scheduled, a, op, dp, dt, q, w)
+        ass = find_direct_leg!V2(scheduled, a, op, dp, dt, q, w, so)
         if ass !== nothing
             push!(assignments, ass)
             push!(assigned_groups, a)
@@ -858,10 +928,56 @@ function assign_passengers(evtols::allPlaneSolution, data, rt::Matrix{Int})
         if a in assigned_groups
             continue
         end
-        ass = find_one_stop_assignment!(scheduled, a, op, dp, dt, q, w)
+        ass = find_one_stop_assignment!V2(scheduled, a, op, dp, dt, q, w)
         if ass !== nothing
             push!(assignments, ass)
             push!(assigned_groups, a)
+        end
+    end
+
+    return assignments, scheduled
+end
+
+function assign_passengersV2(evtols::allPlaneSolution, data, rt::Matrix{Int})
+    A = data.A
+    op = data.op
+    dp = data.dp
+    dt = data.dt
+    q = data.q
+    so = data.so
+    w = data.w
+    fd = data.fd
+    fs = data.fs
+    cap_u = Int(round(data.cap_u))
+
+    scheduled = build_scheduled_legs(evtols, rt, cap_u)
+    assignments = PassengerAssignment[]
+    assigned_groups = Set{Int}()
+
+
+    price_by_group = Dict(a => fd[(op[a], dp[a])] * (so[a] == 1 ? 0.75 : 1.0) for a in A)
+    Price_sort = sort(A, by = a -> price_by_group[a], rev = true)  # descending
+
+    for a in Price_sort
+        if so[a] == 0
+            ass = find_direct_leg!V2(scheduled, a, op, dp, dt, q, w, so)
+            if ass !== nothing
+                push!(assignments, ass)
+                push!(assigned_groups, a)
+            end
+        end
+        if so[a] == 1
+            ass = find_direct_leg!V2(scheduled, a, op, dp, dt, q, w, so)
+            if ass == nothing 
+                ass = find_one_stop_assignment!V2(scheduled, a, op, dp, dt, q, w)
+                if ass !== nothing
+                    push!(assignments, ass)
+                    push!(assigned_groups, a)
+                end
+            else
+                push!(assignments, ass)
+                push!(assigned_groups, a)
+            end
         end
     end
 
@@ -982,7 +1098,7 @@ function generate_best_initial_solutions(data, rt; n_runs::Int=1000, top_k::Int=
     for run in 1:n_runs
         evtols_init = initial_chromosome_solution(data; maxLegs=maxLegs, maxTurnaround=maxTurnaround)
 
-        assignments, scheduled = assign_passengers(evtols_init, data, rt)
+        assignments, scheduled = assign_passengersV2(evtols_init, data, rt)
 
         P = FeasibilityCheck(
             Float32(data.bmax),
@@ -1095,7 +1211,7 @@ function Best_Change(planes::allPlaneSolution, te::Float64, maxTurnaround::Int, 
 
     temp_sol = 0
 
-    assignment, scheduled = assign_passengers(planes, data, rt)
+    assignment, scheduled = assign_passengersV2(planes, data, rt)
 
     best_ass = assignment
     best_sol = deepcopy(planes)
@@ -1118,7 +1234,7 @@ function Best_Change(planes::allPlaneSolution, te::Float64, maxTurnaround::Int, 
                     temp_sol = deepcopy(planes)
                     temp_sol.planes[i] = Change(temp_sol.planes[i], t, j)
 
-                    assignment, scheduled = assign_passengers(temp_sol, data, rt)
+                    assignment, scheduled = assign_passengersV2(temp_sol, data, rt)
                     temp_obj = fitnessFunction(temp_sol, assignment,  Float32(data.bmax), Float32(data.bmin), data.dist, Float32(data.ec), Float32(data.battery_per_km), rt, Int(round(data.ET)), maximum(Int.(data.T)), maximum(data.V), Int(round(data.cap_flt)), data.cap_v, data)
 
                     if temp_obj > best_obj
