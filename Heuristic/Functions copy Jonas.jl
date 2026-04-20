@@ -89,9 +89,9 @@ function load_data(excel_file::String)
     ###########################################################################
     # Read sheets
     ###########################################################################
-    infra = read_sheet(excel_file, "Infrastructure")
-    pax   = read_sheet(excel_file, "PassengerGroups")
-    plane = read_sheet_any(excel_file, ["PlaneData"])
+    infra = read_sheet(excel_file, "Infrastructure (3)")
+    pax   = read_sheet(excel_file, "PassengerGroups (3)")
+    plane = read_sheet_any(excel_file, ["PlaneData (2)"])
 
     ###########################################################################
     # Infrastructure columns
@@ -613,6 +613,8 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
     op = data.op
     dp = data.dp
     te = data.te
+    dt = data.dt
+    rt = data.rt
 
     weights = build_vertiport_weights(V, op, dp, A)
 
@@ -653,9 +655,18 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
 
         turnaroundTime = Int32[]
         current_time = 0
+        current_VP = base
         for k in 1:flightLegs
-            
-            push!(turnaroundTime, Int32(rand(te:maxTurnaround)))
+            from_current = [(a, v) for (a, v) in op if v == current_VP]
+            Candidate_Pass = [dt[a] for (a, _) in from_current if current_time <= dt[a] <= current_time + maxTurnaround]
+            if !isempty(Candidate_Pass)
+                chosen_time = Candidate_Pass[end] - current_time
+                push!(turnaroundTime, round(Int32, chosen_time))
+            else
+                push!(turnaroundTime, Int32(rand(te:maxTurnaround)))
+            end
+            current_time += turnaroundTime[end] + rt[(current_VP,route[k+1])]
+            current_VP = route[k+1]
         end
 
         push!(planes, planeSolution(
@@ -1297,7 +1308,12 @@ function test_best_change()
 
     maxTurnaround=30
 
+    start_time = time()
     Best_sols = generate_best_initial_solutions(data, rt, top_k = 1)
+    elapsed_time = time() - start_time
+    println("Run 1000 inits solutions time: $(round(elapsed_time, digits=4)) seconds")
+
+
 
     evtols_init = Best_sols[1].evtols
     assignment_init = Best_sols[1].assignments
