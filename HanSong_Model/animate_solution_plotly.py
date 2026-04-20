@@ -929,11 +929,12 @@ def build_folium_map(
     TimestampedGeoJson(
         geojson,
         period="PT1S",
-        add_last_point=True,
-        duration="PT2S",
+        add_last_point=False,
+        duration="PT0S",
         auto_play=False,
         loop=False,
-        max_speed=1,
+        min_speed=1,
+        max_speed=20,
         loop_button=True,
         date_options="YYYY/MM/DD HH:mm:ss",
         time_slider_drag_update=True,
@@ -983,6 +984,37 @@ def build_folium_map(
         console.warn('Timedimension not found for map:', mapName);
         return;
       }
+
+      function setTransitionTimeFromSlider(input) {
+        const value = parseFloat(input.value);
+        if (Number.isNaN(value) || value <= 0) {
+          return;
+        }
+        const transitionTimeMs = 1000 / value;
+        mapObj.timeDimension.setTransitionTime(transitionTimeMs);
+        if (mapObj.timeDimensionControl && mapObj.timeDimensionControl._player) {
+          mapObj.timeDimensionControl._player.setTransitionTime(transitionTimeMs);
+        }
+      }
+
+      function bindSpeedSlider() {
+        if (!mapObj.timeDimensionControl || !mapObj.timeDimensionControl._container) {
+          return;
+        }
+        const sliders = mapObj.timeDimensionControl._container.querySelectorAll('input[type="range"]');
+        sliders.forEach((slider) => {
+          const min = parseFloat(slider.min);
+          const max = parseFloat(slider.max);
+          if (Number.isNaN(min) || Number.isNaN(max) || max <= min) {
+            return;
+          }
+          slider.addEventListener('input', () => setTransitionTimeFromSlider(slider));
+          setTransitionTimeFromSlider(slider);
+        });
+      }
+
+      bindSpeedSlider();
+      setTimeout(bindSpeedSlider, 250);
 
       mapObj.timeDimension.on('timeload', (e) => {
         updateEVTOLTable(toTimestampKey(e.time));
