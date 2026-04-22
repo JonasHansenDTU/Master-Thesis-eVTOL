@@ -1907,7 +1907,6 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt)
     return best_obj, best_sol, iterations
 end
 
-
 excel_file = joinpath(@__DIR__, "inputData.xlsx")
 data = load_data(excel_file)
 
@@ -1917,12 +1916,9 @@ for i in data.V, j in data.V
     rt[i, j] = data.rt[(i, j)]
 end
 
-
 maxTurnaround = 30
 Maxtime = Int32(60) 
 nr = 1
-
-
 
 (best_obj, best_sol, iterations) = Heuristic(maxTurnaround, Maxtime, data, rt)
 
@@ -1931,7 +1927,6 @@ println("Best solution:")
 println("Objective Value: $(best_obj)")
 print_chromosome_table(best_sol)
 
-
 # start_time = time()
 # Best_sols = generate_best_initial_solutions(data, rt, top_k = nr)
 
@@ -1939,20 +1934,15 @@ print_chromosome_table(best_sol)
 
 # evtols_init = Best_sols[nr].evtols
 
-
 # println("Initial solution:")
 # print_chromosome_table(evtols_init)
-
-
 
 # # (best_obj, best_sol) = DestructLoop(evtols_init, maxTurnaround, Org_obj, data, rt)
 # (best_obj, best_sol) = ConstructLoop(evtols_init, maxTurnaround, Org_obj, data, rt)
 # # (best_obj, best_sol) = Swap(evtols_init, maxTurnaround, Org_obj, data, rt)
-
 
 # println("Best solution:")
 # print_chromosome_table(best_sol)
 
 # println("Initial Obj $(Org_obj)")
 # println("Best Obj $(best_obj)")
-
