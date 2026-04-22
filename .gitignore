@@ -12,4 +12,5 @@ wheels/
 ~$*.xlsx
 solution_animation.html
 solution_snapshots.csv
+HanSong_Model\solution_snapshots.csv
 ~$*.xlsx
