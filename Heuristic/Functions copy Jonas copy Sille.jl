@@ -204,7 +204,6 @@ function load_data(excel_file::String)
     operating_cost_per_km = params["operating_cost_per_km"]
     battery_per_km        = params["battery_per_km"]
     time_per_km           = params["time_per_km"]
-    cap_flt               = params["cap_flt"]
     cap_u                 = params["cap_u"]
     bmax                  = params["bmax"]
     bmin                  = params["bmin"]
@@ -301,7 +300,7 @@ function load_data(excel_file::String)
         lat = lat, lon = lon,
         dist = dist, fd = fd, fs = fs, c = c, e = e, rt = rt,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
-        cap_v = cap_v, cap_flt = cap_flt, cap_u = cap_u,
+        cap_v = cap_v, cap_u = cap_u,
         bmax = bmax, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3, battery_per_km = battery_per_km
     )
 end
@@ -401,45 +400,11 @@ function FeasibleVertiportCapacity(evtols::allPlaneSolution, rt::Matrix{Int}, T:
     return true
 end
 
-function FeasibleCorridor(evtols::allPlaneSolution, rt::Matrix{Int}, T::Int, V::Int, cap_flt::Int, ET::Int)
-    destinationTimes = zeros(Int, V, V, T)
-
-    for evtol in evtols.planes
-        travelTime = 0
-
-        for i in 1:evtol.flightLegs
-            from = evtol.route[i]
-            to = evtol.route[i+1]
-
-            startTime = travelTime + evtol.turnaroundTime[i]
-            endTime = travelTime + evtol.turnaroundTime[i] + rt[from, to]
-
-            if endTime > ET 
-                endTime = ET
-            end
-
-            for t in startTime:endTime
-                if t >= 1
-                    destinationTimes[from, to, t] += 1
-                    if destinationTimes[from, to, t] > cap_flt 
-                        return false
-                    end
-                end
-            end
-
-            travelTime += evtol.turnaroundTime[i] + rt[from, to]
-        end
-    end
-
-    return true
-end
-
 function FeasibilityCheck(bmax::Float32, bmin::Float32,
     dist::Dict{Tuple{Int,Int},Float64},
     ec::Float32, battery_per_km::Float32,
     evtols::allPlaneSolution,
-    rt::Matrix{Int}, ET::Int, T::Int, V::Int,
-    cap_flt::Int, cap_v::Dict{})
+    rt::Matrix{Int}, ET::Int, T::Int, V::Int, cap_v::Dict{})
 
     P = zeros(Int32, 4)
 
@@ -455,13 +420,8 @@ function FeasibilityCheck(bmax::Float32, bmin::Float32,
         P[3] = 1
     end
 
-    if FeasibleCorridor(evtols, rt, T, V, cap_flt, ET) == false
-        P[4] = 1
-    end
-
     return P
 end
-
 
 ### ------- TESTING AREA !!! --------------###
 # Test if the current version of FeasibleBattery battery works 
@@ -617,7 +577,6 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
     dt = data.dt
     rt = data.rt
 
-
     weights = build_vertiport_weights(V, op, dp, A)
 
     planes = planeSolution[]
@@ -630,23 +589,17 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
     allowed_legs = zeros(Int, nPlanes+1)
     allowed_legs[nPlanes+1] = total_flight_legs
 
-    # println(Set_of_flightlegs)
-
     for n in 1:nPlanes-1
         allowed_legs[n+1] = (rand(Set_of_flightlegs))
         
         while n > 1 && (allowed_legs[n+1] == allowed_legs[n] -1 
                     || allowed_legs[n+1] == allowed_legs[n] +1) 
-            allowed_legs[n] = rand(Set_of_flightlegs) 
-            # println("HERE")
+            allowed_legs[n+1] = rand(Set_of_flightlegs) 
         end
     end
 
     allowed_legs = sort(allowed_legs)
-
-
     allowed_legs = shuffle!([allowed_legs[i]-allowed_legs[i-1] for i in 2:nPlanes+1])
-
 
     for n in 1:nPlanes
         base = bv[n]
@@ -680,8 +633,6 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
             push!(route, Int32(base))
         end
 
-
-
         turnaroundTime = Int32[]
         current_time = 0
         current_VP = base
@@ -689,7 +640,7 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
             from_current = [(a, v) for (a, v) in op if v == current_VP]
             Candidate_Pass = [dt[a] for (a, _) in from_current if current_time+te <= dt[a] <= current_time + maxTurnaround]
             if !isempty(Candidate_Pass)
-                chosen_time = rand(Candidate_Pass) - current_time
+                chosen_time = Candidate_Pass[end] - current_time
                 push!(turnaroundTime, round(Int32, chosen_time))
             else
                 push!(turnaroundTime, Int32(rand(te:maxTurnaround)))
@@ -704,36 +655,6 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
             turnaroundTime
         ))
     end
-
-    
-    # ----- Check for optimal routing ------ #
-
-    Opt_evtol1 = [1,3,1]
-    Opt_evtol2 = []
-    Opt_evtol3 = [5,2,3,5]
-
-    if planes[1].route == Opt_evtol1 && 
-        planes[2].flightLegs == 0 &&
-        planes[3].route == Opt_evtol3
-
-        rt = zeros(Int, Vmax, Vmax)
-        for i in data.V, j in data.V
-            rt[i, j] = data.rt[(i, j)]
-        end
-
-        UpdateTurnAroundTimes(allPlaneSolution(planes), 1, maxTurnaround, data)
-        assignments, scheduled = assign_passengersV2(allPlaneSolution(planes), data, rt)
-        Obj = obj(allPlaneSolution(planes), data, rt)
-        println("Optimal Trips found, obj: $(Obj)")
-        print_chromosome_table(allPlaneSolution(planes))
-        print_assignments(assignments, data)
-    
-        
-    end
-
-
-    #-----------------------------------------
-
 
     return allPlaneSolution(planes)
 end
@@ -801,7 +722,6 @@ function build_scheduled_legs(evtols::allPlaneSolution, rt::Matrix{Int}, cap_u::
 end
 
 mutable struct PassengerAssignment
-
     group::Int
     plane::Int
     legs::Vector{Int}
@@ -957,58 +877,6 @@ function find_one_stop_assignment!V2(scheduled::Vector{ScheduledLeg},
     return PassengerAssignment(a, leg1.plane, [leg1.leg_index, leg2.leg_index])
 end
 
-function assign_passengers(evtols::allPlaneSolution, data, rt::Matrix{Int})
-    A = data.A
-    op = data.op
-    dp = data.dp
-    dt = data.dt
-    q = data.q
-    so = data.so
-    w = data.w
-    cap_u = Int(round(data.cap_u))
-
-    scheduled = build_scheduled_legs(evtols, rt, cap_u)
-    assignments = PassengerAssignment[]
-    assigned_groups = Set{Int}()
-
-    # Step 1: non-stopover passengers -> direct only
-    direct_only = sort([a for a in A if so[a] == 0], by = a -> (dt[a], -q[a]))
-    for a in direct_only
-        ass = find_direct_leg!(scheduled, a, op, dp, dt, q, w)
-        if ass !== nothing
-            push!(assignments, ass)
-            push!(assigned_groups, a)
-        end
-    end
-
-    # Step 2: stopover-allowed passengers -> direct first
-    stopover_ok = sort([a for a in A if so[a] == 1], by = a -> (dt[a], -q[a]))
-    for a in stopover_ok
-        if a in assigned_groups #Not needed?
-            continue
-        end
-        ass = find_direct_leg!(scheduled, a, op, dp, dt, q, w)
-        if ass !== nothing
-            push!(assignments, ass)
-            push!(assigned_groups, a)
-        end
-    end
-
-    # Step 3: remaining stopover-allowed passengers -> one-stop
-    for a in stopover_ok
-        if a in assigned_groups
-            continue
-        end
-        ass = find_one_stop_assignment!(scheduled, a, op, dp, dt, q, w)
-        if ass !== nothing
-            push!(assignments, ass)
-            push!(assigned_groups, a)
-        end
-    end
-
-    return assignments, scheduled
-end
-
 function assign_passengersV2(evtols::allPlaneSolution, data, rt::Matrix{Int})
     A = data.A
     op = data.op
@@ -1037,10 +905,6 @@ function assign_passengersV2(evtols::allPlaneSolution, data, rt::Matrix{Int})
                 push!(assigned_groups, a)
             end
         end
-
-
-
-
         if so[a] == 1
             ass = find_direct_leg!V2(scheduled, a, op, dp, dt, q, w, so)
             if ass == nothing 
@@ -1059,189 +923,6 @@ function assign_passengersV2(evtols::allPlaneSolution, data, rt::Matrix{Int})
     return assignments, scheduled
 end
 
-function assign_passengers_Solver2(evtols::allPlaneSolution, data, rt::Matrix{Int})
-    A  = data.A
-    V  = data.V
-    N  = 1:length(evtols.planes)
-    M  = data.M
-
-    op = data.op
-    dp = data.dp
-    dt = data.dt
-    q  = data.q
-    so = data.so
-    w  = Int(round(data.w))
-
-    fd = data.fd
-    fs = data.fs
-    p  = data.p
-
-    cap_u = Int(round(data.cap_u))
-
-    scheduled = build_scheduled_legs(evtols, rt, cap_u)
-
-    ###########################################################################
-    # Fixed schedule lookup
-    ###########################################################################
-    leg_of = Dict{Tuple{Int,Int}, ScheduledLeg}()
-    for leg in scheduled
-        leg_of[(leg.leg_index, leg.plane)] = leg
-    end
-
-    ###########################################################################
-    # Feasible assignment keys
-    ###########################################################################
-    direct_keys = Tuple{Int,Int,Int}[]
-    stop_keys = Tuple{Int,Int,Int}[]
-
-    for a in A
-        earliest = Int(round(dt[a]))
-        latest = earliest + w
-
-        # Direct assignments
-        for n in N
-            for m in 1:maximum(M)
-                if haskey(leg_of, (m, n))
-                    leg = leg_of[(m, n)]
-                    if leg.from == op[a] &&
-                       leg.to == dp[a] &&
-                       earliest <= leg.dep <= latest
-                        push!(direct_keys, (a, m, n))
-                    end
-                end
-            end
-        end
-
-        # One-stop assignments on consecutive legs
-        if so[a] == 1
-            for n in N
-                for m in 1:(maximum(M) - 1)
-                    if haskey(leg_of, (m, n)) && haskey(leg_of, (m + 1, n))
-                        leg1 = leg_of[(m, n)]
-                        leg2 = leg_of[(m + 1, n)]
-
-                        if leg1.from == op[a] &&
-                           leg2.from == leg1.to &&
-                           leg2.to == dp[a] &&
-                           earliest <= leg1.dep <= latest &&
-                           leg2.dep >= leg1.arr
-                            push!(stop_keys, (a, m, n))
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    ###########################################################################
-    # Solver
-    ###########################################################################
-    model = Model(Gurobi.Optimizer)
-    set_optimizer_attribute(model, "OutputFlag", 0)
-
-    @variable(model, y_dir[direct_keys], Bin)
-    @variable(model, y_stop[stop_keys], Bin)
-
-    @objective(
-        model, Max,
-        sum(
-            (fd[(op[a], dp[a])] * (1 - so[a]) + fs[(op[a], dp[a])] * so[a] + p[a]) * y_dir[(a, m, n)]
-            for (a, m, n) in direct_keys
-        )
-        +
-        sum(
-            (fs[(op[a], dp[a])] + p[a]) * y_stop[(a, m, n)]
-            for (a, m, n) in stop_keys
-        )
-        -
-        sum(p[a] for a in A)
-    )
-
-    # Each passenger group assigned at most once
-    @constraint(model, [a in A],
-        sum((y_dir[(aa, m, n)] for (aa, m, n) in direct_keys if aa == a); init = 0)
-        +
-        sum((y_stop[(aa, m, n)] for (aa, m, n) in stop_keys if aa == a); init = 0)
-        <= 1
-    )
-
-    # Capacity on each scheduled leg
-    for leg in scheduled
-        m = leg.leg_index
-        n = leg.plane
-
-        @constraint(model,
-            sum(
-                (q[a] * y_dir[(a, mm, nn)]
-                 for (a, mm, nn) in direct_keys
-                 if mm == m && nn == n);
-                init = 0
-            )
-            +
-            sum(
-                (q[a] * y_stop[(a, mm, nn)]
-                 for (a, mm, nn) in stop_keys
-                 if (mm == m && nn == n) || (mm + 1 == m && nn == n));
-                init = 0
-            )
-            <= cap_u
-        )
-    end
-
-    # Direct-only passengers ride alone
-    for (a, m, n) in direct_keys
-        if so[a] == 0
-            others_on_same_leg =
-                sum(
-                    (y_dir[(aa, mm, nn)]
-                     for (aa, mm, nn) in direct_keys
-                     if !(aa == a && mm == m && nn == n) && mm == m && nn == n);
-                    init = 0
-                )
-                +
-                sum(
-                    (y_stop[(aa, mm, nn)]
-                     for (aa, mm, nn) in stop_keys
-                     if (mm == m && nn == n) || (mm + 1 == m && nn == n));
-                    init = 0
-                )
-
-            bigM = length(direct_keys) + length(stop_keys)
-            @constraint(model, others_on_same_leg <= bigM * (1 - y_dir[(a, m, n)]))
-        end
-    end
-
-    optimize!(model)
-
-    model.ext[:direct_keys] = direct_keys
-    model.ext[:stop_keys] = stop_keys
-
-    return model, scheduled
-end
-
-function extract_assignments2(model::Model)
-    assignments = PassengerAssignment[]
-
-    direct_keys = model.ext[:direct_keys]
-    stop_keys = model.ext[:stop_keys]
-
-    for key in direct_keys
-        if value(model[:y_dir][key]) > 0.5
-            a, m, n = key
-            push!(assignments, PassengerAssignment(a, n, [m]))
-        end
-    end
-
-    for key in stop_keys
-        if value(model[:y_stop][key]) > 0.5
-            a, m, n = key
-            push!(assignments, PassengerAssignment(a, n, [m, m + 1]))
-        end
-    end
-
-    return assignments
-end
-
 function print_assignments(assignments::Vector{PassengerAssignment}, data)
     println("Passenger assignments:")
     println("----------------------")
@@ -1258,22 +939,8 @@ function print_assignments(assignments::Vector{PassengerAssignment}, data)
     end
 end
 
-function fitnessFunction(
-    evtols::allPlaneSolution,
-    assignments::Vector{PassengerAssignment},
-    bmax::Float32,
-    bmin::Float32,
-    dist::Dict{Tuple{Int,Int},Float64},
-    ec::Float32,
-    battery_per_km::Float32,
-    rt::Matrix{Int},
-    ET::Int,
-    T::Int,
-    V::Int,
-    cap_flt::Int,
-    cap_v::Dict{},
-    data
-)
+function fitnessFunction(evtols::allPlaneSolution,assignments::Vector{PassengerAssignment},bmax::Float32,bmin::Float32,dist::Dict{Tuple{Int,Int},Float64},ec::Float32,
+                        battery_per_km::Float32, rt::Matrix{Int}, ET::Int, T::Int, V::Int, cap_v::Dict{}, data)
     P = FeasibilityCheck(
         bmax,
         bmin,
@@ -1285,7 +952,6 @@ function fitnessFunction(
         ET,
         T,
         V,
-        cap_flt,
         cap_v
     )
 
@@ -1338,6 +1004,443 @@ function fitnessFunction(
     return fitnessvalue
 end
 
+function initial_chromosome_solution2(data, rt; maxLegs::Int=5, maxTurnaround::Int=30, top_c::Int=3)
+    V  = data.V
+    N  = data.N
+    A  = data.A
+    bv = data.bv
+    op = data.op
+    dp = data.dp
+    dt = data.dt
+    q  = data.q
+    so = data.so
+    w  = Int(round(data.w))
+    te = Int(round(data.te))
+    fd = data.fd
+    fs = data.fs
+    cap_u = Int(round(data.cap_u))
+
+    weights = build_vertiport_weights(V, op, dp, A)
+
+    planes = Vector{Union{Nothing,planeSolution}}(undef, length(N))
+    assignments = PassengerAssignment[]
+    assigned_groups = Set{Int}()
+
+    # ----------------------------
+    # Random construction mode
+    # ----------------------------
+    early_first = rand() < 0.5
+
+    passenger_value = Dict(a => (so[a] == 1 ? fs[(op[a], dp[a])] : fd[(op[a], dp[a])]) for a in A)
+
+    if early_first
+        sorted_groups = sort(A, by = a -> (dt[a], -passenger_value[a]))
+    else
+        sorted_groups = sort(A, by = a -> (-dt[a], -passenger_value[a]))
+    end
+
+    # ----------------------------
+    # Random plane order
+    # ----------------------------
+    plane_order = shuffle(collect(1:length(N)))
+    nPlanes = length(N)
+
+    # ----------------------------
+    # Distribute total flight legs
+    # ----------------------------
+    choices = [i for i in 0:(maxLegs * nPlanes) if i != 1]
+    total_flight_legs = rand(choices)
+
+    allowed_legs = zeros(Int, nPlanes)
+
+    while true
+        remaining = total_flight_legs
+        allowed_legs .= 0
+        feasible_distribution = true
+
+        for n in 1:(nPlanes - 1)
+            feasible_choices = Int[]
+
+            for x in 0:maxLegs
+                rem_after = remaining - x
+                if x != 1 && rem_after >= 0
+                    max_possible_rest = maxLegs * (nPlanes - n)
+                    if (rem_after == 0 || rem_after >= 2) && rem_after <= max_possible_rest
+                        push!(feasible_choices, x)
+                    end
+                end
+            end
+
+            if isempty(feasible_choices)
+                feasible_distribution = false
+                break
+            end
+
+            choice = rand(feasible_choices)
+            allowed_legs[n] = choice
+            remaining -= choice
+        end
+
+        if feasible_distribution &&
+           remaining <= maxLegs &&
+           remaining != 1 &&
+           remaining >= 0
+            allowed_legs[nPlanes] = remaining
+            allowed_legs = shuffle!(allowed_legs)
+            break
+        end
+    end
+
+    # ----------------------------
+    # Phase 1: build routes + seed assignments
+    # ----------------------------
+    for n in plane_order
+        base = bv[n]
+        flightLegs_target = allowed_legs[n]
+
+        route = Int32[base]
+        turnaroundTime = Int32[]
+
+        current_vp = base
+        current_time = 0
+        legs_used = 0
+
+        while legs_used < flightLegs_target
+            candidates = NamedTuple[]
+
+            for a in sorted_groups
+                if a in assigned_groups
+                    continue
+                end
+
+                # ------------------------
+                # Direct option
+                # ------------------------
+                if current_vp == op[a]
+                    if legs_used + 1 <= flightLegs_target
+                        wait1 = max(te, Int(round(dt[a] - current_time)))
+                        wait1 = min(wait1, maxTurnaround)
+                        dep1 = current_time + wait1
+
+                        if dt[a] <= dep1 <= dt[a] + w
+                            score = passenger_value[a] - 0.1 * wait1
+                            push!(candidates, (
+                                score = score,
+                                group = a,
+                                mode = :direct,
+                                midpoint = nothing,
+                                reposition = false,
+                                rep_wait = 0,
+                                wait1 = wait1,
+                                wait2 = 0
+                            ))
+                        end
+                    end
+                else
+                    if legs_used + 2 <= flightLegs_target
+                        rep_wait = te
+                        arrival_origin = current_time + rep_wait + rt[current_vp, op[a]]
+                        wait1 = max(te, Int(round(dt[a] - arrival_origin)))
+                        wait1 = min(wait1, maxTurnaround)
+                        dep1 = arrival_origin + wait1
+
+                        if dt[a] <= dep1 <= dt[a] + w
+                            score = passenger_value[a] - 0.1 * wait1 - 0.2 * rt[current_vp, op[a]]
+                            push!(candidates, (
+                                score = score,
+                                group = a,
+                                mode = :direct,
+                                midpoint = nothing,
+                                reposition = true,
+                                rep_wait = rep_wait,
+                                wait1 = wait1,
+                                wait2 = 0
+                            ))
+                        end
+                    end
+                end
+
+                # ------------------------
+                # Stopover option
+                # ------------------------
+                if so[a] == 1
+                    mids = [v for v in V if v != op[a] && v != dp[a]]
+                    if !isempty(mids)
+                        chosen_mid = weighted_choice(mids, [weights[findfirst(==(v), V)] for v in mids])
+
+                        if current_vp == op[a]
+                            if legs_used + 2 <= flightLegs_target
+                                wait1 = max(te, Int(round(dt[a] - current_time)))
+                                wait1 = min(wait1, maxTurnaround)
+                                dep1 = current_time + wait1
+                                arr1 = dep1 + rt[op[a], chosen_mid]
+                                wait2 = te
+                                dep2 = arr1 + wait2
+
+                                if dt[a] <= dep1 <= dt[a] + w && dep2 >= arr1
+                                    score = passenger_value[a] - 0.1 * (wait1 + wait2)
+                                    push!(candidates, (
+                                        score = score,
+                                        group = a,
+                                        mode = :stop,
+                                        midpoint = chosen_mid,
+                                        reposition = false,
+                                        rep_wait = 0,
+                                        wait1 = wait1,
+                                        wait2 = wait2
+                                    ))
+                                end
+                            end
+                        else
+                            if legs_used + 3 <= flightLegs_target
+                                rep_wait = te
+                                arrival_origin = current_time + rep_wait + rt[current_vp, op[a]]
+                                wait1 = max(te, Int(round(dt[a] - arrival_origin)))
+                                wait1 = min(wait1, maxTurnaround)
+                                dep1 = arrival_origin + wait1
+                                arr1 = dep1 + rt[op[a], chosen_mid]
+                                wait2 = te
+                                dep2 = arr1 + wait2
+
+                                if dt[a] <= dep1 <= dt[a] + w && dep2 >= arr1
+                                    score = passenger_value[a] - 0.1 * (wait1 + wait2) - 0.2 * rt[current_vp, op[a]]
+                                    push!(candidates, (
+                                        score = score,
+                                        group = a,
+                                        mode = :stop,
+                                        midpoint = chosen_mid,
+                                        reposition = true,
+                                        rep_wait = rep_wait,
+                                        wait1 = wait1,
+                                        wait2 = wait2
+                                    ))
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+
+            if isempty(candidates)
+                break
+            end
+
+            candidates = sort(candidates, by = x -> x.score, rev = true)
+            pool = candidates[1:min(top_c, length(candidates))]
+            chosen = rand(pool)
+
+            a = chosen.group
+
+            if chosen.reposition
+                push!(route, Int32(op[a]))
+                push!(turnaroundTime, Int32(chosen.rep_wait))
+                current_time += turnaroundTime[end] + rt[current_vp, op[a]]
+                current_vp = op[a]
+                legs_used += 1
+            end
+
+            if chosen.mode == :direct
+                service_leg = legs_used + 1
+
+                push!(route, Int32(dp[a]))
+                push!(turnaroundTime, Int32(chosen.wait1))
+                current_time += turnaroundTime[end] + rt[current_vp, dp[a]]
+                current_vp = dp[a]
+                legs_used += 1
+
+                push!(assignments, PassengerAssignment(a, n, [service_leg]))
+                push!(assigned_groups, a)
+
+            elseif chosen.mode == :stop
+                leg1 = legs_used + 1
+                leg2 = legs_used + 2
+
+                push!(route, Int32(chosen.midpoint))
+                push!(turnaroundTime, Int32(chosen.wait1))
+                current_time += turnaroundTime[end] + rt[current_vp, chosen.midpoint]
+                current_vp = chosen.midpoint
+                legs_used += 1
+
+                push!(route, Int32(dp[a]))
+                push!(turnaroundTime, Int32(chosen.wait2))
+                current_time += turnaroundTime[end] + rt[current_vp, dp[a]]
+                current_vp = dp[a]
+                legs_used += 1
+
+                push!(assignments, PassengerAssignment(a, n, [leg1, leg2]))
+                push!(assigned_groups, a)
+            end
+        end
+
+        # If no more passenger candidate: either fill spare legs randomly or return to base
+        while legs_used < flightLegs_target - 1
+            candidates = [v for v in V if v != current_vp]
+            if isempty(candidates)
+                break
+            end
+
+            nxt = weighted_choice(candidates, [weights[findfirst(==(v), V)] for v in candidates])
+            push!(route, Int32(nxt))
+            push!(turnaroundTime, Int32(rand(te:maxTurnaround)))
+            current_time += turnaroundTime[end] + rt[current_vp, nxt]
+            current_vp = nxt
+            legs_used += 1
+        end
+
+        if legs_used < flightLegs_target && current_vp != base
+            push!(route, Int32(base))
+            push!(turnaroundTime, Int32(rand(te:maxTurnaround)))
+            current_time += turnaroundTime[end] + rt[current_vp, base]
+            current_vp = base
+            legs_used += 1
+        end
+
+        planes[n] = planeSolution(
+            Int32(length(route) - 1),
+            route,
+            turnaroundTime
+        )
+    end
+
+    evtols_init = allPlaneSolution(planeSolution[p for p in planes])
+    scheduled = build_scheduled_legs(evtols_init, rt, cap_u)
+
+    # ----------------------------
+    # Phase 2: assign remaining groups on built schedule
+    # ----------------------------
+    assigned_groups = Set(ass.group for ass in assignments)
+
+    remaining_capacity = Dict((leg.plane, leg.leg_index) => cap_u for leg in scheduled)
+    exclusive_leg = Dict((leg.plane, leg.leg_index) => false for leg in scheduled)
+
+    for ass in assignments
+        a = ass.group
+        for legidx in ass.legs
+            remaining_capacity[(ass.plane, legidx)] -= q[a]
+        end
+        if so[a] == 0
+            @assert length(ass.legs) == 1
+            exclusive_leg[(ass.plane, ass.legs[1])] = true
+        end
+    end
+
+    for a in sorted_groups
+        if a in assigned_groups
+            continue
+        end
+
+        earliest = Int(round(dt[a]))
+        latest = earliest + w
+
+        if so[a] == 0
+            chosen = nothing
+            best_arr = typemax(Int)
+
+            for leg in scheduled
+                key = (leg.plane, leg.leg_index)
+                if leg.from == op[a] &&
+                   leg.to == dp[a] &&
+                   earliest <= leg.dep <= latest &&
+                   remaining_capacity[key] == cap_u &&
+                   !exclusive_leg[key]
+
+                    if leg.arr < best_arr
+                        best_arr = leg.arr
+                        chosen = leg
+                    end
+                end
+            end
+
+            if chosen !== nothing
+                key = (chosen.plane, chosen.leg_index)
+                remaining_capacity[key] -= q[a]
+                exclusive_leg[key] = true
+                push!(assignments, PassengerAssignment(a, chosen.plane, [chosen.leg_index]))
+                push!(assigned_groups, a)
+            end
+        else
+            chosen_direct = nothing
+            best_direct_arr = typemax(Int)
+
+            for leg in scheduled
+                key = (leg.plane, leg.leg_index)
+                if leg.from == op[a] &&
+                   leg.to == dp[a] &&
+                   earliest <= leg.dep <= latest &&
+                   remaining_capacity[key] >= q[a] &&
+                   !exclusive_leg[key]
+
+                    if leg.arr < best_direct_arr
+                        best_direct_arr = leg.arr
+                        chosen_direct = leg
+                    end
+                end
+            end
+
+            if chosen_direct !== nothing
+                key = (chosen_direct.plane, chosen_direct.leg_index)
+                remaining_capacity[key] -= q[a]
+                push!(assignments, PassengerAssignment(a, chosen_direct.plane, [chosen_direct.leg_index]))
+                push!(assigned_groups, a)
+                continue
+            end
+
+            chosen_pair = nothing
+            best_pair_arr = typemax(Int)
+
+            for leg1 in scheduled
+                key1 = (leg1.plane, leg1.leg_index)
+                if leg1.from != op[a]
+                    continue
+                end
+                if !(earliest <= leg1.dep <= latest)
+                    continue
+                end
+                if remaining_capacity[key1] < q[a] || exclusive_leg[key1]
+                    continue
+                end
+
+                for leg2 in scheduled
+                    key2 = (leg2.plane, leg2.leg_index)
+                    if leg2.plane != leg1.plane
+                        continue
+                    end
+                    if leg2.leg_index != leg1.leg_index + 1
+                        continue
+                    end
+                    if leg2.from != leg1.to
+                        continue
+                    end
+                    if leg2.to != dp[a]
+                        continue
+                    end
+                    if leg2.dep < leg1.arr
+                        continue
+                    end
+                    if remaining_capacity[key2] < q[a] || exclusive_leg[key2]
+                        continue
+                    end
+
+                    if leg2.arr < best_pair_arr
+                        best_pair_arr = leg2.arr
+                        chosen_pair = (leg1, leg2)
+                    end
+                end
+            end
+
+            if chosen_pair !== nothing
+                leg1, leg2 = chosen_pair
+                remaining_capacity[(leg1.plane, leg1.leg_index)] -= q[a]
+                remaining_capacity[(leg2.plane, leg2.leg_index)] -= q[a]
+                push!(assignments, PassengerAssignment(a, leg1.plane, [leg1.leg_index, leg2.leg_index]))
+                push!(assigned_groups, a)
+            end
+        end
+    end
+
+    return evtols_init, assignments, scheduled
+end
+
 ###############################################################################
 # Usage
 ###############################################################################
@@ -1350,57 +1453,21 @@ end
 #     rt[i, j] = data.rt[(i, j)]
 # end
 
-function generate_best_initial_solutions(data, rt; n_runs::Int=1000, top_k::Int=10, maxLegs::Int=5, maxTurnaround::Int=30, print_each::Bool=false)
+function generate_best_initial_solutions(data, rt; n_runs::Int=1000, top_k::Int=10, top_c::Int=3,  maxLegs::Int=5, maxTurnaround::Int=30, print_each::Bool=false)
     results = NamedTuple[]
 
     for run in 1:n_runs
-        evtols_init = initial_chromosome_solution(data; maxLegs=maxLegs, maxTurnaround=maxTurnaround)
+        evtols_init, assignments, scheduled = initial_chromosome_solution2(data, rt; maxLegs=maxLegs, maxTurnaround=maxTurnaround, top_c=top_c)
 
-        assignments, scheduled = assign_passengersV2(evtols_init, data, rt)
+        #assignments, scheduled = assign_passengersV2(evtols_init, data, rt)
 
-        # model, scheduled = assign_passengers_Solver2(evtols_init, data, rt)
-        # assignments = extract_assignments2(model)
+        P = FeasibilityCheck(Float32(data.bmax),Float32(data.bmin),data.dist,Float32(data.ec),Float32(data.battery_per_km),
+                    evtols_init,rt,Int(round(data.ET)),maximum(Int.(data.T)),maximum(data.V),data.cap_v)
 
-        P = FeasibilityCheck(
-            Float32(data.bmax),
-            Float32(data.bmin),
-            data.dist,
-            Float32(data.ec),
-            Float32(data.battery_per_km),
-            evtols_init,
-            rt,
-            Int(round(data.ET)),
-            maximum(Int.(data.T)),
-            maximum(data.V),
-            Int(round(data.cap_flt)),
-            data.cap_v
-        )
+        fitness = fitnessFunction(evtols_init,assignments,Float32(data.bmax),Float32(data.bmin),data.dist, Float32(data.ec),
+                        Float32(data.battery_per_km), rt, Int(round(data.ET)), maximum(Int.(data.T)), maximum(data.V), data.cap_v, data)
 
-        fitness = fitnessFunction(
-            evtols_init,
-            assignments,
-            Float32(data.bmax),
-            Float32(data.bmin),
-            data.dist,
-            Float32(data.ec),
-            Float32(data.battery_per_km),
-            rt,
-            Int(round(data.ET)),
-            maximum(Int.(data.T)),
-            maximum(data.V),
-            Int(round(data.cap_flt)),
-            data.cap_v,
-            data
-        )
-
-        push!(results, (
-            run = run,
-            fitness = fitness,
-            evtols = evtols_init,
-            assignments = assignments,
-            scheduled = scheduled,
-            P = P
-        ))
+        push!(results, (run = run, fitness = fitness, evtols = evtols_init, assignments = assignments, scheduled = scheduled, P = P))
 
         if print_each
             println("Run $run | fitness = $fitness | P = $P")
@@ -1438,26 +1505,6 @@ end
 
 # ---------------------------------------------- #
 
-function Possible_TurnaroundTime(plane::planeSolution, plane_idx::Int, schedule::Vector{ScheduledLeg}, te::Int, maxTurnaround::Int, ET::Int)
-
-    m = plane.flightLegs
-    
-    tft = 0
-
-    for leg in schedule
-        if leg.plane == plane_idx && leg.leg_index == m
-            tft = leg.arr
-            break
-        end
-    end
-
-    # println(tft)
-    maxtime = minimum([maximum([ET-tft,plane.turnaroundTime[m]]), maxTurnaround])
-
-    return range(te, maxtime)
-end
-
-
 function Change(plane::planeSolution, new_time::Int, turnaround_idx::Int)
 
     plane_changed = plane
@@ -1468,134 +1515,11 @@ function Change(plane::planeSolution, new_time::Int, turnaround_idx::Int)
 
 end
 
-function Best_Change(planes::allPlaneSolution, te::Float64, maxTurnaround::Int, ET::Float64, data, rt)
-
-    temp_sol = 0
-
-    assignment, scheduled = assign_passengersV2(planes, data, rt)
-
-    best_ass = assignment
-    best_sol = deepcopy(planes)
-    best_obj = fitnessFunction(planes, assignment, Float32(data.bmax), Float32(data.bmin), data.dist, Float32(data.ec), Float32(data.battery_per_km), rt, Int(round(data.ET)), maximum(Int.(data.T)), maximum(data.V), Int(round(data.cap_flt)), data.cap_v, data)
-
-    org_obj = copy(best_obj)
-
-
-    for i in 1:length(best_sol.planes)
-
-        m = best_sol.planes[i].flightLegs
-
-        if m > 1
-
-            turnaroundTimes = Possible_TurnaroundTime(best_sol.planes[i], i, scheduled, Int(te), maxTurnaround, Int(ET))
-               
-            for j in 1:m
-
-                for t in turnaroundTimes
-                    temp_sol = deepcopy(planes)
-                    temp_sol.planes[i] = Change(temp_sol.planes[i], t, j)
-
-                    assignment, scheduled = assign_passengersV2(temp_sol, data, rt)
-                    temp_obj = fitnessFunction(temp_sol, assignment,  Float32(data.bmax), Float32(data.bmin), data.dist, Float32(data.ec), Float32(data.battery_per_km), rt, Int(round(data.ET)), maximum(Int.(data.T)), maximum(data.V), Int(round(data.cap_flt)), data.cap_v, data)
-
-                    if temp_obj > best_obj
-                        best_ass = copy(assignment)
-                        best_sol = temp_sol
-                        best_obj = temp_obj
-                    end
-                end
-            end
-        end
-
-       
-    end
-
-    println("\nOriginal obj value: $(org_obj)")
-    println("\nNew obj value: $(best_obj)")
-
-
-    return best_sol, best_ass, best_obj
-
-end
-
-###############################################################################
-# Simple test for Best_Change function
-###############################################################################
-function test_best_change()
-    println("\nTesting Best_Change function...")
-    println("-" ^ 60)
-    
-    # # Create a simple test solution
-    # plane1 = planeSolution(Int32(2), Int32[1, 2, 1], Int32[5, 8])
-    # plane2 = planeSolution(Int32(2), Int32[1, 3, 1], Int32[10, 8])
-    # test_solution = allPlaneSolution([plane1, plane2])
-    
-    # # println("Initial solution:")
-    # # print_chromosome_table(test_solution)
-    
-    # # Create a simple scheduled legs list for testing
-    # test_schedule = ScheduledLeg[]
-    # push!(test_schedule, ScheduledLeg(1, 1, 1, 2, 5, 20, 5))
-    # push!(test_schedule, ScheduledLeg(1, 2, 2, 1, 28, 43, 5))
-
-    # push!(test_schedule, ScheduledLeg(2, 1, 1, 3, 10, 17, 5))
-    # push!(test_schedule, ScheduledLeg(2, 2, 3, 1, 25, 32, 5))
-
-    
-    # te = 5
-    # maxTurnaround = 20
-    # ET = 120
-
-    excel_file = joinpath(@__DIR__, "inputData.xlsx")
-    data = load_data(excel_file)
-
-    Vmax = maximum(data.V)
-    rt = zeros(Int, Vmax, Vmax)
-    for i in data.V, j in data.V
-        rt[i, j] = data.rt[(i, j)]
-    end
-
-
-    maxTurnaround=30
-
-    start_time = time()
-    Best_sols = generate_best_initial_solutions(data, rt, top_k = 1)
-    elapsed_time = time() - start_time
-    println("Run 1000 inits solutions time: $(round(elapsed_time, digits=4)) seconds")
-
-
-
-    evtols_init = Best_sols[1].evtols
-    assignment_init = Best_sols[1].assignments
-
-    println("\nTesting Best Change function")
-    start_time = time()
-    sol_out, ass_out, obj_out = Best_Change(evtols_init, data.te, maxTurnaround, data.ET, data, rt)
-    elapsed_time = time() - start_time
-    println("Best_Change execution time: $(round(elapsed_time, digits=4)) seconds")
-
-
-    println("Initial solution:")
-    print_chromosome_table(evtols_init)
-    print_assignments(assignment_init, data)
-
-
-    println("New solution:")
-    print_chromosome_table(sol_out)
-    print_assignments(ass_out, data)
-
-
-    println("-" ^ 60)
-end
-
-# Uncomment to run the test:
-# test_best_change()
-
-
-
-function Destructor(plane::planeSolution, idxs::Vector{Int64})
+function Destructor(plane::planeSolution, idxs::Vector{Int64}) # Deletes stops (idxs) of one plane
     m = Int(plane.flightLegs)
 
+    # Special case: if route has exactly 2 legs (base -> x -> base),
+    # any deletion request should remove the whole tour.
     if m == 2 && !isempty(idxs)
         base = plane.route[1]
         resize!(plane.route, 1)
@@ -1605,30 +1529,15 @@ function Destructor(plane::planeSolution, idxs::Vector{Int64})
         return
     end
 
+    # Normal behavior
     del = sort(unique(Int.(idxs)))
-
-    # keep only internal stop indices for safety
-    del = [idx for idx in del if 2 <= idx <= m]
-    isempty(del) && return
-
     plane.flightLegs -= Int32(length(del))
     deleteat!(plane.route, del)
     deleteat!(plane.turnaroundTime, del)
 end
 
-function has_consecutive_duplicates(route)
-    for i in 1:(length(route)-1)
-        if route[i] == route[i+1]
-            return true
-        end
-    end
-    return false
-end
-
-
-
-function Constructor(plane::planeSolution, VP::Int, idx::Int, data)
-    te32 = Int32(data.te)
+function Constructor(plane::planeSolution, maxTurnaround, VP::Int, idx::Int, data)
+    te32 = rand(Int32(data.te):maxTurnaround)
 
     if plane.flightLegs == 0
         base = Int32(plane.route[1])
@@ -1648,45 +1557,6 @@ function Constructor(plane::planeSolution, VP::Int, idx::Int, data)
     insert!(plane.route, idx, Int32(VP))
     insert!(plane.turnaroundTime, idx, te32)
 
-end
-
-function two_opt(plane::planeSolution, idx1::Int, idx2::Int)
-
-    # Nothing to improve if there are fewer than 2 flown legs.
-    if plane.flightLegs < 2
-        return plane
-    end
-
-    # Ensure ordered bounds.
-    if idx1 > idx2
-        idx1, idx2 = idx2, idx1
-    end
-
-    # Keep first/last node fixed (base), reverse only internal part.
-    lo = max(2, idx1)
-    hi = min(length(plane.route) - 1, idx2)
-
-    if lo >= hi
-        return plane
-    end
-
-    rev_seg = reverse(plane.route[lo:hi])
-
-    # Reject move if it creates consecutive identical vertiports.
-    if lo > 1 && plane.route[lo - 1] == rev_seg[1]
-        return plane
-    end
-    if hi < length(plane.route) && rev_seg[end] == plane.route[hi + 1]
-        return plane
-    end
-    for k in 1:(length(rev_seg) - 1)
-        if rev_seg[k] == rev_seg[k + 1]
-            return plane
-        end
-    end
-
-    plane.route[lo:hi] = rev_seg
-    return plane
 end
 
 function UpdateTurnAroundTimes(planes::allPlaneSolution, from::Int64, maxTurnaround::Int64, data)
@@ -1739,27 +1609,13 @@ end
 function obj(planes::allPlaneSolution, data, rt)
     assignments, scheduled = assign_passengersV2(planes, data, rt)
 
-    fitness = fitnessFunction(
-            planes,
-            assignments,
-            Float32(data.bmax),
-            Float32(data.bmin),
-            data.dist,
-            Float32(data.ec),
-            Float32(data.battery_per_km),
-            rt,
-            Int(round(data.ET)),
-            maximum(Int.(data.T)),
-            maximum(data.V),
-            Int(round(data.cap_flt)),
-            data.cap_v,
-            data
-        )
+    fitness = fitnessFunction(planes,assignments,Float32(data.bmax),Float32(data.bmin),data.dist,Float32(data.ec),
+            Float32(data.battery_per_km),rt, Int(round(data.ET)), maximum(Int.(data.T)), maximum(data.V), data.cap_v,data)
 
     return fitness
 end
 
-function DestructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64, data, rt)
+function DestructLoop(planes::allPlaneSolution, init_obj::Float64, data, rt)
 
     N = data.N
     best_obj = init_obj
@@ -1773,11 +1629,6 @@ function DestructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::
             temp_sol = deepcopy(planes)
 
             Destructor(temp_sol.planes[n], [idx])
-
-            if has_consecutive_duplicates(temp_sol.planes[n].route)
-                continue
-            end
-
             new_obj = obj(temp_sol, data, rt)
 
             temp_sol2 = deepcopy(temp_sol)
@@ -1800,7 +1651,7 @@ function DestructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::
     return best_obj, best_sol
 end
 
-function ConstructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64, data, rt)
+function ConstructLoop(planes::allPlaneSolution, maxTurnaround, init_obj::Float64, data, rt)
 
     N = data.N
     V = data.V
@@ -1820,7 +1671,7 @@ function ConstructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj:
                 end
 
                 temp_sol = deepcopy(planes)
-                Constructor(temp_sol.planes[n], v, 2, data)
+                Constructor(temp_sol.planes[n],maxTurnaround, v, 2, data)
 
                 new_obj = obj(temp_sol, data, rt)
 
@@ -1847,7 +1698,7 @@ function ConstructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj:
                 temp_sol = deepcopy(planes)
 
                 if temp_sol.planes[n].route[idx] != v && temp_sol.planes[n].route[idx - 1] != v
-                    Constructor(temp_sol.planes[n], v, idx, data)
+                    Constructor(temp_sol.planes[n],maxTurnaround, v, idx, data)
                     new_obj = obj(temp_sol, data, rt)
 
                     temp_sol2 = deepcopy(temp_sol)
@@ -1930,50 +1781,7 @@ function Swap(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64,
     return best_obj, best_sol
 end
 
-function two_opt_Loop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64, data, rt)
-    N = data.N
-    best_obj = init_obj
-    best_sol = deepcopy(planes)
-
-    for n in N
-        m = Int(planes.planes[n].flightLegs)
-
-        # Need at least 3 legs to have two internal indices to reverse.
-        if m <= 2
-            continue
-        end
-
-        for i in 2:(m - 1)
-            for j in (i + 1):m
-                temp_sol = deepcopy(planes)
-                two_opt(temp_sol.planes[n], i, j)
-
-                temp_obj = obj(temp_sol, data, rt)
-
-                # Re-evaluate with refreshed turnaround times from the changed area.
-                temp_sol2 = deepcopy(temp_sol)
-                from_idx = Int64(max(1, i - 1))
-                UpdateTurnAroundTimes(temp_sol2, from_idx, maxTurnaround, data)
-                temp_obj2 = obj(temp_sol2, data, rt)
-
-                if temp_obj2 > temp_obj
-                    temp_sol = temp_sol2
-                    temp_obj = temp_obj2
-                end
-
-                if temp_obj > best_obj
-                    best_obj = temp_obj
-                    best_sol = deepcopy(temp_sol)
-                end
-            end
-        end
-    end
-    
-    return best_obj, best_sol
-end
-
-
-function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt)
+function Heuristic(data, rt, maxTurnaround, runtime, top_c)
 
     start_ns = time_ns()
     elapsed = 0.0
@@ -1982,9 +1790,9 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt)
     best_obj = -Inf
     best_sol = allPlaneSolution(planeSolution[])
 
-    while elapsed <= Float64(MaxTime)
-        nr = 1
-        Best_sols = generate_best_initial_solutions(data, rt, top_k = nr, n_runs = 100, maxTurnaround = maxTurnaround)
+    while elapsed <= Float64(runtime)
+        nr = rand(1:5)
+        Best_sols = generate_best_initial_solutions(data, rt; n_runs = 100, top_k = nr, top_c, maxLegs=8, maxTurnaround)
 
         temp_obj = Best_sols[nr].fitness
         temp_sol = deepcopy(Best_sols[nr].evtols)
@@ -1993,39 +1801,29 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt)
             best_obj = temp_obj
             best_sol = deepcopy(temp_sol)
             println("New best Obj $(best_obj)")
-            println("Method used: Initial Heurist")
         end
 
         improvement = true
-        while improvement && elapsed <= Float64(MaxTime)
+        while improvement && elapsed <= Float64(runtime)
             improvement = false
-            method_used = 0
 
-            des_obj, des_sol = DestructLoop(temp_sol, maxTurnaround, temp_obj, data, rt)
+            des_obj, des_sol = DestructLoop(temp_sol, temp_obj, data, rt)
             con_obj, con_sol = ConstructLoop(temp_sol, maxTurnaround, temp_obj, data, rt)
             swap_obj, swap_sol = Swap(temp_sol, maxTurnaround, temp_obj, data, rt)
-            two_opt_obj, two_opt_sol = two_opt_Loop(temp_sol, maxTurnaround, temp_obj, data, rt)
 
             cand_obj = des_obj
             cand_sol = des_sol
 
-            if con_obj > cand_obj
-                cand_obj = con_obj
-                cand_sol = con_sol
-                method_used = 1
-            end
-
             if swap_obj > cand_obj
                 cand_obj = swap_obj
                 cand_sol = swap_sol
-                method_used = 2
             end
 
-            if two_opt_obj > cand_obj
-                cand_obj = two_opt_obj
-                cand_sol = two_opt_sol
-                method_used = 3
+            if con_obj > cand_obj
+                cand_obj = con_obj
+                cand_sol = con_sol
             end
+
 
             if cand_obj > temp_obj
                 temp_obj = cand_obj
@@ -2036,11 +1834,79 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt)
                     best_obj = temp_obj
                     best_sol = deepcopy(temp_sol)
                     println("New best Obj $(best_obj)")
-                    println("Method used: $(("Destructor", "Constructor", "Swap", "2-opt")[method_used + 1])")
                 end
             end
 
             elapsed = (time_ns() - start_ns) / 1e9
+        end
+
+        iterations += 1
+        if iterations % 100 == 0
+            println("iteration: $(iterations)")
+        end
+        elapsed = (time_ns() - start_ns) / 1e9
+    end
+
+    return best_obj, best_sol, iterations
+end
+
+function Heuristic2(data, rt, maxTurnaround, runtime, top_c)
+
+    start_ns = time_ns()
+    elapsed = 0.0
+    iterations = 0
+
+    best_obj = -Inf
+    best_sol = allPlaneSolution(planeSolution[])
+
+    while elapsed <= Float64(runtime)
+        nr = rand(1:5)
+        Best_sols = generate_best_initial_solutions(data, rt; n_runs = 100, top_k = nr, top_c, maxLegs=8, maxTurnaround)
+
+        temp_obj = Best_sols[nr].fitness
+        temp_sol = deepcopy(Best_sols[nr].evtols)
+
+        if temp_obj > best_obj
+            best_obj = temp_obj
+            best_sol = deepcopy(temp_sol)
+            println("New best Obj $(best_obj)")
+        end
+
+        improvement = true
+        while improvement
+            elapsed = (time_ns() - start_ns) / 1e9
+            if elapsed > Float64(runtime)
+                break
+            end
+
+            improvement = false
+
+            des_obj, des_sol = DestructLoop(temp_sol, temp_obj, data, rt)
+            if des_obj > temp_obj
+                temp_obj = des_obj
+                temp_sol = des_sol
+                improvement = true
+            else
+                con_obj, con_sol = ConstructLoop(temp_sol, maxTurnaround, temp_obj, data, rt)
+                if con_obj > temp_obj
+                    temp_obj = con_obj
+                    temp_sol = con_sol
+                    improvement = true
+                else
+                    swap_obj, swap_sol = Swap(temp_sol, maxTurnaround, temp_obj, data, rt)
+                    if swap_obj > temp_obj
+                        temp_obj = swap_obj
+                        temp_sol = swap_sol
+                        improvement = true
+                    end
+                end
+            end
+
+            if improvement && temp_obj > best_obj
+                best_obj = temp_obj
+                best_sol = deepcopy(temp_sol)
+                println("New best Obj $(best_obj)")
+            end
         end
 
         iterations += 1
@@ -2062,12 +1928,12 @@ for i in data.V, j in data.V
     rt[i, j] = data.rt[(i, j)]
 end
 
-
-maxTurnaround = 50
-Maxtime = Int32(60) 
 nr = 1
+runtime = 30
+maxTurnaround = Int64(45/5)
+top_c = 4
 
-(best_obj, best_sol, iterations) = Heuristic(maxTurnaround, Maxtime, data, rt)
+(best_obj, best_sol, iterations) = Heuristic2(data, rt, maxTurnaround, runtime, top_c)
 
 println("Heuristic ran $(iterations) iterations")
 println("Best solution:")
@@ -2081,8 +1947,7 @@ print_chromosome_table(best_sol)
 
 # evtols_init = Best_sols[nr].evtols
 
-
-# println("Initial solution:"),
+# println("Initial solution:")
 # print_chromosome_table(evtols_init)
 
 # # (best_obj, best_sol) = DestructLoop(evtols_init, maxTurnaround, Org_obj, data, rt)
