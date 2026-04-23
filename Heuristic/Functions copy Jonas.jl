@@ -680,6 +680,8 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
             push!(route, Int32(base))
         end
 
+
+
         turnaroundTime = Int32[]
         current_time = 0
         current_VP = base
@@ -687,7 +689,7 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
             from_current = [(a, v) for (a, v) in op if v == current_VP]
             Candidate_Pass = [dt[a] for (a, _) in from_current if current_time+te <= dt[a] <= current_time + maxTurnaround]
             if !isempty(Candidate_Pass)
-                chosen_time = Candidate_Pass[end] - current_time
+                chosen_time = rand(Candidate_Pass) - current_time
                 push!(turnaroundTime, round(Int32, chosen_time))
             else
                 push!(turnaroundTime, Int32(rand(te:maxTurnaround)))
@@ -702,6 +704,36 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
             turnaroundTime
         ))
     end
+
+    
+    # ----- Check for optimal routing ------ #
+
+    Opt_evtol1 = [1,3,1]
+    Opt_evtol2 = []
+    Opt_evtol3 = [5,2,3,5]
+
+    if planes[1].route == Opt_evtol1 && 
+        planes[2].flightLegs == 0 &&
+        planes[3].route == Opt_evtol3
+
+        rt = zeros(Int, Vmax, Vmax)
+        for i in data.V, j in data.V
+            rt[i, j] = data.rt[(i, j)]
+        end
+
+        UpdateTurnAroundTimes(allPlaneSolution(planes), 1, maxTurnaround, data)
+        assignments, scheduled = assign_passengersV2(allPlaneSolution(planes), data, rt)
+        Obj = obj(allPlaneSolution(planes), data, rt)
+        println("Optimal Trips found, obj: $(Obj)")
+        print_chromosome_table(allPlaneSolution(planes))
+        print_assignments(assignments, data)
+    
+        
+    end
+
+
+    #-----------------------------------------
+
 
     return allPlaneSolution(planes)
 end
@@ -769,6 +801,7 @@ function build_scheduled_legs(evtols::allPlaneSolution, rt::Matrix{Int}, cap_u::
 end
 
 mutable struct PassengerAssignment
+
     group::Int
     plane::Int
     legs::Vector{Int}
@@ -1004,6 +1037,10 @@ function assign_passengersV2(evtols::allPlaneSolution, data, rt::Matrix{Int})
                 push!(assigned_groups, a)
             end
         end
+
+
+
+
         if so[a] == 1
             ass = find_direct_leg!V2(scheduled, a, op, dp, dt, q, w, so)
             if ass == nothing 
@@ -1556,11 +1593,9 @@ end
 
 
 
-function Destructor(plane::planeSolution, idxs::Vector{Int64}) # Deletes stops (idxs) of one plane
+function Destructor(plane::planeSolution, idxs::Vector{Int64})
     m = Int(plane.flightLegs)
 
-    # Special case: if route has exactly 2 legs (base -> x -> base),
-    # any deletion request should remove the whole tour.
     if m == 2 && !isempty(idxs)
         base = plane.route[1]
         resize!(plane.route, 1)
@@ -1570,11 +1605,24 @@ function Destructor(plane::planeSolution, idxs::Vector{Int64}) # Deletes stops (
         return
     end
 
-    # Normal behavior
     del = sort(unique(Int.(idxs)))
+
+    # keep only internal stop indices for safety
+    del = [idx for idx in del if 2 <= idx <= m]
+    isempty(del) && return
+
     plane.flightLegs -= Int32(length(del))
     deleteat!(plane.route, del)
     deleteat!(plane.turnaroundTime, del)
+end
+
+function has_consecutive_duplicates(route)
+    for i in 1:(length(route)-1)
+        if route[i] == route[i+1]
+            return true
+        end
+    end
+    return false
 end
 
 
@@ -1600,6 +1648,45 @@ function Constructor(plane::planeSolution, VP::Int, idx::Int, data)
     insert!(plane.route, idx, Int32(VP))
     insert!(plane.turnaroundTime, idx, te32)
 
+end
+
+function two_opt(plane::planeSolution, idx1::Int, idx2::Int)
+
+    # Nothing to improve if there are fewer than 2 flown legs.
+    if plane.flightLegs < 2
+        return plane
+    end
+
+    # Ensure ordered bounds.
+    if idx1 > idx2
+        idx1, idx2 = idx2, idx1
+    end
+
+    # Keep first/last node fixed (base), reverse only internal part.
+    lo = max(2, idx1)
+    hi = min(length(plane.route) - 1, idx2)
+
+    if lo >= hi
+        return plane
+    end
+
+    rev_seg = reverse(plane.route[lo:hi])
+
+    # Reject move if it creates consecutive identical vertiports.
+    if lo > 1 && plane.route[lo - 1] == rev_seg[1]
+        return plane
+    end
+    if hi < length(plane.route) && rev_seg[end] == plane.route[hi + 1]
+        return plane
+    end
+    for k in 1:(length(rev_seg) - 1)
+        if rev_seg[k] == rev_seg[k + 1]
+            return plane
+        end
+    end
+
+    plane.route[lo:hi] = rev_seg
+    return plane
 end
 
 function UpdateTurnAroundTimes(planes::allPlaneSolution, from::Int64, maxTurnaround::Int64, data)
@@ -1686,6 +1773,11 @@ function DestructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::
             temp_sol = deepcopy(planes)
 
             Destructor(temp_sol.planes[n], [idx])
+
+            if has_consecutive_duplicates(temp_sol.planes[n].route)
+                continue
+            end
+
             new_obj = obj(temp_sol, data, rt)
 
             temp_sol2 = deepcopy(temp_sol)
@@ -1838,6 +1930,48 @@ function Swap(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64,
     return best_obj, best_sol
 end
 
+function two_opt_Loop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64, data, rt)
+    N = data.N
+    best_obj = init_obj
+    best_sol = deepcopy(planes)
+
+    for n in N
+        m = Int(planes.planes[n].flightLegs)
+
+        # Need at least 3 legs to have two internal indices to reverse.
+        if m <= 2
+            continue
+        end
+
+        for i in 2:(m - 1)
+            for j in (i + 1):m
+                temp_sol = deepcopy(planes)
+                two_opt(temp_sol.planes[n], i, j)
+
+                temp_obj = obj(temp_sol, data, rt)
+
+                # Re-evaluate with refreshed turnaround times from the changed area.
+                temp_sol2 = deepcopy(temp_sol)
+                from_idx = Int64(max(1, i - 1))
+                UpdateTurnAroundTimes(temp_sol2, from_idx, maxTurnaround, data)
+                temp_obj2 = obj(temp_sol2, data, rt)
+
+                if temp_obj2 > temp_obj
+                    temp_sol = temp_sol2
+                    temp_obj = temp_obj2
+                end
+
+                if temp_obj > best_obj
+                    best_obj = temp_obj
+                    best_sol = deepcopy(temp_sol)
+                end
+            end
+        end
+    end
+    
+    return best_obj, best_sol
+end
+
 
 function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt)
 
@@ -1850,7 +1984,7 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt)
 
     while elapsed <= Float64(MaxTime)
         nr = 1
-        Best_sols = generate_best_initial_solutions(data, rt, top_k = nr, n_runs = 100)
+        Best_sols = generate_best_initial_solutions(data, rt, top_k = nr, n_runs = 100, maxTurnaround = maxTurnaround)
 
         temp_obj = Best_sols[nr].fitness
         temp_sol = deepcopy(Best_sols[nr].evtols)
@@ -1859,15 +1993,18 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt)
             best_obj = temp_obj
             best_sol = deepcopy(temp_sol)
             println("New best Obj $(best_obj)")
+            println("Method used: Initial Heurist")
         end
 
         improvement = true
         while improvement && elapsed <= Float64(MaxTime)
             improvement = false
+            method_used = 0
 
             des_obj, des_sol = DestructLoop(temp_sol, maxTurnaround, temp_obj, data, rt)
             con_obj, con_sol = ConstructLoop(temp_sol, maxTurnaround, temp_obj, data, rt)
             swap_obj, swap_sol = Swap(temp_sol, maxTurnaround, temp_obj, data, rt)
+            two_opt_obj, two_opt_sol = two_opt_Loop(temp_sol, maxTurnaround, temp_obj, data, rt)
 
             cand_obj = des_obj
             cand_sol = des_sol
@@ -1875,11 +2012,19 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt)
             if con_obj > cand_obj
                 cand_obj = con_obj
                 cand_sol = con_sol
+                method_used = 1
             end
 
             if swap_obj > cand_obj
                 cand_obj = swap_obj
                 cand_sol = swap_sol
+                method_used = 2
+            end
+
+            if two_opt_obj > cand_obj
+                cand_obj = two_opt_obj
+                cand_sol = two_opt_sol
+                method_used = 3
             end
 
             if cand_obj > temp_obj
@@ -1891,6 +2036,7 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt)
                     best_obj = temp_obj
                     best_sol = deepcopy(temp_sol)
                     println("New best Obj $(best_obj)")
+                    println("Method used: $(("Destructor", "Constructor", "Swap", "2-opt")[method_used + 1])")
                 end
             end
 
@@ -1918,7 +2064,7 @@ for i in data.V, j in data.V
 end
 
 
-maxTurnaround = 30
+maxTurnaround = 50
 Maxtime = Int32(60) 
 nr = 1
 
@@ -1940,7 +2086,7 @@ print_chromosome_table(best_sol)
 # evtols_init = Best_sols[nr].evtols
 
 
-# println("Initial solution:")
+# println("Initial solution:"),
 # print_chromosome_table(evtols_init)
 
 
