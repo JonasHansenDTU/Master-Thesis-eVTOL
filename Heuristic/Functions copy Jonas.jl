@@ -102,8 +102,8 @@ function load_data(excel_file::String)
 
     # Coordinates can be either one string column "coordinates"
     # or two numeric columns such as "latitude", "longitude".
-    coord_col = if any(Symbol(String(n)) == :coordinates for n in names(infra))
-        find_col(infra, [:coordinates])
+    coord_col = if any(Symbol(String(n)) == :coordinates_kbh for n in names(infra))
+        find_col(infra, [:coordinates_kbh])
     else
         nothing
     end
@@ -708,28 +708,30 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
     
     # ----- Check for optimal routing ------ #
 
-    Opt_evtol1 = [1,3,1]
-    Opt_evtol2 = []
-    Opt_evtol3 = [5,2,3,5]
+    # Opt_evtol1 = [1,3,1]
+    # Opt_evtol2 = []
+    # Opt_evtol3 = [5,2,3,5]
 
-    if planes[1].route == Opt_evtol1 && 
-        planes[2].flightLegs == 0 &&
-        planes[3].route == Opt_evtol3
+    # if planes[1].route == Opt_evtol1 && 
+    #     planes[2].flightLegs == 0 &&
+    #     planes[3].route == Opt_evtol3
 
-        rt = zeros(Int, Vmax, Vmax)
-        for i in data.V, j in data.V
-            rt[i, j] = data.rt[(i, j)]
-        end
+    #     rt = zeros(Int, Vmax, Vmax)
+    #     for i in data.V, j in data.V
+    #         rt[i, j] = data.rt[(i, j)]
+    #     end
 
-        UpdateTurnAroundTimes(allPlaneSolution(planes), 1, maxTurnaround, data)
-        assignments, scheduled = assign_passengersV2(allPlaneSolution(planes), data, rt)
-        Obj = obj(allPlaneSolution(planes), data, rt)
-        println("Optimal Trips found, obj: $(Obj)")
-        print_chromosome_table(allPlaneSolution(planes))
-        print_assignments(assignments, data)
+    #     UpdateTurnAroundTimes(allPlaneSolution(planes), 1, maxTurnaround, data)
+    #     assignments, scheduled = assign_passengersV2(allPlaneSolution(planes), data, rt)
+    #     Obj = obj(allPlaneSolution(planes), data, rt)
+    #     println("Optimal Trips found, obj: $(Obj)")
+    #     print_chromosome_table(allPlaneSolution(planes))
+    #     print_assignments(assignments, data)
+    #     print_schedule_pretty(scheduled)
+
     
         
-    end
+    # end
 
 
     #-----------------------------------------
@@ -737,6 +739,9 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
 
     return allPlaneSolution(planes)
 end
+
+
+
 
 function print_chromosome_table(evtols::allPlaneSolution)
     println("Chromosome table:")
@@ -800,6 +805,38 @@ function build_scheduled_legs(evtols::allPlaneSolution, rt::Matrix{Int}, cap_u::
     return scheduled
 end
 
+function print_schedule_pretty(scheduled::Vector{ScheduledLeg}; sort_by_plane::Bool=true)
+    if isempty(scheduled)
+        println("Schedule is empty.")
+        return
+    end
+
+    legs = sort_by_plane ? sort(scheduled, by = l -> (l.plane, l.leg_index)) : scheduled
+
+    println("Schedule")
+    println("========")
+
+    current_plane = -1
+    for leg in legs
+        if leg.plane != current_plane
+            current_plane = leg.plane
+            println()
+            println("Plane $(current_plane)")
+            println("-" ^ 72)
+            @printf("%-6s %-6s %-6s %-6s %-8s %-8s %-8s\n",
+                    "Leg", "From", "To", "Dep", "Arr", "Dur", "CapLeft")
+            println("-" ^ 72)
+        end
+
+        dur = leg.arr - leg.dep
+        @printf("%-6d %-6d %-6d %-6d %-8d %-8d %-8d\n",
+                leg.leg_index, leg.from, leg.to, leg.dep, leg.arr, dur, leg.remaining_capacity)
+    end
+
+    println()
+    println("Total legs: $(length(legs))")
+end
+
 mutable struct PassengerAssignment
 
     group::Int
@@ -852,7 +889,7 @@ function find_direct_leg!V2(scheduled::Vector{ScheduledLeg}, a::Int, op, dp, dt,
     end
 
     best = candidates[argmin([leg.arr for leg in candidates])]
-    if so == 1
+    if so[a] == 1
         best.remaining_capacity -= q[a]
     else 
         best.remaining_capacity = 0 #Makes sure that the direct only passengers ride alone
@@ -1027,7 +1064,8 @@ function assign_passengersV2(evtols::allPlaneSolution, data, rt::Matrix{Int})
 
 
     price_by_group = Dict(a => fd[(op[a], dp[a])] * (so[a] == 1 ? 0.75 : 1.0) for a in A)
-    Price_sort = sort(A, by = a -> price_by_group[a], rev = true)  # descending
+    Price_sort = sort(A, by = a -> price_by_group[a], rev = true)  #descending
+
 
     for a in Price_sort
         if so[a] == 0
@@ -1036,12 +1074,7 @@ function assign_passengersV2(evtols::allPlaneSolution, data, rt::Matrix{Int})
                 push!(assignments, ass)
                 push!(assigned_groups, a)
             end
-        end
-
-
-
-
-        if so[a] == 1
+        else
             ass = find_direct_leg!V2(scheduled, a, op, dp, dt, q, w, so)
             if ass == nothing 
                 ass = find_one_stop_assignment!V2(scheduled, a, op, dp, dt, q, w)
@@ -1993,7 +2026,7 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt)
             best_obj = temp_obj
             best_sol = deepcopy(temp_sol)
             println("New best Obj $(best_obj)")
-            println("Method used: Initial Heurist")
+            println("Method used: Initial Heuristic")
         end
 
         improvement = true
@@ -2064,7 +2097,7 @@ end
 
 
 maxTurnaround = 50
-Maxtime = Int32(60) 
+Maxtime = Int32(10) 
 nr = 1
 
 (best_obj, best_sol, iterations) = Heuristic(maxTurnaround, Maxtime, data, rt)
@@ -2073,6 +2106,14 @@ println("Heuristic ran $(iterations) iterations")
 println("Best solution:")
 println("Objective Value: $(best_obj)")
 print_chromosome_table(best_sol)
+
+assignments, scheduled = assign_passengersV2(best_sol, data, rt)
+
+# println("Passenger Assignment")
+print_assignments(assignments, data)
+
+print_schedule_pretty(scheduled)
+# println("Max waiting time: $(data.w)")
 
 # start_time = time()
 # Best_sols = generate_best_initial_solutions(data, rt, top_k = nr)
