@@ -96,7 +96,7 @@ Expected sheets:
     - PassengerGroups (3)
     - PlaneData
 """
-function load_data(excel_file::String)
+function load_data(excel_file::String, parameter_file::String)
 
     ###########################################################################
     # Read sheets
@@ -113,8 +113,8 @@ function load_data(excel_file::String)
 
     # Coordinates can be either one string column "coordinates"
     # or two numeric columns such as "latitude", "longitude".
-    coord_col = if any(Symbol(String(n)) == :coordinates_kbh for n in names(infra))
-        find_col(infra, [:coordinates_kbh])
+    coord_col = if any(Symbol(String(n)) == :coordinates for n in names(infra))
+        find_col(infra, [:coordinates])
     else
         nothing
     end
@@ -181,10 +181,10 @@ function load_data(excel_file::String)
     # System parameters from Table 3
     ###########################################################################
     
-    df = XLSX.readtable(excel_file, "Parameters")
+    df = XLSX.readtable(parameter_file, "Parameters")
     params = Dict{String, Float64}()
 
-    XLSX.openxlsx(excel_file) do xf
+    XLSX.openxlsx(parameter_file) do xf
         sheet = xf["Parameters"]
         
         for row in XLSX.eachrow(sheet)
@@ -257,7 +257,7 @@ function load_data(excel_file::String)
     ###########################################################################
     # Prices
     ###########################################################################
-    prices = read_sheet(excel_file, "Prices")
+    prices = read_sheet(parameter_file, "Prices")
     from_col = find_col(prices, [:from])
     to_col   = find_col(prices, [:to])
     fd_sum_col = find_col(prices, [:fd_sum])
@@ -341,9 +341,9 @@ end
 # Model builder
 ###############################################################################
 
-function build_model(excel_file::String; show_progress::Bool = true, display_interval_sec::Int = 5)
+function build_model(excel_file::String, parameter_file::String; show_progress::Bool = true, display_interval_sec::Int = 5)
 
-    data = load_data(excel_file)
+    data = load_data(excel_file, parameter_file)
 
     A = data.A
     V = data.V
@@ -671,11 +671,12 @@ end
 # Solve + simple reporting
 ###############################################################################
 
-function solve_instance(excel_file::String; show_progress::Bool = true, display_interval_sec::Int = 5)
+function solve_instance(excel_file::String, parameter_file::String; show_progress::Bool = true, display_interval_sec::Int = 5)
     timings = Dict{String,Float64}()
 
     t_build = @elapsed model, data = build_model(
-        excel_file;
+        excel_file,
+        parameter_file;
         show_progress = show_progress,
         display_interval_sec = display_interval_sec,
     )
@@ -876,9 +877,10 @@ end
 ###############################################################################
 
 excel_file = joinpath("inputData/inputDataMini.xlsx")
+parameter_file = joinpath("inputData/Parameters.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()
-model, data, timings = solve_instance(excel_file)
+model, data, timings = solve_instance(excel_file, parameter_file)
 
 t_export = @elapsed export_solution_snapshots(model, data)
 timings["Snapshot export"] = t_export

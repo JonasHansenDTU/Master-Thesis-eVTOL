@@ -75,14 +75,14 @@ Expected sheets:
     - PassengerGroups (3)
     - PlaneData
 """
-function load_data(excel_file::String)
+function load_data(excel_file::String, parameter_file::String)
 
     ###########################################################################
     # Read sheets
     ###########################################################################
-    infra = read_sheet(excel_file, "Infrastructure (3)")
-    pax   = read_sheet(excel_file, "PassengerGroups (3)")
-    plane = read_sheet_any(excel_file, ["PlaneData (2)"])
+    infra = read_sheet(excel_file, "Infrastructure")
+    pax   = read_sheet(excel_file, "PassengerGroups")
+    plane = read_sheet_any(excel_file, ["PlaneData"])
 
     ###########################################################################
     # Infrastructure columns
@@ -92,8 +92,8 @@ function load_data(excel_file::String)
 
     # Coordinates can be either one string column "coordinates"
     # or two numeric columns such as "latitude", "longitude".
-    coord_col = if any(Symbol(String(n)) == :coordinates_kbh for n in names(infra))
-        find_col(infra, [:coordinates_kbh])
+    coord_col = if any(Symbol(String(n)) == :coordinates for n in names(infra))
+        find_col(infra, [:coordinates])
     else
         nothing
     end
@@ -160,10 +160,10 @@ function load_data(excel_file::String)
     # System parameters from Table 3
     ###########################################################################
     
-    df = XLSX.readtable(excel_file, "Parameters")
+    df = XLSX.readtable(parameter_file, "Parameters")
     params = Dict{String, Float64}()
 
-    XLSX.openxlsx(excel_file) do xf
+    XLSX.openxlsx(parameter_file) do xf
         sheet = xf["Parameters"]
         
         for row in XLSX.eachrow(sheet)
@@ -236,7 +236,7 @@ function load_data(excel_file::String)
     ###########################################################################
     # Prices
     ###########################################################################
-    prices = read_sheet(excel_file, "Prices")
+    prices = read_sheet(parameter_file, "Prices")
     from_col = find_col(prices, [:from])
     to_col   = find_col(prices, [:to])
     fd_sum_col = find_col(prices, [:fd_sum])

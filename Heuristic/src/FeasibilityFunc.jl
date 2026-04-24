@@ -18,7 +18,8 @@ function BatteryCharged(turnaroundTime::Float16, ec::Float32)
     return turnaroundTime*ec
 end
 
-function FeasibleBattery(evtols::allPlaneSolution, bmax::Float32, bmin::Float32, dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32)
+function FeasibleBattery(evtols::allPlaneSolution, bmax::Float32, bmid::Float32, bmin::Float32, dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32)
+
     for evtol in evtols.planes
         BatteryLevel = zeros(Float32, evtol.flightLegs + 1)
         BatteryLevel[1] = bmid
@@ -32,7 +33,11 @@ function FeasibleBattery(evtols::allPlaneSolution, bmax::Float32, bmin::Float32,
                 min(BatteryLevel[i] + BatteryCharged(Float16(evtol.turnaroundTime[i]), ec), bmax) -
                 BatteryNeeded(TravelLength, battery_per_km)
 
-            
+            if BatteryLevel[i+1] > 80
+                for i in bmid+1:BatteryLevel[i+1]
+                    battery_overrule += b_penalty
+                end
+            end
 
             if BatteryLevel[i + 1] < bmin
                 return false
@@ -40,7 +45,7 @@ function FeasibleBattery(evtols::allPlaneSolution, bmax::Float32, bmin::Float32,
         end
     end 
 
-    return true
+    return true, battery_overrule
 end
 
 function FeasibleCompletionTime(evtols::allPlaneSolution, rt::Matrix{Int}, ET::Int)
@@ -128,7 +133,7 @@ end
 #     return true
 # end
 
-function FeasibilityCheck(bmax::Float32, bmin::Float32,
+function FeasibilityCheck(bmax::Float32, bmid::Float32, bmin::Float32, 
     dist::Dict{Tuple{Int,Int},Float64},
     ec::Float32, battery_per_km::Float32,
     evtols::allPlaneSolution,
@@ -138,7 +143,7 @@ function FeasibilityCheck(bmax::Float32, bmin::Float32,
 
     P = zeros(Int32, 4)
 
-    if FeasibleBattery(evtols, bmax, bmin, dist, ec, battery_per_km) == false
+    if FeasibleBattery(evtols, bmax, bmid, bmin, dist, ec, battery_per_km) == false
         P[1] = 1
     end
 
@@ -153,6 +158,10 @@ function FeasibilityCheck(bmax::Float32, bmin::Float32,
     # if FeasibleCorridor(evtols, rt, T, V, cap_flt, ET) == false
     #     P[4] = 1
     # end
+
+    if FeasibleBattery(evtols, bmax, bmid, bmin, dist, ec, battery_per_km) == false
+        P[1] = 1
+    end
 
     return P
 end
