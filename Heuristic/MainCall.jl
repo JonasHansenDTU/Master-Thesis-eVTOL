@@ -10,8 +10,17 @@ const MOI = MathOptInterface
 
 
 src_dir = joinpath(@__DIR__, "src")
-for file in sort(readdir(src_dir))
-    endswith(file, ".jl") || continue
+source_files = [
+    "DataLoadFunc.jl",
+    "FeasibilityFunc.jl",
+    "InitialSolFunc.jl",
+    "PassAssignFunc.jl",
+    "FitnessFunc.jl",
+    "NeighborhoodFunc.jl",
+    "HeuristicFunc.jl",
+]
+
+for file in source_files
     include(joinpath(src_dir, file))
 end
 
@@ -29,7 +38,7 @@ end
 
 
 maxTurnaround = 100
-Maxtime = Int32(250) 
+Maxtime = Int32(30) 
 
 (best_obj, best_sol, iterations) = Heuristic(maxTurnaround, Maxtime, data, rt)
 

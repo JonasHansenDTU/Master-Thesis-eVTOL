@@ -1,3 +1,10 @@
+mutable struct PassengerAssignment
+
+    group::Int
+    plane::Int
+    legs::Vector{Int}
+end
+
 mutable struct ScheduledLeg
     plane::Int
     leg_index::Int

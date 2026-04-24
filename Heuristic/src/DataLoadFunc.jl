@@ -80,9 +80,9 @@ function load_data(excel_file::String)
     ###########################################################################
     # Read sheets
     ###########################################################################
-    infra = read_sheet(excel_file, "Infrastructure")
-    pax   = read_sheet(excel_file, "PassengerGroups")
-    plane = read_sheet_any(excel_file, ["PlaneData"])
+    infra = read_sheet(excel_file, "Infrastructure (3)")
+    pax   = read_sheet(excel_file, "PassengerGroups (3)")
+    plane = read_sheet_any(excel_file, ["PlaneData (2)"])
 
     ###########################################################################
     # Infrastructure columns
@@ -153,14 +153,6 @@ function load_data(excel_file::String)
         error("PlaneData has invalid Base Vertiport values $(bad_bases). Valid vertiports from Infrastructure are $(V).")
     end
 
-    M = 0:6
-    M_no0 = 1:maximum(M)
-    M_mid = 1:(maximum(M)-1)
-    M_no_last = 0:(maximum(M)-1)
-
-    T = 0:120
-    T_no0 = 1:maximum(T)
-
     # Passenger groups
     A = sort(Int.(pax[!, group_col]))
 
@@ -194,9 +186,11 @@ function load_data(excel_file::String)
     operating_cost_per_km = params["operating_cost_per_km"]
     battery_per_km        = params["battery_per_km"]
     time_per_km           = params["time_per_km"]
-    cap_flt               = params["cap_flt"]
     cap_u                 = params["cap_u"]
+    opening_cost          = params["opening_cost"]
     bmax                  = params["bmax"]
+    bmid                  = params["bmid"]
+    b_penalty             = params["b_penalty"]
     bmin                  = params["bmin"]
     ec                    = params["ec"]
     te                    = params["te"]
@@ -208,6 +202,13 @@ function load_data(excel_file::String)
     M2c                   = bmax + ec * ET
     M3                    = ET
 
+    M = 0:6
+    M_no0 = 1:maximum(M)
+    M_mid = 1:(maximum(M)-1)
+    M_no_last = 0:(maximum(M)-1)
+
+    T = 0:ET
+    T_no0 = 1:maximum(T)
 
     ###########################################################################
     # Node coordinates and parking capacities
@@ -231,6 +232,25 @@ function load_data(excel_file::String)
         end
     end
 
+
+    ###########################################################################
+    # Prices
+    ###########################################################################
+    prices = read_sheet(excel_file, "Prices")
+    from_col = find_col(prices, [:from])
+    to_col   = find_col(prices, [:to])
+    fd_sum_col = find_col(prices, [:fd_sum])
+    fd_lookup = Dict{Tuple{Int,Int}, Float64}()
+
+    for r in eachrow(prices)
+        i = Int(r[from_col])
+        j = Int(r[to_col])
+        fd_lookup[(i,j)] = Float64(r[fd_sum_col])
+    end
+    for (i,j) in collect(keys(fd_lookup))
+        fd_lookup[(j,i)] = fd_lookup[(i,j)]
+    end
+
     ###########################################################################
     # Derived arc parameters: distance, fd, fs, c, e, rt
     ###########################################################################
@@ -245,7 +265,7 @@ function load_data(excel_file::String)
     for i in V, j in V
         dij = haversine_km(lat[i], lon[i], lat[j], lon[j])
         dist[(i,j)] = dij
-        fd[(i,j)] = fare_direct_per_km * dij
+        fd[(i,j)] = get(fd_lookup, (i,j), 0.0)
         fs[(i,j)] = fare_stopover_factor * fd[(i,j)]
         c[(i,j)]  = operating_cost_per_km * dij
         e[(i,j)]  = battery_per_km * dij
@@ -289,9 +309,10 @@ function load_data(excel_file::String)
         T = collect(T), T_no0 = collect(T_no0),
         bv = bv,
         lat = lat, lon = lon,
-        dist = dist, fd = fd, fs = fs, c = c, e = e, rt = rt,
+        dist = dist, fd = fd_lookup, fs = fs, c = c, e = e, rt = rt,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
-        cap_v = cap_v, cap_flt = cap_flt, cap_u = cap_u,
-        bmax = bmax, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3, battery_per_km = battery_per_km
+        cap_v = cap_v, cap_u = cap_u, opening_cost = opening_cost,
+        bmax = bmax, bmid = bmid, b_penalty = b_penalty, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3,
+        battery_per_km = battery_per_km
     )
 end
