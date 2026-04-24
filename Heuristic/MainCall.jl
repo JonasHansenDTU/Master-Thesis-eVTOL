@@ -47,9 +47,19 @@ println("Best solution:")
 println("Objective Value: $(best_obj)")
 print_chromosome_table(best_sol)
 
+# Compute and print battery levels
+feasible, battery_levels = FeasibleBattery(best_sol, Float32(data.bmax), Float32(data.bmin), data.dist, Float32(data.ec), Float32(data.battery_per_km))
+println("Battery Levels:")
+for (p, levels) in enumerate(battery_levels)
+    println("Plane $p: $(levels)")
+end
+
 assignments, scheduled = assign_passengersV2(best_sol, data, rt)
 
 # println("Passenger Assignment")
 print_assignments(assignments, data)
 
 print_schedule_pretty(scheduled)
+
+# Export solution snapshots for visualization
+snapshots = export_solution_snapshots(best_sol, scheduled, assignments, battery_levels, data)

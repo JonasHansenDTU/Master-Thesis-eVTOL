@@ -19,6 +19,8 @@ function BatteryCharged(turnaroundTime::Float16, ec::Float32)
 end
 
 function FeasibleBattery(evtols::allPlaneSolution, bmax::Float32, bmin::Float32, dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32)
+    battery_levels = Vector{Vector{Float32}}()
+    feasible = true
     for evtol in evtols.planes
         BatteryLevel = zeros(Float32, evtol.flightLegs + 1)
         BatteryLevel[1] = bmid
@@ -35,12 +37,13 @@ function FeasibleBattery(evtols::allPlaneSolution, bmax::Float32, bmin::Float32,
             
 
             if BatteryLevel[i + 1] < bmin
-                return false
+                feasible = false
             end
         end
+        push!(battery_levels, BatteryLevel)
     end 
 
-    return true
+    return feasible, battery_levels
 end
 
 function FeasibleCompletionTime(evtols::allPlaneSolution, rt::Matrix{Int}, ET::Int)
@@ -138,7 +141,8 @@ function FeasibilityCheck(bmax::Float32, bmin::Float32,
 
     P = zeros(Int32, 4)
 
-    if FeasibleBattery(evtols, bmax, bmin, dist, ec, battery_per_km) == false
+    feasible_battery, _ = FeasibleBattery(evtols, bmax, bmin, dist, ec, battery_per_km)
+    if feasible_battery == false
         P[1] = 1
     end
 

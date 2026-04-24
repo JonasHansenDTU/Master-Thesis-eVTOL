@@ -347,3 +347,203 @@ function print_assignments(assignments::Vector{PassengerAssignment}, data)
         )
     end
 end
+
+function export_solution_snapshots(evtols::allPlaneSolution, scheduled::Vector{ScheduledLeg}, assignments::Vector{PassengerAssignment}, battery_levels::Vector{Vector{Float32}}, data; out_csv::String = joinpath(@__DIR__, "..", "solution_snapshots.csv"))
+    V = data.V
+    A = data.A
+    N = length(evtols.planes)
+    lat = data.lat
+    lon = data.lon
+    rt = data.rt
+    op = data.op
+    dp = data.dp
+    q = data.q
+    ET = Int(data.ET)
+
+    # Build a map of which passenger groups are assigned to which legs
+    passengers_on_leg = Dict{Tuple{Int,Int}, Vector{Int}}()  # (plane, leg_index) -> [group_ids]
+    for ass in assignments
+        for leg_idx in ass.legs
+            key = (ass.plane, leg_idx)
+            if !haskey(passengers_on_leg, key)
+                passengers_on_leg[key] = Int[]
+            end
+            push!(passengers_on_leg[key], ass.group)
+        end
+    end
+
+    # Build a map of which groups are served overall by each eVTOL
+    served_groups_by_evtol = Dict{Int, Vector{Int}}()
+    for n in 1:N
+        groups = Int[]
+        for (plane, leg_idx) in keys(passengers_on_leg)
+            if plane == n
+                append!(groups, passengers_on_leg[(plane, leg_idx)])
+            end
+        end
+        served_groups_by_evtol[n] = unique(groups)
+    end
+
+    rows = NamedTuple[]
+
+    for n in 1:N, t in 0:ET
+        # Determine state and location of eVTOL n at time t
+        state = "inactive"
+        node_from = missing
+        node_to = missing
+        op_index = missing
+        is_p = 0.0
+        is_o = 0.0
+
+        # Find which leg(s) this eVTOL is on at time t
+        for leg in scheduled
+            if leg.plane != n
+                continue
+            end
+
+            if leg.dep <= t < leg.arr
+                # Flying
+                state = "flying"
+                node_from = leg.from
+                node_to = leg.to
+                op_index = leg.leg_index
+                is_o = 1.0
+                break
+            elseif leg.arr <= t && (leg.leg_index == length([l for l in scheduled if l.plane == n]) || t < [l for l in scheduled if l.plane == n && l.leg_index > leg.leg_index][1].dep)
+                # Parked at destination
+                state = "parked"
+                node_from = leg.to
+                node_to = leg.to
+                is_p = 1.0
+                break
+            end
+        end
+
+        # Handle parked at base for first time step before first flight
+        if state == "inactive"
+            first_leg = findfirst(l -> l.plane == n, scheduled)
+            if first_leg !== nothing
+                if t < scheduled[first_leg].dep
+                    state = "parked"
+                    # Find base vertiport for this eVTOL
+                    base_vp = data.bv[n]
+                    node_from = base_vp
+                    node_to = base_vp
+                    is_p = 1.0
+                else
+                    state = "inactive"
+                end
+            else
+                state = "parked"
+                base_vp = data.bv[n]
+                node_from = base_vp
+                node_to = base_vp
+                is_p = 1.0
+            end
+        end
+
+        # Get coordinates
+        x_from = ismissing(node_from) ? missing : lon[node_from]
+        y_from = ismissing(node_from) ? missing : lat[node_from]
+        x_to = ismissing(node_to) ? missing : lon[node_to]
+        y_to = ismissing(node_to) ? missing : lat[node_to]
+
+        x = (ismissing(x_from) || ismissing(x_to)) ? missing : (x_from + x_to) / 2
+        y = (ismissing(y_from) || ismissing(y_to)) ? missing : (y_from + y_to) / 2
+
+        # Compute battery level for time t using physics-based calculation
+        # Start with full battery and simulate charging/discharging
+        battery_level = Float32(data.bmax)
+        current_time = 0
+        
+        for leg in sort([l for l in scheduled if l.plane == n], by=l->l.dep)
+            # Charge during parked time before this leg
+            parked_time = leg.dep - current_time
+            battery_level = min(battery_level + Float32(parked_time) * Float32(data.ec), Float32(data.bmax))
+            
+            # During flight of this leg
+            if leg.dep <= t < leg.arr
+                # Interpolate position during flight based on discharge rate
+                time_in_flight = t - leg.dep
+                flight_distance = Float32(data.dist[(leg.from, leg.to)]) 
+                discharge_rate = Float32(data.battery_per_km) * flight_distance / Float32(leg.arr - leg.dep)
+                battery_level = battery_level - discharge_rate * Float32(time_in_flight)
+                break
+            elseif t >= leg.arr
+                # After flight of this leg, apply full discharge
+                flight_distance = Float32(data.dist[(leg.from, leg.to)])
+                battery_level = battery_level - Float32(data.battery_per_km) * flight_distance
+                current_time = leg.arr
+            else
+                break
+            end
+        end
+        
+        # Clamp battery to valid range
+        battery_level = max(battery_level, Float32(data.bmin))
+
+        # Get passenger info
+        onboard_groups = Int[]
+        if state == "flying" && op_index !== missing
+            onboard_groups = get(passengers_on_leg, (n, op_index), Int[])
+        end
+        onboard_passenger_count = sum(q[a] for a in onboard_groups; init=0)
+        onboard_group_sizes = isempty(onboard_groups) ? "" : join(["$(a):$(q[a])" for a in onboard_groups], ";")
+
+        served_groups_evtol = served_groups_by_evtol[n]
+
+        push!(rows, (
+            time = t,
+            evtol_id = n,
+            state = state,
+            node_from = node_from,
+            node_to = node_to,
+            op = op_index,
+            is_p = is_p,
+            is_o = is_o,
+            battery_level = battery_level,
+            battery_after_op = op_index,
+            onboard_passenger_count = onboard_passenger_count,
+            onboard_groups = isempty(onboard_groups) ? "" : join(onboard_groups, ";"),
+            onboard_group_sizes = onboard_group_sizes,
+            served_groups_evtol = isempty(served_groups_evtol) ? "" : join(served_groups_evtol, ";"),
+            x = x,
+            y = y,
+            x_from = x_from,
+            y_from = y_from,
+            x_to = x_to,
+            y_to = y_to
+        ))
+    end
+
+    # Append infrastructure nodes as vertiport markers
+    for j in V
+        push!(rows, (
+            time = -1,
+            evtol_id = -1,
+            state = "vertiport",
+            node_from = j,
+            node_to = j,
+            op = -1,
+            is_p = 0.0,
+            is_o = 0.0,
+            battery_level = NaN,
+            battery_after_op = -1,
+            onboard_passenger_count = 0,
+            onboard_groups = "",
+            onboard_group_sizes = "",
+            served_groups_evtol = "",
+            x = lon[j],
+            y = lat[j],
+            x_from = lon[j],
+            y_from = lat[j],
+            x_to = lon[j],
+            y_to = lat[j]
+        ))
+    end
+
+    snapshots = DataFrame(rows)
+    CSV.write(out_csv, snapshots)
+    println("Snapshot export written: ", out_csv, " (rows=", nrow(snapshots), ")")
+    return snapshots
+end
