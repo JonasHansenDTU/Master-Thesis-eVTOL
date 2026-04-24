@@ -12,7 +12,7 @@ function fitnessFunction(evtols::allPlaneSolution,
     cap_v::Dict{},
     data
 )
-    P = FeasibilityCheck(bmax, bmin, dist, ec, battery_per_km, evtols, rt, ET, T, V, cap_v )
+    P = FeasibilityCheck(bmax, bmin, dist, ec, battery_per_km, evtols, rt, ET, T, V, cap_v)
 
     A  = data.A
     op = data.op

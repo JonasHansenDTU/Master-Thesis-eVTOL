@@ -101,9 +101,9 @@ function load_data(excel_file::String)
     ###########################################################################
     # Read sheets
     ###########################################################################
-    infra = read_sheet(excel_file, "Infrastructure (3)")
-    pax   = read_sheet(excel_file, "PassengerGroups (3)")
-    plane = read_sheet_any(excel_file, ["PlaneData (2)"])
+    infra = read_sheet(excel_file, "Infrastructure")
+    pax   = read_sheet(excel_file, "PassengerGroups")
+    plane = read_sheet_any(excel_file, ["PlaneData"])
 
     ###########################################################################
     # Infrastructure columns
@@ -559,7 +559,7 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
         sum(s[a,m,n] * q[a] for a in A) <= cap_u
     )
 
-    # (6.19) eVTOL starts with max battery
+    # (6.19) eVTOL starts with mid battery
     @constraint(model, [n in N], u[0,n] == bmid)
 
     # (6.20) Battery cannot exceed max
@@ -875,7 +875,7 @@ end
 # Usage
 ###############################################################################
 
-excel_file = joinpath(@__DIR__, "inputData.xlsx")
+excel_file = joinpath("inputData/inputDataMini.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()
 model, data, timings = solve_instance(excel_file)

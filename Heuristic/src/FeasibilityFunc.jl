@@ -21,7 +21,7 @@ end
 function FeasibleBattery(evtols::allPlaneSolution, bmax::Float32, bmin::Float32, dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32)
     for evtol in evtols.planes
         BatteryLevel = zeros(Float32, evtol.flightLegs + 1)
-        BatteryLevel[1] = bmax
+        BatteryLevel[1] = bmid
 
         for i in 1:evtol.flightLegs
             from = evtol.route[i]
@@ -31,6 +31,8 @@ function FeasibleBattery(evtols::allPlaneSolution, bmax::Float32, bmin::Float32,
             BatteryLevel[i + 1] =
                 min(BatteryLevel[i] + BatteryCharged(Float16(evtol.turnaroundTime[i]), ec), bmax) -
                 BatteryNeeded(TravelLength, battery_per_km)
+
+            
 
             if BatteryLevel[i + 1] < bmin
                 return false

@@ -101,9 +101,9 @@ function load_data(excel_file::String)
     ###########################################################################
     # Read sheets
     ###########################################################################
-    infra = read_sheet(excel_file, "Infrastructure (3)")
-    pax   = read_sheet(excel_file, "PassengerGroups (3)")
-    plane = read_sheet_any(excel_file, ["PlaneData (2)"])
+    infra = read_sheet(excel_file, "Infrastructure")
+    pax   = read_sheet(excel_file, "PassengerGroups")
+    plane = read_sheet_any(excel_file, ["PlaneData"])
 
     ###########################################################################
     # Infrastructure columns
@@ -174,14 +174,6 @@ function load_data(excel_file::String)
         error("PlaneData has invalid Base Vertiport values $(bad_bases). Valid vertiports from Infrastructure are $(V).")
     end
 
-    M = 0:6
-    M_no0 = 1:maximum(M)
-    M_mid = 1:(maximum(M)-1)
-    M_no_last = 0:(maximum(M)-1)
-
-    T = 0:120
-    T_no0 = 1:maximum(T)
-
     # Passenger groups
     A = sort(Int.(pax[!, group_col]))
 
@@ -215,7 +207,6 @@ function load_data(excel_file::String)
     operating_cost_per_km = params["operating_cost_per_km"]
     battery_per_km        = params["battery_per_km"]
     time_per_km           = params["time_per_km"]
-    cap_flt               = params["cap_flt"]
     cap_u                 = params["cap_u"]
     bmax                  = params["bmax"]
     bmin                  = params["bmin"]
@@ -229,6 +220,14 @@ function load_data(excel_file::String)
     M2c                   = bmax + ec * ET
     M3                    = ET
 
+
+    M = 0:6
+    M_no0 = 1:maximum(M)
+    M_mid = 1:(maximum(M)-1)
+    M_no_last = 0:(maximum(M)-1)
+
+    T = 0:ET
+    T_no0 = 1:maximum(T)
 
     ###########################################################################
     # Node coordinates and parking capacities
@@ -312,7 +311,7 @@ function load_data(excel_file::String)
         lat = lat, lon = lon,
         dist = dist, fd = fd, fs = fs, c = c, e = e, rt = rt,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
-        cap_v = cap_v, cap_flt = cap_flt, cap_u = cap_u,
+        cap_v = cap_v, cap_u = cap_u,
         bmax = bmax, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3
     )
 end
@@ -350,7 +349,6 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
     p  = data.p
 
     cap_v = data.cap_v
-    cap_flt  = data.cap_flt
     cap_u    = data.cap_u
     bmax     = data.bmax
     bmin     = data.bmin
@@ -635,11 +633,6 @@ function build_model(excel_file::String; show_progress::Bool = true, display_int
         sum(is_p[j,n,t] for n in N) <= cap_v[j]
     )
 
-    # (6.37) Air corridor capacity
-    @constraint(model, [i in V, j in V, t in T],
-        sum(is_o[i,j,m,n,t] for m in M, n in N) <= cap_flt
-    )
-
     return model, data
 end
 
@@ -851,7 +844,7 @@ end
 # Usage
 ###############################################################################
 
-excel_file = joinpath(@__DIR__, "inputData.xlsx")
+excel_file = joinpath("inputData/inputDataMini.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()
 model, data, timings = solve_instance(excel_file)
@@ -882,7 +875,6 @@ function print_results_pretty(model::Model, data)
     T_no0 = data.T_no0
     bv = data.bv
     cap_v = data.cap_v
-    cap_flt = data.cap_flt
     cap_u = data.cap_u
     bmax = data.bmax
     bmin = data.bmin
@@ -929,7 +921,6 @@ function print_results_pretty(model::Model, data)
     println(lpad("Maximum waiting time (w)", 35) * ": " * @sprintf("%.2f", w) * " min")
     println(lpad("End time (ET)", 35) * ": " * @sprintf("%.2f", ET))
     println(lpad("eVTOL seat capacity (cap_u)", 35) * ": " * string(Int(cap_u)))
-    println(lpad("Air corridor capacity (cap_flt)", 35) * ": " * string(Int(cap_flt)))
 
     section("INFRASTRUCTURE NODES & PARKING CAPACITY")
     println(lpad("Node", 6) * " | " * lpad("Type", 11) * " | " * lpad("Capacity", 10))
