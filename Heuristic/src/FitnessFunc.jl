@@ -1,5 +1,4 @@
-function fitnessFunction(
-    evtols::allPlaneSolution,
+function fitnessFunction(evtols::allPlaneSolution,
     assignments::Vector{PassengerAssignment},
     bmax::Float32,
     bmin::Float32,
@@ -10,24 +9,10 @@ function fitnessFunction(
     ET::Int,
     T::Int,
     V::Int,
-    # cap_flt::Int,
     cap_v::Dict{},
     data
 )
-    P = FeasibilityCheck(
-        bmax,
-        bmin,
-        dist,
-        ec,
-        battery_per_km,
-        evtols,
-        rt,
-        ET,
-        T,
-        V,
-        # cap_flt,
-        cap_v
-    )
+    P = FeasibilityCheck(bmax, bmin, dist, ec, battery_per_km, evtols, rt, ET, T, V, cap_v )
 
     A  = data.A
     op = data.op
