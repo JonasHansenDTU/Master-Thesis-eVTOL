@@ -1088,7 +1088,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--params-excel",
         type=Path,
-        default=Path(__file__).with_name("inputData.xlsx"),
+        default=Path(__file__).resolve().parent.parent / "inputData" / "inputData.xlsx",
         help="Excel file containing the Parameters sheet used for battery rates and bounds.",
     )
     parser.add_argument(

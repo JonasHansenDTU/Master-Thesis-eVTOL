@@ -27,7 +27,7 @@ end
 
 
 
-excel_file = joinpath(@__DIR__, "inputData.xlsx")
+excel_file = joinpath(@__DIR__, "..", "inputData", "inputData.xlsx")
 data = load_data(excel_file)
 
 Vmax = maximum(data.V)
