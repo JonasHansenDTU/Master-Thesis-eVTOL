@@ -156,7 +156,7 @@ function obj(planes::allPlaneSolution, data, rt)
             Int(round(data.ET)),
             maximum(Int.(data.T)),
             maximum(data.V),
-            Int(round(data.cap_flt)),
+            # Int(round(data.cap_flt)),
             data.cap_v,
             data
         )

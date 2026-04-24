@@ -312,6 +312,7 @@ function load_data(excel_file::String)
         dist = dist, fd = fd_lookup, fs = fs, c = c, e = e, rt = rt,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
         cap_v = cap_v, cap_u = cap_u, opening_cost = opening_cost,
-        bmax = bmax, bmid = bmid, b_penalty = b_penalty, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3
+        bmax = bmax, bmid = bmid, b_penalty = b_penalty, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3,
+        battery_per_km = battery_per_km
     )
 end

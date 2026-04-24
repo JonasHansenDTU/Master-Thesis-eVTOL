@@ -93,45 +93,46 @@ function FeasibleVertiportCapacity(evtols::allPlaneSolution, rt::Matrix{Int}, T:
     return true
 end
 
-function FeasibleCorridor(evtols::allPlaneSolution, rt::Matrix{Int}, T::Int, V::Int, cap_flt::Int, ET::Int)
-    destinationTimes = zeros(Int, V, V, T)
+# function FeasibleCorridor(evtols::allPlaneSolution, rt::Matrix{Int}, T::Int, V::Int, cap_flt::Int, ET::Int)
+#     destinationTimes = zeros(Int, V, V, T)
 
-    for evtol in evtols.planes
-        travelTime = 0
+#     for evtol in evtols.planes
+#         travelTime = 0
 
-        for i in 1:evtol.flightLegs
-            from = evtol.route[i]
-            to = evtol.route[i+1]
+#         for i in 1:evtol.flightLegs
+#             from = evtol.route[i]
+#             to = evtol.route[i+1]
 
-            startTime = travelTime + evtol.turnaroundTime[i]
-            endTime = travelTime + evtol.turnaroundTime[i] + rt[from, to]
+#             startTime = travelTime + evtol.turnaroundTime[i]
+#             endTime = travelTime + evtol.turnaroundTime[i] + rt[from, to]
 
-            if endTime > ET 
-                endTime = ET
-            end
+#             if endTime > ET 
+#                 endTime = ET
+#             end
 
-            for t in startTime:endTime
-                if t >= 1
-                    destinationTimes[from, to, t] += 1
-                    if destinationTimes[from, to, t] > cap_flt 
-                        return false
-                    end
-                end
-            end
+#             for t in startTime:endTime
+#                 if t >= 1
+#                     destinationTimes[from, to, t] += 1
+#                     if destinationTimes[from, to, t] > cap_flt 
+#                         return false
+#                     end
+#                 end
+#             end
 
-            travelTime += evtol.turnaroundTime[i] + rt[from, to]
-        end
-    end
+#             travelTime += evtol.turnaroundTime[i] + rt[from, to]
+#         end
+#     end
 
-    return true
-end
+#     return true
+# end
 
 function FeasibilityCheck(bmax::Float32, bmin::Float32,
     dist::Dict{Tuple{Int,Int},Float64},
     ec::Float32, battery_per_km::Float32,
     evtols::allPlaneSolution,
     rt::Matrix{Int}, ET::Int, T::Int, V::Int,
-    cap_flt::Int, cap_v::Dict{})
+    # cap_flt::Int, 
+    cap_v::Dict{})
 
     P = zeros(Int32, 4)
 
@@ -147,9 +148,9 @@ function FeasibilityCheck(bmax::Float32, bmin::Float32,
         P[3] = 1
     end
 
-    if FeasibleCorridor(evtols, rt, T, V, cap_flt, ET) == false
-        P[4] = 1
-    end
+    # if FeasibleCorridor(evtols, rt, T, V, cap_flt, ET) == false
+    #     P[4] = 1
+    # end
 
     return P
 end

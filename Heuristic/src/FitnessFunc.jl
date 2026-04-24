@@ -10,7 +10,7 @@ function fitnessFunction(
     ET::Int,
     T::Int,
     V::Int,
-    cap_flt::Int,
+    # cap_flt::Int,
     cap_v::Dict{},
     data
 )
@@ -25,7 +25,7 @@ function fitnessFunction(
         ET,
         T,
         V,
-        cap_flt,
+        # cap_flt,
         cap_v
     )
 
