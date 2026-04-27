@@ -30,8 +30,6 @@ function has_consecutive_duplicates(route)
     return false
 end
 
-
-
 function Constructor(plane::planeSolution, VP::Int, idx::Int, data)
     te32 = Int32(data.te)
 
@@ -142,17 +140,18 @@ function UpdateTurnAroundTimes(planes::allPlaneSolution, from::Int64, maxTurnaro
 end
 
 function obj(planes::allPlaneSolution, data, rt)
-    assignments, scheduled = assign_passengersV2(planes, data, rt)
+    assignments, scheduled = assign_passengersV2(planes, data, Int.(rt))
 
     fitness = fitnessFunction(
             planes,
             assignments,
             Float32(data.bmax),
+            Float32(data.bmid),
             Float32(data.bmin),
             data.dist,
             Float32(data.ec),
             Float32(data.battery_per_km),
-            rt,
+            Int.(rt),
             Int(round(data.ET)),
             maximum(Int.(data.T)),
             maximum(data.V),

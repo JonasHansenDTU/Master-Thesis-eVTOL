@@ -165,9 +165,6 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
     return allPlaneSolution(planes)
 end
 
-
-
-
 function print_chromosome_table(evtols::allPlaneSolution)
     println("Chromosome table:")
     println("-----------------")
@@ -197,35 +194,38 @@ function generate_best_initial_solutions(data, rt; n_runs::Int=1000, top_k::Int=
     for run in 1:n_runs
         evtols_init = initial_chromosome_solution(data; maxLegs=maxLegs, maxTurnaround=maxTurnaround)
 
-        assignments, scheduled = assign_passengersV2(evtols_init, data, rt)
+        assignments, scheduled = assign_passengersV2(evtols_init, data, Int.(rt))
 
         # model, scheduled = assign_passengers_Solver2(evtols_init, data, rt)
         # assignments = extract_assignments2(model)
 
         P = FeasibilityCheck(
             Float32(data.bmax),
+            Float32(data.bmid),
             Float32(data.bmin),
             data.dist,
             Float32(data.ec),
             Float32(data.battery_per_km),
             evtols_init,
-            rt,
+            Int.(rt),
             Int(round(data.ET)),
             maximum(Int.(data.T)),
             maximum(data.V),
             # Int(round(data.cap_flt)),
-            data.cap_v
+            data.cap_v,
+            data.b_penalty
         )
 
         fitness = fitnessFunction(
             evtols_init,
             assignments,
             Float32(data.bmax),
+            Float32(data.bmid),
             Float32(data.bmin),
             data.dist,
             Float32(data.ec),
             Float32(data.battery_per_km),
-            rt,
+            Int.(rt),
             Int(round(data.ET)),
             maximum(Int.(data.T)),
             maximum(data.V),

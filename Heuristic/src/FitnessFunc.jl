@@ -1,19 +1,7 @@
-function fitnessFunction(evtols::allPlaneSolution,
-    assignments::Vector{PassengerAssignment},
-    bmax::Float32,
-    bmin::Float32,
-    dist::Dict{Tuple{Int,Int},Float64},
-    ec::Float32,
-    battery_per_km::Float32,
-    rt::Matrix{Int},
-    ET::Int,
-    T::Int,
-    V::Int,
-    cap_v::Dict{},
-    data
-)
-    P = FeasibilityCheck(bmax, bmin, dist, ec, battery_per_km, evtols, rt, ET, T, V, cap_v)
-
+function fitnessFunction(evtols::allPlaneSolution, assignments::Vector{PassengerAssignment}, bmax::Float32, bmid::Float32, bmin::Float32,
+    dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32, rt::Matrix{Int}, ET::Int, T::Int, V::Int, cap_v::Dict{}, data)
+    
+    b_penalty = data.b_penalty 
     A  = data.A
     op = data.op
     dp = data.dp
@@ -22,6 +10,9 @@ function fitnessFunction(evtols::allPlaneSolution,
     c  = data.c
     so = data.so
     p  = data.p
+    opening_cost = data.opening_cost
+
+    P = FeasibilityCheck(bmax, bmid, bmin, dist, ec, battery_per_km, evtols, rt, ET, T, V, cap_v, b_penalty)
 
     fitnessvalue = 0.0
 
@@ -53,12 +44,12 @@ function fitnessFunction(evtols::allPlaneSolution,
     # 4. Fixed cost for each used eVTOL
     for plane in evtols.planes
         if plane.flightLegs > 0
-            fitnessvalue -= 400.0
+            fitnessvalue -= opening_cost
         end
     end
 
     # 5. Large infeasibility penalty
-    fitnessvalue -= sum(P) * 1_000_000.0
+    fitnessvalue -= sum(P)
 
     return fitnessvalue
 end
