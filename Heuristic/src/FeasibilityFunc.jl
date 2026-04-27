@@ -19,8 +19,10 @@ function BatteryCharged(turnaroundTime::Float16, ec::Float32)
 end
 
 function FeasibleBattery(evtols::allPlaneSolution, bmax::Float32, bmid::Float32, bmin::Float32, dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32, b_penalty)
-
+    battery_levels = Vector{Vector{Float32}}()
     battery_overrule = 0
+
+    feasible = true
 
     for evtol in evtols.planes
         BatteryLevel = zeros(Float32, evtol.flightLegs + 1)
@@ -42,12 +44,14 @@ function FeasibleBattery(evtols::allPlaneSolution, bmax::Float32, bmid::Float32,
             end
 
             if BatteryLevel[i + 1] < bmin
-                return false
+                feasible = false
             end
         end
+
+        push!(battery_levels, BatteryLevel) 
     end 
 
-    return true, battery_overrule
+    return feasible, battery_levels, battery_overrule
 end
 
 function FeasibleCompletionTime(evtols::allPlaneSolution, rt::Matrix{Int}, ET::Int)
@@ -102,57 +106,19 @@ function FeasibleVertiportCapacity(evtols::allPlaneSolution, rt::Matrix{Int}, T:
     return true
 end
 
-# function FeasibleCorridor(evtols::allPlaneSolution, rt::Matrix{Int}, T::Int, V::Int, cap_flt::Int, ET::Int)
-#     destinationTimes = zeros(Int, V, V, T)
-
-#     for evtol in evtols.planes
-#         travelTime = 0
-
-#         for i in 1:evtol.flightLegs
-#             from = evtol.route[i]
-#             to = evtol.route[i+1]
-
-#             startTime = travelTime + evtol.turnaroundTime[i]
-#             endTime = travelTime + evtol.turnaroundTime[i] + rt[from, to]
-
-#             if endTime > ET 
-#                 endTime = ET
-#             end
-
-#             for t in startTime:endTime
-#                 if t >= 1
-#                     destinationTimes[from, to, t] += 1
-#                     if destinationTimes[from, to, t] > cap_flt 
-#                         return false
-#                     end
-#                 end
-#             end
-
-#             travelTime += evtol.turnaroundTime[i] + rt[from, to]
-#         end
-#     end
-
-#     return true
-# end
-
-function FeasibilityCheck(bmax::Float32, bmid::Float32, bmin::Float32, 
-    dist::Dict{Tuple{Int,Int},Float64},
-    ec::Float32, battery_per_km::Float32,
-    evtols::allPlaneSolution,
-    rt::Matrix{Int}, ET::Int, T::Int, V::Int,
-    # cap_flt::Int, 
-    cap_v::Dict{},
-    b_penalty)
+function FeasibilityCheck(bmax::Float32, bmid::Float32, bmin::Float32, dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32,
+    evtols::allPlaneSolution,rt::Matrix{Int}, ET::Int, T::Int, V::Int,cap_v::Dict{},b_penalty)
 
     P = zeros(Int32, 4)
 
-    if FeasibleBattery(evtols, bmax, bmid, bmin, dist, ec, battery_per_km, b_penalty) == false
+    feasible, battery_levels, battery_overrule = FeasibleBattery(evtols, bmax, bmid, bmin, dist, ec, battery_per_km, b_penalty)
+
+    if feasible == false
         P[1] = 1_000_000
     end
 
-    if FeasibleBattery(evtols, bmax, bmid, bmin, dist, ec, battery_per_km, b_penalty) == true
-        battery_overrule = FeasibleBattery(evtols, bmax, bmid, bmin, dist, ec, battery_per_km, b_penalty)
-        P[1] = battery_overrule
+    if feasible == true
+        P[1] = battery_overrule 
     end
 
     if FeasibleCompletionTime(evtols, rt, ET) == false
