@@ -105,8 +105,6 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
             push!(route, Int32(base))
         end
 
-
-
         turnaroundTime = Int32[]
         current_time = 0
         current_VP = base
@@ -198,7 +196,7 @@ function generate_best_initial_solutions(data, rt; n_runs::Int=1000, top_k::Int=
         # model, scheduled = assign_passengers_Solver2(evtols_init, data, rt)
         # assignments = extract_assignments2(model)
 
-        P, battery_levels = FeasibilityCheck(Float32(data.bmax), Float32(data.bmid), Float32(data.bmin), data.dist, Float32(data.ec),
+        P = FeasibilityCheck(Float32(data.bmax), Float32(data.bmid), Float32(data.bmin), data.dist, Float32(data.ec),
             Float32(data.battery_per_km), evtols_init, Int.(rt), Int(round(data.ET)), maximum(Int.(data.T)), maximum(data.V), data.cap_v, data.b_penalty)
 
         fitness = fitnessFunction(evtols_init, assignments, Float32(data.bmax), Float32(data.bmid), Float32(data.bmin), data.dist, Float32(data.ec),

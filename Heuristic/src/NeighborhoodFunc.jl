@@ -155,7 +155,6 @@ function obj(planes::allPlaneSolution, data, rt)
             Int(round(data.ET)),
             maximum(Int.(data.T)),
             maximum(data.V),
-            # Int(round(data.cap_flt)),
             data.cap_v,
             data
         )
@@ -185,7 +184,7 @@ function DestructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::
             new_obj = obj(temp_sol, data, rt)
 
             temp_sol2 = deepcopy(temp_sol)
-            from_idx = Int64(max(1, idx - 1))
+            from_idx = Int64(idx - 1)
             UpdateTurnAroundTimes(temp_sol2, from_idx, maxTurnaround, data)
             new_obj2 = obj(temp_sol2, data, rt)
 
@@ -210,7 +209,6 @@ function ConstructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj:
     V = data.V
     best_obj = init_obj
     best_sol = deepcopy(planes)
-
 
     for n in N
         m = Int(planes.planes[n].flightLegs)

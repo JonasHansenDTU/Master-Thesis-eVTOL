@@ -129,9 +129,6 @@ function FeasibilityCheck(bmax::Float32, bmid::Float32, bmin::Float32, dist::Dic
         P[3] = 1_000_000
     end
 
-    # if FeasibleCorridor(evtols, rt, T, V, cap_flt, ET) == false
-    #     P[4] = 1
-    # end
 
     return P
 end

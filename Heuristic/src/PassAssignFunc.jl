@@ -78,7 +78,6 @@ function print_schedule_pretty(scheduled::Vector{ScheduledLeg}; sort_by_plane::B
 end
 
 mutable struct PassengerAssignment
-
     group::Int
     plane::Int
     legs::Vector{Int}
@@ -212,7 +211,8 @@ function find_one_stop_assignment!V2(scheduled::Vector{ScheduledLeg},
 
                 leg2 = scheduled[idx+1]
                 if leg2.plane == leg1.plane &&
-                    leg2.to == dp[a]
+                    leg2.to == dp[a] &&
+                    leg2.remaining_capacity >= q[a]
 
                     if leg2.arr < best_arrival
                         best_arrival = leg2.arr
@@ -302,10 +302,8 @@ function assign_passengersV2(evtols::allPlaneSolution, data, rt::Matrix{Int})
     assignments = PassengerAssignment[]
     assigned_groups = Set{Int}()
 
-
     price_by_group = Dict(a => fd[(op[a], dp[a])] * (so[a] == 1 ? 0.75 : 1.0) for a in A)
     Price_sort = sort(A, by = a -> price_by_group[a], rev = true)  #descending
-
 
     for a in Price_sort
         if so[a] == 0
@@ -348,7 +346,7 @@ function print_assignments(assignments::Vector{PassengerAssignment}, data)
     end
 end
 
-function export_solution_snapshots(evtols::allPlaneSolution, scheduled::Vector{ScheduledLeg}, assignments::Vector{PassengerAssignment}, battery_levels::Vector{Vector{Float32}}, data; out_csv::String = joinpath(@__DIR__, "..", "solution_snapshots.csv"))
+function export_solution_snapshots(evtols::allPlaneSolution, scheduled::Vector{ScheduledLeg}, assignments::Vector{PassengerAssignment}, data; out_csv::String = joinpath(@__DIR__, "..", "solution_snapshots.csv"))
     V = data.V
     A = data.A
     N = length(evtols.planes)
