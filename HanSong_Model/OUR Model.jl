@@ -568,7 +568,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     # (6.21) Battery must stay above minimum
     @constraint(model, [m in M, n in N], u[m,n] >= bmin)
 
-    # (6.22) Soft upper battery target: penalize battery above bmid
+    # (6.22) Penalize battery above bmid
     @constraint(model, [m in M_no0, n in N], over_bmid[m,n] >= u[m,n] - bmid)
 
     # (6.23a) First operation from a vertiport only reflects energy consumption

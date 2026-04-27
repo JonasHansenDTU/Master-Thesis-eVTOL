@@ -212,7 +212,8 @@ function generate_best_initial_solutions(data, rt; n_runs::Int=1000, top_k::Int=
             maximum(Int.(data.T)),
             maximum(data.V),
             # Int(round(data.cap_flt)),
-            data.cap_v
+            data.cap_v,
+            data.b_penalty
         )
 
         fitness = fitnessFunction(
