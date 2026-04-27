@@ -16,6 +16,12 @@ function fitnessFunction(evtols::allPlaneSolution, assignments::Vector{Passenger
 
     fitnessvalue = 0.0
 
+    # if (evtols.planes[1].flightLegs == 0 &&
+    #     evtols.planes[2].route == [2, 3, 2] &&
+    #     evtols.planes[3].route == [5, 3, 5])
+    #     println("tjek")
+    # end
+
     # 1. Revenue from assigned passenger groups
     for ass in assignments
         a = ass.group
