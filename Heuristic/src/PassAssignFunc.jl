@@ -212,7 +212,8 @@ function find_one_stop_assignment!V2(scheduled::Vector{ScheduledLeg},
 
                 leg2 = scheduled[idx+1]
                 if leg2.plane == leg1.plane &&
-                    leg2.to == dp[a]
+                    leg2.to == dp[a] &&
+                    leg2.remaining_capacity >= q[a]
 
                     if leg2.arr < best_arrival
                         best_arrival = leg2.arr

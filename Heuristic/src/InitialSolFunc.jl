@@ -48,29 +48,48 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
     planes = planeSolution[]
     nPlanes = length(N)
 
-    choices = [i for i in 0:maxLegs*nPlanes if i != 1]
+    choices = [i for i in 0:(maxLegs * nPlanes) if i != 1]
     total_flight_legs = rand(choices)
-    Set_of_flightlegs = [i for i in 0:total_flight_legs if i != 1 && i != total_flight_legs-1]
 
-    allowed_legs = zeros(Int, nPlanes+1)
-    allowed_legs[nPlanes+1] = total_flight_legs
+    allowed_legs = zeros(Int, nPlanes)
 
-    # println(Set_of_flightlegs)
+    while true
+        remaining = total_flight_legs
+        allowed_legs .= 0
+        feasible_distribution = true
 
-    for n in 1:nPlanes-1
-        allowed_legs[n+1] = (rand(Set_of_flightlegs))
-        
-        while n > 1 && (allowed_legs[n+1] == allowed_legs[n] -1 
-                    || allowed_legs[n+1] == allowed_legs[n] +1) 
-            allowed_legs[n] = rand(Set_of_flightlegs) 
-            # println("HERE")
+        for n in 1:(nPlanes - 1)
+            feasible_choices = Int[]
+
+            for x in 0:maxLegs
+                rem_after = remaining - x
+                if x != 1 && rem_after >= 0
+                    max_possible_rest = maxLegs * (nPlanes - n)
+                    if (rem_after == 0 || rem_after >= 2) && rem_after <= max_possible_rest
+                        push!(feasible_choices, x)
+                    end
+                end
+            end
+
+            if isempty(feasible_choices)
+                feasible_distribution = false
+                break
+            end
+
+            choice = rand(feasible_choices)
+            allowed_legs[n] = choice
+            remaining -= choice
+        end
+
+        if feasible_distribution &&
+           remaining <= maxLegs &&
+           remaining != 1 &&
+           remaining >= 0
+            allowed_legs[nPlanes] = remaining
+            allowed_legs = shuffle!(allowed_legs)
+            break
         end
     end
-
-    allowed_legs = sort(allowed_legs)
-
-
-    allowed_legs = shuffle!([allowed_legs[i]-allowed_legs[i-1] for i in 2:nPlanes+1])
 
 
     for n in 1:nPlanes
@@ -160,6 +179,12 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
 
 
     #-----------------------------------------
+    planes1 = allPlaneSolution(planes)
+    for n in N
+        if planes1.planes[n].route[1] != planes1.planes[n].route[end]
+            println("HEY!!!")
+        end
+    end
 
 
     return allPlaneSolution(planes)
