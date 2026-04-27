@@ -187,7 +187,6 @@ function print_chromosome_table(evtols::allPlaneSolution)
     end
 end
 
-
 function generate_best_initial_solutions(data, rt; n_runs::Int=1000, top_k::Int=10, maxLegs::Int=5, maxTurnaround::Int=30, print_each::Bool=false)
     results = NamedTuple[]
 
@@ -199,49 +198,13 @@ function generate_best_initial_solutions(data, rt; n_runs::Int=1000, top_k::Int=
         # model, scheduled = assign_passengers_Solver2(evtols_init, data, rt)
         # assignments = extract_assignments2(model)
 
-        P = FeasibilityCheck(
-            Float32(data.bmax),
-            Float32(data.bmid),
-            Float32(data.bmin),
-            data.dist,
-            Float32(data.ec),
-            Float32(data.battery_per_km),
-            evtols_init,
-            Int.(rt),
-            Int(round(data.ET)),
-            maximum(Int.(data.T)),
-            maximum(data.V),
-            # Int(round(data.cap_flt)),
-            data.cap_v,
-            data.b_penalty
-        )
+        P, battery_levels = FeasibilityCheck(Float32(data.bmax), Float32(data.bmid), Float32(data.bmin), data.dist, Float32(data.ec),
+            Float32(data.battery_per_km), evtols_init, Int.(rt), Int(round(data.ET)), maximum(Int.(data.T)), maximum(data.V), data.cap_v, data.b_penalty)
 
-        fitness = fitnessFunction(
-            evtols_init,
-            assignments,
-            Float32(data.bmax),
-            Float32(data.bmid),
-            Float32(data.bmin),
-            data.dist,
-            Float32(data.ec),
-            Float32(data.battery_per_km),
-            Int.(rt),
-            Int(round(data.ET)),
-            maximum(Int.(data.T)),
-            maximum(data.V),
-            # Int(round(data.cap_flt)),
-            data.cap_v,
-            data
-        )
+        fitness = fitnessFunction(evtols_init, assignments, Float32(data.bmax), Float32(data.bmid), Float32(data.bmin), data.dist, Float32(data.ec),
+            Float32(data.battery_per_km), Int.(rt), Int(round(data.ET)), maximum(Int.(data.T)), maximum(data.V), data.cap_v, data)
 
-        push!(results, (
-            run = run,
-            fitness = fitness,
-            evtols = evtols_init,
-            assignments = assignments,
-            scheduled = scheduled,
-            P = P
-        ))
+        push!(results, (run = run, fitness = fitness, evtols = evtols_init, assignments = assignments, scheduled = scheduled, P = P))
 
         if print_each
             println("Run $run | fitness = $fitness | P = $P")
