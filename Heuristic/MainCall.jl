@@ -8,7 +8,6 @@ using MathOptInterface
 using Printf
 const MOI = MathOptInterface
 
-
 src_dir = joinpath(@__DIR__, "src")
 source_files = [
     "DataLoadFunc.jl",
@@ -59,5 +58,5 @@ assignments, scheduled = assign_passengersV2(best_sol, data, Int.(rt))
 print_assignments(assignments, data)
 
 # Export solution snapshots for visualization
-snapshots = export_solution_snapshots(best_sol, scheduled, assignments, battery_levels, data)
+#snapshots = export_solution_snapshots(best_sol, scheduled, assignments, battery_levels, data)
 print_schedule_pretty(scheduled) 

@@ -15,6 +15,7 @@ function BatteryNeeded(TravelLength::Float32, battery_per_km::Float32)
 end
 
 function BatteryCharged(turnaroundTime::Float16, ec::Float32)
+
     return turnaroundTime*ec
 end
 
@@ -28,14 +29,22 @@ function FeasibleBattery(evtols::allPlaneSolution, bmax::Float32, bmid::Float32,
         BatteryLevel = zeros(Float32, evtol.flightLegs + 1)
         BatteryLevel[1] = bmid
 
-        for i in 1:evtol.flightLegs
+        if evtol.flightLegs >0
+            from2 = evtol.route[1]
+            to2 = evtol.route[2]
+            TravelLength2 = Float32(dist[(from2, to2)])
+            BatteryLevel[2] = BatteryLevel[1] - BatteryNeeded(TravelLength2, battery_per_km)
+        end
+
+        for i in 2:evtol.flightLegs
             from = evtol.route[i]
             to = evtol.route[i + 1]
             TravelLength = Float32(dist[(from, to)])
 
             BatteryLevel[i + 1] =
-                min(BatteryLevel[i] + BatteryCharged(Float16(evtol.turnaroundTime[i]), ec), bmax) -
-                BatteryNeeded(TravelLength, battery_per_km)
+                min(BatteryLevel[i] +
+                min(min(BatteryCharged(Float16(evtol.turnaroundTime[i]), ec), bmax - BatteryLevel[i]), BatteryNeeded(TravelLength, battery_per_km)) -
+                BatteryNeeded(TravelLength, battery_per_km), bmax)
 
             if BatteryLevel[i+1] > 80
                 for i in bmid+1:BatteryLevel[i+1]
