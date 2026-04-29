@@ -884,11 +884,7 @@ end
 # Usage
 ###############################################################################
 
-<<<<<<< HEAD
-excel_file = joinpath("inputData/inputDataBig.xlsx")
-=======
 excel_file = joinpath("inputData/inputDataGiant.xlsx")
->>>>>>> 39e7165da626f3ed99bdf402b1a01ba887e3a094
 parameter_file = joinpath("inputData/Parameters.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()
