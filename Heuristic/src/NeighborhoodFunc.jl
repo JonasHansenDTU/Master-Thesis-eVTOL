@@ -94,9 +94,12 @@ end
 
 function UpdateTurnAroundTimes(planes::allPlaneSolution, from::Int64, maxTurnaround::Int64, data)
     op = data.op
+    dp = data.dp
     te = Int(data.te)
     dt = data.dt
     rt = data.rt
+    w = data.w
+    ET = data.ET
 
     for plane in planes.planes
         flightLegs = Int(plane.flightLegs)
@@ -119,14 +122,15 @@ function UpdateTurnAroundTimes(planes::allPlaneSolution, from::Int64, maxTurnaro
 
         # Recompute turnaround times from from_k onward
         for k in from_k:flightLegs
-            candidate_pass = [
-                dt[a] for (a, v) in op
-                if v == current_VP && current_time + te <= dt[a] <= current_time + maxTurnaround
-            ]
+            common_a = [a for (a, v) in op if v == current_VP && dp[a] == route[k+1]]
+
+            candidate_pass = [dt[a] for a in common_a if
+                current_time + te - w <= dt[a] <= current_time + maxTurnaround &&
+                dt[a] + rt[(op[a], dp[a])] <= ET]
 
             if !isempty(candidate_pass)
                 # deterministic: latest feasible passenger time in the window
-                chosen_time = maximum(candidate_pass) - current_time
+                chosen_time = max(maximum(candidate_pass) - current_time, te)
                 plane.turnaroundTime[k] = Int32(round(Int, chosen_time))
             else
                 plane.turnaroundTime[k] = Int32(rand(te:maxTurnaround))

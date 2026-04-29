@@ -884,7 +884,7 @@ end
 # Usage
 ###############################################################################
 
-excel_file = joinpath("inputData/inputData.xlsx")
+excel_file = joinpath("inputData/inputDataMini.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()
