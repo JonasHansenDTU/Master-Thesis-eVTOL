@@ -69,7 +69,7 @@ def _load_battery_params(
 
     if params_excel is not None and params_excel.exists():
         try:
-            raw = pd.read_excel(params_excel, sheet_name="Parameters", header=None)
+            raw = pd.read_excel(params_excel, sheet_name=0, header=None)
             for _, row in raw.iterrows():
                 if len(row) < 2:
                     continue
@@ -1088,8 +1088,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--params-excel",
         type=Path,
-        default=Path(__file__).resolve().parent.parent / "inputData" / "inputData.xlsx",
-        help="Excel file containing the Parameters sheet used for battery rates and bounds.",
+        default=Path(__file__).resolve().parent.parent / "inputData" / "Parameters.xlsx",
+        help="Excel file containing battery rates and bounds.",
     )
     parser.add_argument(
         "--battery-per-km",
