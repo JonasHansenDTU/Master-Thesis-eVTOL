@@ -882,8 +882,8 @@ println("Using Excel file: ", excel_file)
 total_start = time()
 model, data, timings = solve_instance(excel_file, parameter_file)
 
-t_export = @elapsed export_solution_snapshots(model, data)
-timings["Snapshot export"] = t_export
+# t_export = @elapsed export_solution_snapshots(model, data)
+# timings["Snapshot export"] = t_export
 
 ###############################################################################
 # Pretty result printing - ALL VARIABLES
