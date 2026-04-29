@@ -39,7 +39,7 @@ end
 maxTurnaround = 100
 Maxtime = Int32(10) 
 
-(best_obj, best_sol, iterations) = Heuristic(maxTurnaround, Maxtime, data, rt)
+(best_obj, best_sol, iterations) = Heuristic(maxTurnaround, Maxtime, data, rt, top_c)
 
 println("Heuristic ran $(iterations) iterations")
 println("Best solution:")

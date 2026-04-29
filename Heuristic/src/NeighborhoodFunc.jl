@@ -200,11 +200,11 @@ function DestructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::
         end
     end
 
-    for n in N
-        if best_sol.planes[n].route[1] != best_sol.planes[n].route[end]
-            println("HEY!!!")
-        end
-    end
+    # for n in N
+    #     if best_sol.planes[n].route[1] != best_sol.planes[n].route[end]
+    #         println("HEY!!!")
+    #     end
+    # end
 
     return best_obj, best_sol
 end
@@ -276,11 +276,11 @@ function ConstructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj:
         end
     end
 
-    for n in N
-        if best_sol.planes[n].route[1] != best_sol.planes[n].route[end]
-            println("HEY!!!")
-        end
-    end
+    # for n in N
+    #     if best_sol.planes[n].route[1] != best_sol.planes[n].route[end]
+    #         println("HEY!!!")
+    #     end
+    # end
 
     return best_obj, best_sol
 end
@@ -341,11 +341,11 @@ function Swap(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64,
         end
     end
 
-    for n in N
-        if best_sol.planes[n].route[1] != best_sol.planes[n].route[end]
-            println("HEY!!!")
-        end
-    end
+    # for n in N
+    #     if best_sol.planes[n].route[1] != best_sol.planes[n].route[end]
+    #         println("HEY!!!")
+    #     end
+    # end
 
     return best_obj, best_sol
 end
@@ -389,11 +389,11 @@ function two_opt_Loop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::
         end
     end
 
-    for n in N
-        if best_sol.planes[n].route[1] != best_sol.planes[n].route[end]
-            println("HEY!!!")
-        end
-    end
+    # for n in N
+    #     if best_sol.planes[n].route[1] != best_sol.planes[n].route[end]
+    #         println("HEY!!!")
+    #     end
+    # end
     
     return best_obj, best_sol
 end
