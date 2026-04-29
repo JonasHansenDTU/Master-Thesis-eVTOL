@@ -1,4 +1,4 @@
-function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt)
+function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
 
     start_ns = time_ns()
     elapsed = 0.0
@@ -8,8 +8,8 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt)
     best_sol = allPlaneSolution(planeSolution[])
 
     while elapsed <= Float64(MaxTime)
-        nr = 1
-        Best_sols = generate_best_initial_solutions(data, rt, top_k = nr, n_runs = 100, maxTurnaround = maxTurnaround)
+        nr = rand(1:5)
+        Best_sols = generate_best_initial_solutions(data, rt; n_runs = 100, top_k = nr, top_c, maxLegs=6, maxTurnaround)
 
         temp_obj = Best_sols[nr].fitness
         temp_sol = deepcopy(Best_sols[nr].evtols)
