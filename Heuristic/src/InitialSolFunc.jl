@@ -156,27 +156,27 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
     
     # ----- Check for optimal routing ------ #
 
-    Opt_evtol1 = [1,3,1]
-    Opt_evtol2 = [2, 3, 2]
-    # Opt_evtol3 = [5,2,3,5]
+    # Opt_evtol1 = [1,3,1]
+    # Opt_evtol2 = [2, 3, 2]
+    # # Opt_evtol3 = [5,2,3,5]
 
-    if planes[1].route == Opt_evtol1 && 
-        planes[3].flightLegs == 0 &&
-        planes[2].route == Opt_evtol2
+    # if planes[1].route == Opt_evtol1 && 
+    #     planes[3].flightLegs == 0 &&
+    #     planes[2].route == Opt_evtol2
 
-        rt = zeros(Int, Vmax, Vmax)
-        for i in data.V, j in data.V
-            rt[i, j] = data.rt[(i, j)]
-        end
+    #     rt = zeros(Int, Vmax, Vmax)
+    #     for i in data.V, j in data.V
+    #         rt[i, j] = data.rt[(i, j)]
+    #     end
 
-        UpdateTurnAroundTimes(allPlaneSolution(planes), 1, maxTurnaround, data)
-        assignments, scheduled = assign_passengersV2(allPlaneSolution(planes), data, rt)
-        Obj = obj(allPlaneSolution(planes), data, rt)
-        println("Optimal Trips found, obj: $(Obj)")
-        print_chromosome_table(allPlaneSolution(planes))
-        print_assignments(assignments, data)
-        print_schedule_pretty(scheduled) 
-    end
+    #     UpdateTurnAroundTimes(allPlaneSolution(planes), 1, maxTurnaround, data)
+    #     assignments, scheduled = assign_passengersV2(allPlaneSolution(planes), data, rt)
+    #     Obj = obj(allPlaneSolution(planes), data, rt)
+    #     println("Optimal Trips found, obj: $(Obj)")
+    #     print_chromosome_table(allPlaneSolution(planes))
+    #     print_assignments(assignments, data)
+    #     print_schedule_pretty(scheduled) 
+    # end
 
 
     #-----------------------------------------
