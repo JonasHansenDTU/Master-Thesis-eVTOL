@@ -436,6 +436,9 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     # over_bmid[m,n] = amount battery level exceeds bmid after operation m
     @variable(model, over_bmid[m in M, n in N] >= 0)
 
+    #charge[m,n] = battery charged for plane n in operation m
+    @variable(model, charge[m in M, n in N] >= 0)
+
     ###########################################################################
     # Initialization helpers (operation 0 should not be an actual flown trip)
     ###########################################################################
@@ -581,18 +584,23 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
         u[1,n] >= u[0,n] - e[(i,j)] * x[i,j,1,n] - (1 - x[i,j,1,n]) * M2b
     )
 
+
+    @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
+        charge[m,n] <= ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) +
+                  (1 - x[i,j,m,n]) * M2c)
+
     # (6.24a) Battery update between operations
     @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
         u[m,n] <= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
-                  ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) +
+                  charge[m,n] +
                   (1 - x[i,j,m,n]) * M2c
     )
 
     # (6.24b)
     @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
         u[m,n] >= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
-                  ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) -
-                  (1 - x[i,j,m,n]) * M2c
+                 charge[m,n] -
+                  (1 - x[i,j,m,n]) * M2c*2
     )
 
     # (6.25) Operation 0 starts at time 0
