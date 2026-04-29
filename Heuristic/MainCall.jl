@@ -36,7 +36,9 @@ for i in data.V, j in data.V
 end
 
 maxTurnaround = 100
-Maxtime = Int32(30) 
+Maxtime = Int32(30)
+top_c = 10
+
 
 (best_obj, best_sol, iterations) = Heuristic(maxTurnaround, Maxtime, data, rt, top_c)
 
