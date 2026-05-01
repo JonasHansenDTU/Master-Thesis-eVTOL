@@ -7,7 +7,7 @@ sheet_name = "Prices"
 
 # -----------------------------
 # Parsing helpers
-# -----------------------------
+# --------------------------
 
 function parse_number(x)
     if ismissing(x) || x === nothing || strip(string(x)) == ""
