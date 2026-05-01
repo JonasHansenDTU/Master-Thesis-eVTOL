@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_d07561222f2919291d4869e012bd0264 {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+
+            <style>html, body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+            </style>
+
+            <style>#map {
+                position:absolute;
+                top:0;
+                bottom:0;
+                right:0;
+                left:0;
+                }
+            </style>
+
+            <script>
+                L_NO_TOUCH = false;
+                L_DISABLE_3D = false;
+            </script>
+
+        
+</head>
+<body>
+    
+    
+            <div class="folium-map" id="map_d07561222f2919291d4869e012bd0264" ></div>
+        
+</body>
+<script>
+    
+    
+            var map_d07561222f2919291d4869e012bd0264 = L.map(
+                "map_d07561222f2919291d4869e012bd0264",
+                {
+                    center: [55.70336052121213, 12.731438051515154],
+                    crs: L.CRS.EPSG3857,
+                    ...{
+  "zoom": 7,
+  "zoomControl": true,
+  "preferCanvas": false,
+}
+
+                }
+            );
+
+            
+
+        
+    
+            var tile_layer_bccaf2e61cc2367f0679fa33346bf2a1 = L.tileLayer(
+                "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                {
+  "minZoom": 0,
+  "maxZoom": 19,
+  "maxNativeZoom": 19,
+  "noWrap": false,
+  "attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            tile_layer_bccaf2e61cc2367f0679fa33346bf2a1.addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            var circle_marker_3b988055b0c019b39d7cb43d048e7242 = L.circleMarker(
+                [55.70336052121213, 12.731438051515154],
+                {"bubblingMouseEvents": true, "color": "red", "dashArray": null, "dashOffset": null, "fill": true, "fillColor": "red", "fillOpacity": 1, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "opacity": 1.0, "radius": 8, "stroke": true, "weight": 3}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+        var popup_606cb0507a57a344f47e1043f7536be2 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_f028e2ce9bfd1dca9b458b40a7efcd1c = $(`<div id="html_f028e2ce9bfd1dca9b458b40a7efcd1c" style="width: 100.0%; height: 100.0%;">Københavns Kommune</div>`)[0];
+                popup_606cb0507a57a344f47e1043f7536be2.setContent(html_f028e2ce9bfd1dca9b458b40a7efcd1c);
+            
+        
+
+        circle_marker_3b988055b0c019b39d7cb43d048e7242.bindPopup(popup_606cb0507a57a344f47e1043f7536be2)
+        ;
+
+        
+    
+    
+            var poly_line_562010a54952c7d6390097bd76000463 = L.polyline(
+                [[55.70336052121213, 12.731438051515154], [55.70336052121213, 12.731438051515154]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5, "smoothFactor": 1.0, "stroke": true, "weight": 23.230404024473}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            poly_line_562010a54952c7d6390097bd76000463.bindTooltip(
+                `<div>
+                     Københavns Kommune → Københavns Kommune: 11615 ture
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_e086c10ca0c2cef6292880a204d7179d = L.polyline(
+                [[55.70336052121213, 12.731438051515154], [55.68091312518423, 12.523727891646207]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5, "smoothFactor": 1.0, "stroke": true, "weight": 2.60346609964862}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            poly_line_e086c10ca0c2cef6292880a204d7179d.bindTooltip(
+                `<div>
+                     Københavns Kommune → Frederiksberg Kommune: 1301 ture
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_bd76b7ca682fb4c2aff70acc95b880e1 = L.polyline(
+                [[55.70336052121213, 12.731438051515154], [55.73657881812981, 12.354629551530449]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5, "smoothFactor": 1.0, "stroke": true, "weight": 0.794134078575402}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            poly_line_bd76b7ca682fb4c2aff70acc95b880e1.bindTooltip(
+                `<div>
+                     Københavns Kommune → Ballerup Kommune: 397 ture
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_1ab60cbb4b7e42f56de7d9aa1337139f = L.polyline(
+                [[55.70336052121213, 12.731438051515154], [55.64266337665157, 12.419336481981997]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5, "smoothFactor": 1.0, "stroke": true, "weight": 0.866006923074912}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            poly_line_1ab60cbb4b7e42f56de7d9aa1337139f.bindTooltip(
+                `<div>
+                     Københavns Kommune → Brøndby Kommune: 433 ture
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_3d608a0d1a05f22934b8d06d7bc944f1 = L.polyline(
+                [[55.70336052121213, 12.731438051515154], [55.749195387151104, 12.550368040673465]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5, "smoothFactor": 1.0, "stroke": true, "weight": 1.903769473049502}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            poly_line_3d608a0d1a05f22934b8d06d7bc944f1.bindTooltip(
+                `<div>
+                     Københavns Kommune → Gentofte Kommune: 951 ture
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_126d420e66d7889f3e801e09bd52334f = L.polyline(
+                [[55.70336052121213, 12.731438051515154], [55.74417224459101, 12.476141650976277]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5, "smoothFactor": 1.0, "stroke": true, "weight": 1.116903197521834}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            poly_line_126d420e66d7889f3e801e09bd52334f.bindTooltip(
+                `<div>
+                     Københavns Kommune → Gladsaxe Kommune: 558 ture
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_089a361ee94893ccb76eb1a4c48a20a0 = L.polyline(
+                [[55.70336052121213, 12.731438051515154], [55.68575021946419, 12.404646012623406]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5, "smoothFactor": 1.0, "stroke": true, "weight": 0.6920970140166499}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            poly_line_089a361ee94893ccb76eb1a4c48a20a0.bindTooltip(
+                `<div>
+                     Københavns Kommune → Glostrup Kommune: 346 ture
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_d387d8ffbc4e8ab176dc131a87fb9e7d = L.polyline(
+                [[55.70336052121213, 12.731438051515154], [55.733183690458006, 12.425876104471083]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5, "smoothFactor": 1.0, "stroke": true, "weight": 0.51192419749257}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            poly_line_d387d8ffbc4e8ab176dc131a87fb9e7d.bindTooltip(
+                `<div>
+                     Københavns Kommune → Herlev Kommune: 255 ture
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_fd2fb21370d2d885acb362cd9cc9c9f8 = L.polyline(
+                [[55.70336052121213, 12.731438051515154], [55.67380146346905, 12.344574764194126]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5, "smoothFactor": 1.0, "stroke": true, "weight": 0.46825204089517203}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            poly_line_fd2fb21370d2d885acb362cd9cc9c9f8.bindTooltip(
+                `<div>
+                     Københavns Kommune → Albertslund Kommune: 234 ture
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_c7acfe249bf22c12d52030f880f6aa35 = L.polyline(
+                [[55.70336052121213, 12.731438051515154], [55.63451580555555, 12.507018633333335]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5, "smoothFactor": 1.0, "stroke": true, "weight": 1.300719439389686}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            poly_line_c7acfe249bf22c12d52030f880f6aa35.bindTooltip(
+                `<div>
+                     Københavns Kommune → Hvidovre Kommune: 650 ture
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_6035dba22c28ec9de630c869bc0f2ccc = L.polyline(
+                [[55.70336052121213, 12.731438051515154], [55.66895238820623, 12.254957475952697]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5, "smoothFactor": 1.0, "stroke": true, "weight": 0.469151314694336}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            poly_line_6035dba22c28ec9de630c869bc0f2ccc.bindTooltip(
+                `<div>
+                     Københavns Kommune → Høje-Taastrup Kommune: 234 ture
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_a9d8c9c62c392ac8ca5e6e34a5a5e7b4 = L.polyline(
+                [[55.70336052121213, 12.731438051515154], [55.784563778536274, 12.519596436876524]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5, "smoothFactor": 1.0, "stroke": true, "weight": 1.1129868925060922}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            poly_line_a9d8c9c62c392ac8ca5e6e34a5a5e7b4.bindTooltip(
+                `<div>
+                     Københavns Kommune → Lyngby-Taarbæk Kommune: 556 ture
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_da9c24e8942383a1e6e2aae6c99267c5 = L.polyline(
+                [[55.70336052121213, 12.731438051515154], [55.6879673707227, 12.451682149483798]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5, "smoothFactor": 1.0, "stroke": true, "weight": 0.8359539770564599}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            poly_line_da9c24e8942383a1e6e2aae6c99267c5.bindTooltip(
+                `<div>
+                     Københavns Kommune → Rødovre Kommune: 417 ture
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_015e82251ecd7b4fdc5256ed47f44281 = L.polyline(
+                [[55.70336052121213, 12.731438051515154], [55.61921760811377, 12.303195464392777]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5, "smoothFactor": 1.0, "stroke": true, "weight": 0.47247642571535603}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            poly_line_015e82251ecd7b4fdc5256ed47f44281.bindTooltip(
+                `<div>
+                     Københavns Kommune → Ishøj Kommune: 236 ture
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_930c3bde148d314f24e54f08730156e8 = L.polyline(
+                [[55.70336052121213, 12.731438051515154], [55.67087343000001, 12.77590178]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5, "smoothFactor": 1.0, "stroke": true, "weight": 3.09283294705504}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            poly_line_930c3bde148d314f24e54f08730156e8.bindTooltip(
+                `<div>
+                     Københavns Kommune → Tårnby Kommune: 1546 ture
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_8b9a3b6d3a7d5d2a1400b68515401bb7 = L.polyline(
+                [[55.70336052121213, 12.731438051515154], [55.835444000349845, 12.482451671353632]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5, "smoothFactor": 1.0, "stroke": true, "weight": 0.666059100526608}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            poly_line_8b9a3b6d3a7d5d2a1400b68515401bb7.bindTooltip(
+                `<div>
+                     Københavns Kommune → Rudersdal Kommune: 333 ture
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_d89bae022c70a14d8702213ae5bf66ab = L.polyline(
+                [[55.70336052121213, 12.731438051515154], [55.59547164204109, 12.253150278805077]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5, "smoothFactor": 1.0, "stroke": true, "weight": 0.527570836271552}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            poly_line_d89bae022c70a14d8702213ae5bf66ab.bindTooltip(
+                `<div>
+                     Københavns Kommune → Greve Kommune: 263 ture
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var poly_line_a41dae3b48c05d9426da2d518332538b = L.polyline(
+                [[55.70336052121213, 12.731438051515154], [55.746305936842106, 12.085146036842104]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.5, "smoothFactor": 1.0, "stroke": true, "weight": 0.56084366527563}
+            ).addTo(map_d07561222f2919291d4869e012bd0264);
+        
+    
+            poly_line_a41dae3b48c05d9426da2d518332538b.bindTooltip(
+                `<div>
+                     Københavns Kommune → Roskilde Kommune: 280 ture
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+</script>
+</html>
