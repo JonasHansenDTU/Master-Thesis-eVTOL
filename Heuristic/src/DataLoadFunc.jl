@@ -68,6 +68,15 @@ function haversine_km(lat1, lon1, lat2, lon2)
     return R * c
 end
 
+### ----------------- Create candidate routes from passengers op ------------ ###
+
+function Candidate_Route()
+    
+
+end
+
+
+### ------------------------------------------------------------------------- ###
 """
 Build all sets and parameters from Excel + system parameters.
 Expected sheets:
