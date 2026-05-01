@@ -679,7 +679,7 @@ end
 # Solve + simple reporting
 ###############################################################################
 
-function solve_instance(excel_file::String, parameter_file::String; show_progress::Bool = true, display_interval_sec::Int = 5, print_status::Bool=false)
+function solve_instance(excel_file::String, parameter_file::String; show_progress::Bool = true, display_interval_sec::Int = 5)
     timings = Dict{String,Float64}()
 
     t_build = @elapsed model, data = build_model(
@@ -696,12 +696,11 @@ function solve_instance(excel_file::String, parameter_file::String; show_progres
     term = termination_status(model)
     primal = primal_status(model)
 
-    if print_status
-        println("Termination status: ", term)
-        println("Primal status:      ", primal)
-        if term == MOI.OPTIMAL || term == MOI.TIME_LIMIT || term == MOI.FEASIBLE_POINT
-            println("Objective value:    ", objective_value(model))
-        end
+    println("Termination status: ", term)
+    println("Primal status:      ", primal)
+
+    if term == MOI.OPTIMAL || term == MOI.TIME_LIMIT || term == MOI.FEASIBLE_POINT
+        println("Objective value:    ", objective_value(model))
     end
 
     return model, data, timings
@@ -887,6 +886,7 @@ end
 
 excel_file = joinpath("inputData/inputDataHumongous.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
+println("Using Excel file: ", excel_file)
 total_start = time()
 model, data, timings = solve_instance(excel_file, parameter_file)
 
@@ -1159,203 +1159,7 @@ function print_results_pretty(model::Model, data)
     println()
 end
 
-###############################################################################
-# Compact result printing - SUMMARY ONLY
-###############################################################################
-
-function print_solution_summary(model::Model, data)
-    if !has_values(model)
-        println("No primal solution available.")
-        return
-    end
-
-    A = data.A
-    V = data.V
-    N = data.N
-    M = data.M
-    M_no0 = hasproperty(data, :M_no0) ? data.M_no0 : [m for m in M if m != 0]
-    bv = data.bv
-    cap_u = Int(round(data.cap_u))
-    op = data.op
-    dp = data.dp
-    dt = data.dt
-    q = data.q
-
-    println("Objective Value: ", objective_value(model))
-
-    # -----------------
-    # Extract legs by plane
-    # -----------------
-    legs_by_plane = Dict{Int,Vector{NamedTuple}}()
-    for n in N
-        legs_by_plane[n] = NamedTuple[]
-        for m in sort(collect(M_no0))
-            arc_from = nothing
-            arc_to = nothing
-            for i in V
-                for j in V
-                    if i != j && value(model[:x][i, j, m, n]) > 0.5
-                        arc_from = i
-                        arc_to = j
-                        break
-                    end
-                end
-                if arc_from !== nothing
-                    break
-                end
-            end
-            if arc_from !== nothing
-                dep_mn = Int(round(value(model[:dep][m, n])))
-                arr_mn = Int(round(value(model[:arr][m, n])))
-                push!(legs_by_plane[n], (m = Int(m), from = Int(arc_from), to = Int(arc_to), dep = dep_mn, arr = arr_mn))
-            end
-        end
-    end
-
-    # -----------------
-    # Chromosome table
-    # -----------------
-    println("Chromosome table:")
-    println("-----------------")
-
-    for n in N
-        legs = legs_by_plane[n]
-        flightLegs = length(legs)
-
-        route = Int[]
-        if flightLegs == 0
-            push!(route, Int(bv[n]))
-        else
-            push!(route, legs[1].from)
-            for leg in legs
-                push!(route, leg.to)
-            end
-        end
-
-        turnaround = Int[]
-        prev_arr = 0
-        for leg in legs
-            wait = leg.dep - prev_arr
-            push!(turnaround, max(0, wait))
-            prev_arr = leg.arr
-        end
-
-        print("eVTOL", n, ": ")
-        print(flightLegs, " | ")
-        for v in route
-            print(v, " ")
-        end
-        print("| ")
-        for t in turnaround
-            print(t, " ")
-        end
-        println()
-    end
-
-    # -----------------
-    # Battery levels
-    # -----------------
-    println("Battery Levels:")
-    m0 = minimum(collect(M))
-    for n in N
-        legs = legs_by_plane[n]
-        uvals = Float32[]
-        push!(uvals, Float32(value(model[:u][m0, n])))
-        for leg in legs
-            push!(uvals, Float32(value(model[:u][leg.m, n])))
-        end
-        println("Plane ", n, ": ", uvals)
-    end
-
-    # -----------------
-    # Passenger assignments
-    # -----------------
-    println("Passenger assignments:")
-    println("----------------------")
-
-    for a in sort(collect(A))
-        chosen_plane = nothing
-        for n in N
-            if value(model[:ss][a, n]) > 0.5
-                chosen_plane = n
-                break
-            end
-        end
-        if chosen_plane === nothing
-            continue
-        end
-
-        legs_used = Int[]
-        for m in sort(collect(M_no0))
-            if value(model[:s][a, m, chosen_plane]) > 0.5
-                push!(legs_used, Int(m))
-            end
-        end
-        if isempty(legs_used)
-            continue
-        end
-
-        println(
-            "Group ", a,
-            " | plane ", chosen_plane,
-            " | legs ", legs_used,
-            " | ", op[a], " -> ", dp[a],
-            " | q=", q[a],
-            " | dt=", dt[a]
-        )
-    end
-
-    # -----------------
-    # Schedule
-    # -----------------
-    legs_all = NamedTuple[]
-    for n in N
-        append!(legs_all, legs_by_plane[n])
-    end
-    legs_all = sort(legs_all, by = l -> (l.m, l.dep))
-
-    if isempty(legs_all)
-        println("Schedule is empty.")
-        return
-    end
-
-    println("Schedule")
-    println("========")
-
-    total_legs = 0
-    for n in N
-        legs = legs_by_plane[n]
-        if isempty(legs)
-            continue
-        end
-
-        println()
-        println("Plane ", n)
-        println("-" ^ 72)
-        @printf("%-6s %-6s %-6s %-6s %-8s %-8s %-8s\n",
-                "Leg", "From", "To", "Dep", "Arr", "Dur", "CapLeft")
-        println("-" ^ 72)
-
-        for leg in legs
-            load = 0
-            for a in A
-                if value(model[:s][a, leg.m, n]) > 0.5
-                    load += Int(round(q[a]))
-                end
-            end
-            cap_left = cap_u - load
-            dur = leg.arr - leg.dep
-            @printf("%-6d %-6d %-6d %-6d %-8d %-8d %-8d\n",
-                    leg.m, leg.from, leg.to, leg.dep, leg.arr, dur, cap_left)
-            total_legs += 1
-        end
-    end
-
-    println()
-    println("Total legs: ", total_legs)
-end
-
-t_pretty = @elapsed Base.invokelatest(print_solution_summary, model, data)
+t_pretty = @elapsed Base.invokelatest(print_results_pretty, model, data)
 timings["Pretty printing"] = t_pretty
 timings["Total script"] = time() - total_start
 
