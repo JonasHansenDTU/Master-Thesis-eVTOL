@@ -3,7 +3,7 @@ using HTTP
 using JSON3
 
 file = "inputData/Parameters.xlsx"
-sheet_name = "Prices"   # ret hvis dit ark hedder noget andet
+sheet_name = "Prices" 
 
 # -----------------------------
 # Parsing helpers
