@@ -26,7 +26,7 @@ for file in source_files
     include(joinpath(src_dir, file))
 end
 
-excel_file = joinpath("inputData/inputDataGiant.xlsx")
+excel_file = joinpath("inputData/inputDataHumongous.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 data = load_data(excel_file, parameter_file)
 

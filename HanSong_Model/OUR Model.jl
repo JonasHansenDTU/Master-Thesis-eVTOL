@@ -885,7 +885,7 @@ end
 # Usage
 ###############################################################################
 
-excel_file = joinpath("inputData/inputDataGiant.xlsx")
+excel_file = joinpath("inputData/inputDataHumongous.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 total_start = time()
 model, data, timings = solve_instance(excel_file, parameter_file)
