@@ -1,4 +1,4 @@
-function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
+function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; verbose::Bool=false, progress_every::Int=0)
 
     start_ns = time_ns()
     elapsed = 0.0
@@ -8,8 +8,8 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
     best_sol = allPlaneSolution(planeSolution[])
 
     while elapsed <= Float64(MaxTime)
-        nr = rand(1:5)
-        Best_sols = generate_best_initial_solutions(data, rt; n_runs = 100, top_k = nr, top_c, maxLegs=6, maxTurnaround)
+        nr = 1
+        Best_sols = generate_best_initial_solutions(data, rt; n_runs = 50, top_k = nr, top_c, maxLegs=6, maxTurnaround)
 
         temp_obj = Best_sols[nr].fitness
         temp_sol = deepcopy(Best_sols[nr].evtols)
@@ -17,9 +17,16 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
         if temp_obj > best_obj
             best_obj = temp_obj
             best_sol = deepcopy(temp_sol)
-            println("New best Obj $(best_obj)")
-            println("Method used: Initial Heuristic")
+            if verbose
+                println("New best Obj $(best_obj)")
+                println("Method used: Initial Heuristic")
+            end
         end
+
+        # if print_chromosome_table(temp_sol) !== nothing
+        #     print_chromosome_table(temp_sol)
+        #     println("Objective value: $(temp_obj)")
+        # end 
 
         improvement = true
         while improvement && elapsed <= Float64(MaxTime)
@@ -60,8 +67,10 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
                 if temp_obj > best_obj
                     best_obj = temp_obj
                     best_sol = deepcopy(temp_sol)
-                    println("New best Obj $(best_obj)")
-                    println("Method used: $(("Destructor", "Constructor", "Swap", "2-opt")[method_used + 1])")
+                    if verbose
+                        println("New best Obj $(best_obj)")
+                        println("Method used: $(("Destructor", "Constructor", "Swap", "2-opt")[method_used + 1])")
+                    end
                 end
             end
 
@@ -69,7 +78,7 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
         end
 
         iterations += 1
-        if iterations % 100 == 0
+        if verbose && progress_every > 0 && iterations % progress_every == 0
             println("iteration: $(iterations)")
         end
         elapsed = (time_ns() - start_ns) / 1e9
