@@ -28,8 +28,8 @@ function build_vertiport_weights(V, op, dp, A)
     return [counts[v] for v in V]
 end
 
-function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30)
-    #creates a random initial route plan for each plane, starting and ending at its base, 
+function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30, debug_print::Bool=false)
+    #creates a random initial route plan for each plane, starting and ending at its base,
     #with demand-biased intermediate vertiports and random flight legs and turnaround times, then packs everything into your chromosome structure.
 
     V = data.V
@@ -43,7 +43,6 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
     rt = data.rt
     w = data.w
     ET = data.ET
-
 
     weights = build_vertiport_weights(V, op, dp, A)
 
@@ -140,7 +139,25 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
                 chosen_time = max(te,rand(Candidate_Pass) - current_time)
                 push!(turnaroundTime, round(Int32, chosen_time))
             else
-                push!(turnaroundTime, Int32(rand(te:maxTurnaround)))
+                # Choose rate (tune as needed)
+                λ = 1.0 / (maxTurnaround - te)
+
+                # Bounds as floats
+                a = float(te)
+                b = float(maxTurnaround)
+
+                # Sample from truncated exponential using inverse CDF
+                u = rand()
+                x = a - log(1 - u * (1 - exp(-λ * (b - a)))) / λ
+
+                # Convert to integer safely
+                x_int = floor(Int, x)
+
+                # Optional: clamp just in case of floating-point edge rounding
+                x_int = clamp(x_int, Int(te), Int(maxTurnaround))
+
+                # Store result
+                push!(turnaroundTime, x_int)
             end
             current_time += turnaroundTime[end] + rt[(current_VP,route[(k+1)])]
             current_VP = route[(k+1)]
@@ -164,6 +181,39 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
     #     planes[3].flightLegs == 0 &&
     #     planes[2].route == Opt_evtol2
 
+    if debug_print
+        # ----- Check for optimal routing ------ #
+
+        Opt_evtol1 = [1,3,1]
+        Opt_evtol2 = [2, 3, 2]
+        # Opt_evtol3 = [5,2,3,5]
+
+        if planes[1].route == Opt_evtol1 &&
+            planes[3].flightLegs == 0 &&
+            planes[2].route == Opt_evtol2
+
+            rt = zeros(Int, Vmax, Vmax)
+            for i in data.V, j in data.V
+                rt[i, j] = data.rt[(i, j)]
+            end
+
+            UpdateTurnAroundTimes(allPlaneSolution(planes), 1, maxTurnaround, data)
+            assignments, scheduled = assign_passengersV2(allPlaneSolution(planes), data, rt)
+            Obj = obj(allPlaneSolution(planes), data, rt)
+            println("Optimal Trips found, obj: $(Obj)")
+            print_chromosome_table(allPlaneSolution(planes))
+            print_assignments(assignments, data)
+            print_schedule_pretty(scheduled)
+        end
+
+        #-----------------------------------------
+        planes1 = allPlaneSolution(planes)
+        for n in N
+            if planes1.planes[n].route[1] != planes1.planes[n].route[end]
+                println("HEY!!!")
+            end
+        end
+    end
     #     rt = zeros(Int, Vmax, Vmax)
     #     for i in data.V, j in data.V
     #         rt[i, j] = data.rt[(i, j)]
@@ -179,19 +229,10 @@ function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30
     # end
 
 
-    #-----------------------------------------
-    planes1 = allPlaneSolution(planes)
-    for n in N
-        if planes1.planes[n].route[1] != planes1.planes[n].route[end]
-            println("HEY!!!")
-        end
-    end
-
-
     return allPlaneSolution(planes)
 end
 
-function initial_chromosome_solution2(data, rt; maxLegs::Int=5, maxTurnaround::Int=30, top_c::Int=3)
+function initial_chromosome_solution2(data, rt; maxLegs::Int=5, maxTurnaround::Int=30, top_c::Int=3, debug_print::Bool=false)
     V  = data.V
     N  = data.N
     A  = data.A
@@ -625,9 +666,11 @@ function initial_chromosome_solution2(data, rt; maxLegs::Int=5, maxTurnaround::I
         end
     end
 
-    for n in N
-        if evtols_init.planes[n].route[1] != evtols_init.planes[n].route[end]
-            println("HEY!!!")
+    if debug_print
+        for n in N
+            if evtols_init.planes[n].route[1] != evtols_init.planes[n].route[end]
+                println("HEY!!!")
+            end
         end
     end
 

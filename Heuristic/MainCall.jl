@@ -1,6 +1,9 @@
 using XLSX
 using DataFrames
 using Random
+using Distributions
+
+
 using JuMP
 using Gurobi
 using CSV
@@ -36,14 +39,12 @@ for i in data.V, j in data.V
 end
 
 maxTurnaround = 100
-Maxtime = Int32(10)
+Maxtime = Int32(30)
 top_c = 10
 
 
-(best_obj, best_sol, iterations) = Heuristic(maxTurnaround, Maxtime, data, rt, top_c)
-
-println("Heuristic ran $(iterations) iterations")
-println("Best solution:")
+(best_obj, best_sol, iterations) = Heuristic(maxTurnaround, Maxtime, data, rt, top_c, verbose = true)
+println("Solution found in $(iterations) iterations.")
 println("Objective Value: $(best_obj)")
 print_chromosome_table(best_sol)
 

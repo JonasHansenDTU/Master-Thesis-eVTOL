@@ -133,7 +133,23 @@ function UpdateTurnAroundTimes(planes::allPlaneSolution, from::Int64, maxTurnaro
                 chosen_time = max(maximum(candidate_pass) - current_time, te)
                 plane.turnaroundTime[k] = Int32(round(Int, chosen_time))
             else
-                plane.turnaroundTime[k] = Int32(rand(te:maxTurnaround))
+                # Choose rate (tune as needed)
+                λ = 1.0 / (maxTurnaround - te)
+
+                # Bounds as floats
+                a = float(te)
+                b = float(maxTurnaround)
+
+                # Sample from truncated exponential using inverse CDF
+                u = rand()
+                x = a - log(1 - u * (1 - exp(-λ * (b - a)))) / λ
+
+                # Convert to integer safely
+                x_int = floor(Int, x)
+
+                # Optional: clamp just in case of floating-point edge rounding
+                x_int = clamp(x_int, Int(te), Int(maxTurnaround))
+                plane.turnaroundTime[k] = x_int
             end
 
             next_VP = Int(route[k + 1])
