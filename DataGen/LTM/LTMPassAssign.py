@@ -144,5 +144,5 @@ df_out = df_out[
 output_file = BASE_DIR / "synthetic_demand_groups.xlsx"
 df_out.to_excel(output_file, index=False)
 
-print(f"Saved: {output_file}")
+print(f"\n✅ Saved: {output_file}")
 print(df_out.head())
