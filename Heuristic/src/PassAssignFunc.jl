@@ -314,7 +314,7 @@ function assign_passengersV2(evtols::allPlaneSolution, data, rt::Matrix{Int})
             end
         else
             ass = find_direct_leg!V2(scheduled, a, op, dp, dt, q, w, so)
-            if ass == nothing 
+            if ass === nothing 
                 ass = find_one_stop_assignment!V2(scheduled, a, op, dp, dt, q, w, te)
                 if ass !== nothing
                     push!(assignments, ass)
@@ -543,5 +543,4 @@ function export_solution_snapshots(evtols::allPlaneSolution, scheduled::Vector{S
     snapshots = DataFrame(rows)
     CSV.write(out_csv, snapshots)
     println("Snapshot export written: ", out_csv, " (rows=", nrow(snapshots), ")")
-    return snapshots
-end
+ 
