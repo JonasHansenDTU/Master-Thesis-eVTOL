@@ -37,8 +37,7 @@ end
 
 maxTurnaround = 100
 Maxtime = Int32(600)
-top_c = 10
-
+top_c = 4
 
 (best_obj, best_sol, iterations) = Heuristic(maxTurnaround, Maxtime, data, rt, top_c)
 
