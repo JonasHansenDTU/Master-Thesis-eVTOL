@@ -12,6 +12,8 @@ using DataFrames
 using CSV
 using MathOptInterface
 using Printf
+using HTTP
+using JSON3
 const MOI = MathOptInterface
 
 ###############################################################################
@@ -167,7 +169,6 @@ function load_data(excel_file::String, parameter_file::String)
         b = Int(r[base_vp_col])
         bv[n] = b
     end
-
     
     bad_bases = sort([b for b in values(bv) if !(b in V)])
     if !isempty(bad_bases)
@@ -253,7 +254,6 @@ function load_data(excel_file::String, parameter_file::String)
         end
     end
 
-
     ###########################################################################
     # Prices
     ###########################################################################
@@ -321,6 +321,79 @@ function load_data(excel_file::String, parameter_file::String)
         d[(a,i,j)] = (i == op[a] && j == dp[a]) ? 1 : 0
     end
 
+    function osrm_time_minutes(lat1, lon1, lat2, lon2)
+        # OSRM bruger lon,lat — ikke lat,lon
+        url = "http://router.project-osrm.org/route/v1/driving/$(lon1),$(lat1);$(lon2),$(lat2)?overview=false"
+    
+        resp = HTTP.get(url)
+        data = JSON3.read(String(resp.body))
+    
+        if data.code != "Ok"
+            error("OSRM error: $(data.code)")
+        end
+    
+        return data.routes[1].duration / 60.0
+    end
+    
+    function drive_time_key(lat1, lon1, lat2, lon2)
+        return (
+            round(lat1, digits=6),
+            round(lon1, digits=6),
+            round(lat2, digits=6),
+            round(lon2, digits=6)
+        )
+    end
+    
+    function drive_time_minutes(lat1, lon1, lat2, lon2, cache)
+        key = drive_time_key(lat1, lon1, lat2, lon2)
+        if haskey(cache, key)
+            return cache[key]
+        end
+        minutes = osrm_time_minutes(lat1, lon1, lat2, lon2)
+        cache[key] = minutes
+        sleep(0.2)
+        return minutes
+    end
+
+    # Precompute allowed end vps for each eVTOL
+    drive_time_cache = Dict{Tuple{Float64, Float64, Float64, Float64}, Float64}()
+    if isfile("drive_time_cache.csv")
+        cache_df = CSV.read("drive_time_cache.csv", DataFrame)
+        for row in eachrow(cache_df)
+            key = (row.lat1, row.lon1, row.lat2, row.lon2)
+            drive_time_cache[key] = row.minutes
+        end
+    end
+
+    end_vp = Dict{Int, Vector{Int}}()
+    for n in N
+        base_vp = bv[n]
+        if lat_col !== nothing && lon_col !== nothing
+            base_lat = infra[base_vp, lat_col]
+            base_lon = infra[base_vp, lon_col]
+        elseif coord_col !== nothing
+            base_lat, base_lon = parse.(Float64, split(strip(infra[base_vp, coord_col], ['(', ')']), ","))
+        else
+            error("No latitude/longitude or coordinates column found.")
+        end
+        allowed = Int[]
+        for v in V
+            if lat_col !== nothing && lon_col !== nothing
+                lat = infra[v, lat_col]
+                lon = infra[v, lon_col]
+            elseif coord_col !== nothing
+                lat, lon = parse.(Float64, split(strip(infra[v, coord_col], ['(', ')']), ","))
+            else
+                error("No latitude/longitude or coordinates column found.")
+            end
+            drivetime = drive_time_minutes(base_lat, base_lon, lat, lon, drive_time_cache)
+            if drivetime <= 60
+                push!(allowed, v)
+            end
+        end
+        end_vp[n] = allowed
+    end
+
     return (
         infra = infra,
         pax = pax,
@@ -330,7 +403,7 @@ function load_data(excel_file::String, parameter_file::String)
         T = collect(T), T_no0 = collect(T_no0),
         bv = bv,
         lat = lat, lon = lon,
-        dist = dist, fd = fd_lookup, fs = fs, c = c, e = e, rt = rt,
+        dist = dist, fd = fd_lookup, fs = fs, c = c, e = e, rt = rt, end_vp = end_vp, drive_time_cache = drive_time_cache,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
         cap_v = cap_v, cap_u = cap_u, opening_cost = opening_cost,
         bmax = bmax, bmid = bmid, b_penalty = b_penalty, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3
@@ -368,6 +441,8 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     q  = data.q
     so = data.so
     p  = data.p
+    end_vp = data.end_vp
+    drive_time_cache = data.drive_time_cache
 
     cap_v        = data.cap_v
     cap_u        = data.cap_u
@@ -469,19 +544,25 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     ###########################################################################
 
     # (6.2) eVTOL leaves base vertiport at time/operation 1 if it is being used
-    @constraint(model, [n in N], sum(x[bv[n], j, 1, n] for j in V) == y[n])
+    @constraint(model, [n in N], 
+        sum(x[bv[n], j, 1, n] for j in V) == y[n]
+    )
 
-    # (6.3) eVTOL returns to its base vertiport
+    # (6.3) eVTOL returns to its base vertiport or another vertiport withing 60 minute drive
     @constraint(model, [n in N],
         sum(x[bv[n], j, m, n] for j in V, m in M_no0) ==
-        sum(x[j, bv[n], m, n] for j in V, m in M_no0)
+        sum(x[j, vp, m, n] for j in V, vp in end_vp[n], m in M_no0)
     )
 
     # (6.4) eVTOL 
-    @constraint(model, [m in 1:maximum(M), n in N], sum(x[i,j,m,n] for i in V, j in V) <= y[n] )
+    @constraint(model, [m in 1:maximum(M), n in N], 
+        sum(x[i,j,m,n] for i in V, j in V) <= y[n] 
+    )
 
     # (6.5) 
-    @constraint(model, [i in V, m in M_no0, n in N], x[i,i,m,n] <= 0)
+    @constraint(model, [i in V, m in M_no0, n in N], 
+        x[i,i,m,n] <= 0
+    )
 
     # (6.6) Flow consistency between operation m and m+1
     @constraint(model, [j in V, m in M_mid, n in N],
@@ -519,7 +600,9 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     )
 
     # (6.11) If passenger group does not allow layovers, then z[a] must be 0
-    @constraint(model, [a in A], z[a] <= so[a])
+    @constraint(model, [a in A], 
+        z[a] <= so[a]
+    )
 
     # (6.12) If passenger group a is not served by eVTOL n, it cannot be served in any operation m
     @constraint(model, [a in A, m in M, n in N],
@@ -563,16 +646,24 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     )
 
     # (6.19) eVTOL starts with mid battery
-    @constraint(model, [n in N], u[0,n] == bmid)
+    @constraint(model, [n in N], 
+        u[0,n] == bmid
+    )
 
     # (6.20) Battery cannot exceed max
-    @constraint(model, [m in M, n in N], u[m,n] <= bmax)
+    @constraint(model, [m in M, n in N], 
+        u[m,n] <= bmax
+    )
 
     # (6.21) Battery must stay above minimum
-    @constraint(model, [m in M, n in N], u[m,n] >= bmin)
+    @constraint(model, [m in M, n in N], 
+        u[m,n] >= bmin
+    )
 
     # (6.22) Penalize battery above bmid
-    @constraint(model, [m in M_no0, n in N], over_bmid[m,n] >= u[m,n] - bmid)
+    @constraint(model, [m in M_no0, n in N], 
+        over_bmid[m,n] >= u[m,n] - bmid
+    )
 
     # (6.23a) First operation from a vertiport only reflects energy consumption
     @constraint(model, [i in V, j in V, n in N],
@@ -587,7 +678,8 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
 
     @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
         charge[m,n] <= ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) +
-                  (1 - x[i,j,m,n]) * M2c)
+                  (1 - x[i,j,m,n]) * M2c
+    )
 
     # (6.24a) Battery update between operations
     @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
@@ -604,16 +696,23 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     )
 
     # (6.25) Operation 0 starts at time 0
-    @constraint(model, [n in N], arr[0,n] == 0)
+    @constraint(model, [n in N], 
+        arr[0,n] == 0
+    )
 
-    # (6.26) Arrival time lower bound
-    @constraint(model, [m in M_no0, n in N],
-    arr[m,n] >= arr[m-1,n] + sum((te + rt[(i,j)]) * x[i,j,m,n] for i in V, j in V)
+    # (6.26a) Arrival time lower bound
+    @constraint(model, [m in 2:maximum(M), n in N],
+        arr[m,n] >= arr[m-1,n] + sum((te + rt[(i,j)]) * x[i,j,m,n] for i in V, j in V)
+    )
+
+    # (6.26b) Arrival time lower bound
+    @constraint(model, [n in N],
+        arr[1,n] >= arr[1-1,n] + sum((rt[(i,j)]) * x[i,j,1,n] for i in V, j in V)
     )
 
     # (6.27) Departure time = arrival time - travel time
     @constraint(model, [m in M, n in N],
-    arr[m,n] == dep[m,n] + sum(rt[(i,j)] * x[i,j,m,n] for i in V, j in V)
+        arr[m,n] == dep[m,n] + sum(rt[(i,j)] * x[i,j,m,n] for i in V, j in V)
     )
 
     # (6.28) Minimum layover time
@@ -1164,3 +1263,17 @@ timings["Pretty printing"] = t_pretty
 timings["Total script"] = time() - total_start
 
 print_timing_summary(timings)
+
+drive_time_cache = data.drive_time_cache
+
+cache_df = DataFrame(
+    lat1 = Float64[],
+    lon1 = Float64[],
+    lat2 = Float64[],
+    lon2 = Float64[],
+    minutes = Float64[]
+)
+for ((lat1, lon1, lat2, lon2), minutes) in drive_time_cache
+    push!(cache_df, (lat1, lon1, lat2, lon2, minutes))
+end
+CSV.write("drive_time_cache.csv", cache_df)

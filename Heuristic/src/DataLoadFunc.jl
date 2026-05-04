@@ -71,8 +71,8 @@ end
 """
 Build all sets and parameters from Excel + system parameters.
 Expected sheets:
-    - Infrastructure (3)
-    - PassengerGroups (3)
+    - Infrastructure
+    - PassengerGroups 
     - PlaneData
 """
 function load_data(excel_file::String, parameter_file::String)
