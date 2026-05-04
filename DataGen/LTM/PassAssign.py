@@ -14,6 +14,7 @@ file_path = BASE_DIR / "AntalErhvervstureMellemKommuner_GMM_Basis2025.xlsx"
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 # Load OD data
 =======
 # Load data
@@ -24,6 +25,9 @@ file_path = BASE_DIR / "AntalErhvervstureMellemKommuner_GMM_Basis2025.xlsx"
 =======
 # Load data
 >>>>>>> 012c75c (LTM Data to PassengerGroups)
+=======
+# Load OD data
+>>>>>>> 20220b3 (LTMDataGen)
 # -------------------------
 
 df = pd.read_excel(file_path, sheet_name="LTM")
@@ -31,6 +35,7 @@ df = pd.read_excel(file_path, sheet_name="LTM")
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 MODE = "fly"
 =======
 MODE = "bil"
@@ -41,6 +46,9 @@ MODE = "fly"
 =======
 MODE = "bil"
 >>>>>>> 012c75c (LTM Data to PassengerGroups)
+=======
+MODE = "fly"
+>>>>>>> 20220b3 (LTMDataGen)
 col = f"AntalErhvervsture_{MODE}"
 
 df = df[["FraKommune", "TilKommune", col]].copy()
@@ -49,16 +57,24 @@ df.rename(columns={col: "trips"}, inplace=True)
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 # remove zero flows
 =======
 # fjern null flows
 >>>>>>> 012c75c (LTM Data to PassengerGroups)
+=======
+# remove zero flows
+>>>>>>> 20220b3 (LTMDataGen)
 df = df[df["trips"] > 0]
 
-# 🔥 fjern selv-rejser
+# remove self trips
 df = df[df["FraKommune"] != df["TilKommune"]]
+
 # -------------------------
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 20220b3 (LTMDataGen)
 # Load vertiports
 # -------------------------
 
@@ -77,6 +93,7 @@ print(f"Ruter efter vertiport filter: {len(df)}")
 
 # -------------------------
 # Create probabilities
+<<<<<<< HEAD
 =======
 # fjern null flows
 =======
@@ -114,11 +131,14 @@ print(f"Ruter efter vertiport filter: {len(df)}")
 =======
 # Create probabilities (VERY IMPORTANT)
 >>>>>>> 012c75c (LTM Data to PassengerGroups)
+=======
+>>>>>>> 20220b3 (LTMDataGen)
 # -------------------------
 
 df["prob"] = df["trips"] / df["trips"].sum()
 
 # -------------------------
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -132,6 +152,9 @@ df["prob"] = df["trips"] / df["trips"].sum()
 =======
 # Group size model (more group-heavy)
 >>>>>>> 012c75c (LTM Data to PassengerGroups)
+=======
+# Group size model
+>>>>>>> 20220b3 (LTMDataGen)
 # -------------------------
 
 def sample_group_size(trips):
@@ -145,6 +168,7 @@ def sample_group_size(trips):
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
     return np.random.choice([1, 2, 3, 4], p=probs)
 =======
     return np.random.choice([1,2,3,4], p=probs)
@@ -155,6 +179,9 @@ def sample_group_size(trips):
 =======
     return np.random.choice([1,2,3,4], p=probs)
 >>>>>>> 012c75c (LTM Data to PassengerGroups)
+=======
+    return np.random.choice([1, 2, 3, 4], p=probs)
+>>>>>>> 20220b3 (LTMDataGen)
 
 # -------------------------
 # Settings
@@ -166,6 +193,7 @@ GROUPS_PER_DAY = 60
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 START_TIME = 8 * 60   # 08:00
 END_TIME   = 22 * 60  # 22:00
 =======
@@ -180,6 +208,10 @@ END_TIME   = 22 * 60  # 22:00
 START_TIME = 8 * 60
 END_TIME   = 22 * 60
 >>>>>>> 012c75c (LTM Data to PassengerGroups)
+=======
+START_TIME = 8 * 60   # 08:00
+END_TIME   = 22 * 60  # 22:00
+>>>>>>> 20220b3 (LTMDataGen)
 
 np.random.seed(42)
 
@@ -189,6 +221,7 @@ rows = []
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 # Generate synthetic demand
 # -------------------------
 
@@ -211,6 +244,12 @@ for day in range(1, DAYS + 1):
 
 for day in range(1, DAYS+1):
 >>>>>>> 012c75c (LTM Data to PassengerGroups)
+=======
+# Generate synthetic demand
+# -------------------------
+
+for day in range(1, DAYS + 1):
+>>>>>>> 20220b3 (LTMDataGen)
 
     sampled_indices = np.random.choice(
         df.index,
@@ -228,6 +267,7 @@ for day in range(1, DAYS+1):
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
         stopover = np.random.choice([0, 1])
 
         rows.append({
@@ -254,6 +294,13 @@ for day in range(1, DAYS+1):
             "origin": row["FraKommune"],
             "destination": row["TilKommune"],
 >>>>>>> 012c75c (LTM Data to PassengerGroups)
+=======
+        stopover = np.random.choice([0, 1])
+
+        rows.append({
+            "origin": kommune_to_vertiport[row["FraKommune"]],
+            "destination": kommune_to_vertiport[row["TilKommune"]],
+>>>>>>> 20220b3 (LTMDataGen)
             "time": time,
             "number_of_passengers": passengers,
             "stopover_allowed": stopover,
@@ -270,6 +317,7 @@ df_out = pd.DataFrame(rows)
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 # Sort chronologically
 =======
 # Sort correctly
@@ -280,10 +328,14 @@ df_out = pd.DataFrame(rows)
 =======
 # Sort correctly
 >>>>>>> 012c75c (LTM Data to PassengerGroups)
+=======
+# Sort chronologically
+>>>>>>> 20220b3 (LTMDataGen)
 # -------------------------
 
 df_out = df_out.sort_values(["day", "time"]).reset_index(drop=True)
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -327,6 +379,11 @@ df_out = df_out[[
 # assign group ID AFTER sorting
 df_out["group"] = df_out.index + 1
 
+=======
+# assign group ID AFTER sorting
+df_out["group"] = df_out.index + 1
+
+>>>>>>> 20220b3 (LTMDataGen)
 # reorder columns
 df_out = df_out[
     [
@@ -339,9 +396,12 @@ df_out = df_out[
         "day"
     ]
 ]
+<<<<<<< HEAD
 >>>>>>> d5dc66b (LTMDataGen)
 =======
 >>>>>>> 012c75c (LTM Data to PassengerGroups)
+=======
+>>>>>>> 20220b3 (LTMDataGen)
 
 # -------------------------
 # Save
@@ -350,6 +410,7 @@ df_out = df_out[
 output_file = BASE_DIR / "synthetic_demand_groups.xlsx"
 df_out.to_excel(output_file, index=False)
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -363,4 +424,7 @@ print(f"\n✅ Saved: {output_file}")
 =======
 print(f"✅ Saved: {output_file}")
 >>>>>>> 012c75c (LTM Data to PassengerGroups)
+=======
+print(f"\n✅ Saved: {output_file}")
+>>>>>>> 20220b3 (LTMDataGen)
 print(df_out.head())
