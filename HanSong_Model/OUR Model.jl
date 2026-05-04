@@ -1034,43 +1034,43 @@ function print_results_pretty(model::Model, data)
         println("(all zeros)")
     end
 
-    section("DECISION VAR: y[n] (eVTOL In Use)")
-    println(lpad("eVTOL", 8) * " | " * lpad("Value", 8) * " | " * lpad("In Use", 8))
-    println("-" ^ 32)
-    for n in N
-        yval = value(model[:y][n])
-        in_use = yval > 0.5 ? "Yes" : "No"
-        println(lpad(string(n), 8) * " | " * lpad(@sprintf("%.2f", yval), 8) * " | " * lpad(in_use, 8))
-    end
+    # section("DECISION VAR: y[n] (eVTOL In Use)")
+    # println(lpad("eVTOL", 8) * " | " * lpad("Value", 8) * " | " * lpad("In Use", 8))
+    # println("-" ^ 32)
+    # for n in N
+    #     yval = value(model[:y][n])
+    #     in_use = yval > 0.5 ? "Yes" : "No"
+    #     println(lpad(string(n), 8) * " | " * lpad(@sprintf("%.2f", yval), 8) * " | " * lpad(in_use, 8))
+    # end
 
-    section("DECISION VAR: s[a,m,n] (Service per Operation)")
-    println(lpad("Group", 6) * " | " * lpad("Op", 5) * " | " * lpad("eVTOL", 8) * " | " * lpad("Value", 8))
-    println("-" ^ 35)
-    for a in A, m in M_no0, n in N
-        sval = value(model[:s][a,m,n])
-        if sval > 0.01
-            println(lpad(string(a), 6) * " | " * lpad(string(m), 5) * " | " * lpad(string(n), 8) * " | " * lpad(@sprintf("%.2f", sval), 8))
-        end
-    end
+    # section("DECISION VAR: s[a,m,n] (Service per Operation)")
+    # println(lpad("Group", 6) * " | " * lpad("Op", 5) * " | " * lpad("eVTOL", 8) * " | " * lpad("Value", 8))
+    # println("-" ^ 35)
+    # for a in A, m in M_no0, n in N
+    #     sval = value(model[:s][a,m,n])
+    #     if sval > 0.01
+    #         println(lpad(string(a), 6) * " | " * lpad(string(m), 5) * " | " * lpad(string(n), 8) * " | " * lpad(@sprintf("%.2f", sval), 8))
+    #     end
+    # end
 
-    section("DECISION VAR: ss[a,n] (Service by eVTOL)")
-    println(lpad("Group", 6) * " | " * lpad("eVTOL", 8) * " | " * lpad("Value", 8))
-    println("-" ^ 28)
-    for a in A, n in N
-        sval = value(model[:ss][a,n])
-        if sval > 0.01
-            println(lpad(string(a), 6) * " | " * lpad(string(n), 8) * " | " * lpad(@sprintf("%.2f", sval), 8))
-        end
-    end
+    # section("DECISION VAR: ss[a,n] (Service by eVTOL)")
+    # println(lpad("Group", 6) * " | " * lpad("eVTOL", 8) * " | " * lpad("Value", 8))
+    # println("-" ^ 28)
+    # for a in A, n in N
+    #     sval = value(model[:ss][a,n])
+    #     if sval > 0.01
+    #         println(lpad(string(a), 6) * " | " * lpad(string(n), 8) * " | " * lpad(@sprintf("%.2f", sval), 8))
+    #     end
+    # end
 
-    section("DECISION VAR: z[a] (Direct=0, Layover=1)")
-    println(lpad("Group", 6) * " | " * lpad("Value", 8) * " | " * lpad("Type", 12))
-    println("-" ^ 32)
-    for a in A
-        zval = value(model[:z][a])
-        ztype = zval > 0.5 ? "Layover" : "Direct"
-        println(lpad(string(a), 6) * " | " * lpad(@sprintf("%.2f", zval), 8) * " | " * lpad(ztype, 12))
-    end
+    # section("DECISION VAR: z[a] (Direct=0, Layover=1)")
+    # println(lpad("Group", 6) * " | " * lpad("Value", 8) * " | " * lpad("Type", 12))
+    # println("-" ^ 32)
+    # for a in A
+    #     zval = value(model[:z][a])
+    #     ztype = zval > 0.5 ? "Layover" : "Direct"
+    #     println(lpad(string(a), 6) * " | " * lpad(@sprintf("%.2f", zval), 8) * " | " * lpad(ztype, 12))
+    # end
 
     section("DECISION VAR: k[a,i,j,m,n] (Service Arc)")
     count = 0
@@ -1106,54 +1106,54 @@ function print_results_pretty(model::Model, data)
         println(lpad(string(n), 8) * " | " * lpad(string(m), 5) * " | " * lpad(@sprintf("%.2f", dep_val), 12) * " | " * lpad(@sprintf("%.2f", arr_val), 12))
     end
 
-    section("DECISION VAR: is_p[j,n,t] and is_o[i,j,m,n,t] (Occupancy States)")
-    println(lpad("eVTOL", 8) * " | " * lpad("Time", 6) * " | " * lpad("Park Node", 10) * " | " * lpad("Travel Arc", 10) * " | " * lpad("Op", 5) * " | " * lpad("is_p", 8) * " | " * lpad("is_o", 8))
-    println("-" ^ 73)
+    # section("DECISION VAR: is_p[j,n,t] and is_o[i,j,m,n,t] (Occupancy States)")
+    # println(lpad("eVTOL", 8) * " | " * lpad("Time", 6) * " | " * lpad("Park Node", 10) * " | " * lpad("Travel Arc", 10) * " | " * lpad("Op", 5) * " | " * lpad("is_p", 8) * " | " * lpad("is_o", 8))
+    # println("-" ^ 73)
 
-    shown = 0
-    p_count = 0
-    o_count = 0
+    # shown = 0
+    # p_count = 0
+    # o_count = 0
 
-    for n in N, t in T
-        p_node = "-"
-        check = 0.5
-        p_val = 0.0
-        for j in V
-            pv = value(model[:is_p][j,n,t])
-            if pv > check
-                p_val = pv
-                p_node = string(j)
-            end
-        end
+    # for n in N, t in T
+    #     p_node = "-"
+    #     check = 0.5
+    #     p_val = 0.0
+    #     for j in V
+    #         pv = value(model[:is_p][j,n,t])
+    #         if pv > check
+    #             p_val = pv
+    #             p_node = string(j)
+    #         end
+    #     end
 
-        o_arc = "-"
-        o_op = "-"
-        o_val = 0.0
-        for i in V, j in V, m in M
-            ov = value(model[:is_o][i,j,m,n,t])
-            if ov > check
-                o_val = ov
-                o_arc = "$i->$j"
-                o_op = string(m)
-            end
-        end
+    #     o_arc = "-"
+    #     o_op = "-"
+    #     o_val = 0.0
+    #     for i in V, j in V, m in M
+    #         ov = value(model[:is_o][i,j,m,n,t])
+    #         if ov > check
+    #             o_val = ov
+    #             o_arc = "$i->$j"
+    #             o_op = string(m)
+    #         end
+    #     end
 
-        if p_val > 0.01 || o_val > 0.01
-            println(lpad(string(n), 8) * " | " * lpad(string(t), 6) * " | " * lpad(p_node, 10) * " | " * lpad(o_arc, 10) * " | " * lpad(o_op, 5) * " | " * lpad(@sprintf("%.2f", p_val), 8) * " | " * lpad(@sprintf("%.2f", o_val), 8))
-            shown += 1
-            if p_val > 0.5
-                p_count += 1
-            end
-            if o_val > 0.5
-                o_count += 1
-            end
-        end
-    end
+    #     if p_val > 0.01 || o_val > 0.01
+    #         println(lpad(string(n), 8) * " | " * lpad(string(t), 6) * " | " * lpad(p_node, 10) * " | " * lpad(o_arc, 10) * " | " * lpad(o_op, 5) * " | " * lpad(@sprintf("%.2f", p_val), 8) * " | " * lpad(@sprintf("%.2f", o_val), 8))
+    #         shown += 1
+    #         if p_val > 0.5
+    #             p_count += 1
+    #         end
+    #         if o_val > 0.5
+    #             o_count += 1
+    #         end
+    #     end
+    # end
 
-    if shown == 0
-        println("(all or mostly zeros)")
-    end
-    println("Summary: rows shown = $(shown), active is_p = $(p_count), active is_o = $(o_count)")
+    # if shown == 0
+    #     println("(all or mostly zeros)")
+    # end
+    # println("Summary: rows shown = $(shown), active is_p = $(p_count), active is_o = $(o_count)")
 
     divider()
     println()
