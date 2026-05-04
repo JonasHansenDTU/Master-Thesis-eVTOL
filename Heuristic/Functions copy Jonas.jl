@@ -1076,7 +1076,7 @@ function assign_passengersV2(evtols::allPlaneSolution, data, rt::Matrix{Int})
             end
         else
             ass = find_direct_leg!V2(scheduled, a, op, dp, dt, q, w, so)
-            if ass == nothing 
+            if ass === nothing 
                 ass = find_one_stop_assignment!V2(scheduled, a, op, dp, dt, q, w)
                 if ass !== nothing
                     push!(assignments, ass)
