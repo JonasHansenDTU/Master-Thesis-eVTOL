@@ -900,16 +900,16 @@ function assign_passengersV2(evtols::allPlaneSolution, data, rt::Matrix{Int})
     for a in Price_sort
         if so[a] == 0
             ass = find_direct_leg!V2(scheduled, a, op, dp, dt, q, w, so)
-            if ass !== nothing
+            if ass !== isnothing
                 push!(assignments, ass)
                 push!(assigned_groups, a)
             end
         end
         if so[a] == 1
             ass = find_direct_leg!V2(scheduled, a, op, dp, dt, q, w, so)
-            if ass == nothing 
+            if ass == isnothing 
                 ass = find_one_stop_assignment!V2(scheduled, a, op, dp, dt, q, w)
-                if ass !== nothing
+                if ass !== isnothing
                     push!(assignments, ass)
                     push!(assigned_groups, a)
                 end
