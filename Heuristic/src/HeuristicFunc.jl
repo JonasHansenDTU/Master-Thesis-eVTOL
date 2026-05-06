@@ -7,9 +7,11 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; verbos
     best_obj = -Inf
     best_sol = allPlaneSolution(planeSolution[])
 
+    candiateroutes = Candidate_Route(data)
+
     while elapsed <= Float64(MaxTime)
         nr = 1
-        Best_sols = generate_best_initial_solutions(data, rt; n_runs = 50, top_k = nr, top_c, maxLegs=6, maxTurnaround)
+        Best_sols = generate_best_initial_solutions(data, rt, candiateroutes; n_runs = 50, top_k = nr, top_c, maxLegs=6, maxTurnaround)
 
         temp_obj = Best_sols[nr].fitness
         temp_sol = deepcopy(Best_sols[nr].evtols)

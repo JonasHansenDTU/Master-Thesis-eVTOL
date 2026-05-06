@@ -28,6 +28,363 @@ function build_vertiport_weights(V, op, dp, A)
     return [counts[v] for v in V]
 end
 
+### ----------------- Create candidate routes from passengers op ------------ ###
+function Time_and_Price(data, a1, a2)
+    so = data.so
+    op = data.op
+    dp = data.dp
+    # dt = data.dt
+    fs = data.fs
+    fd = data.fd
+    rt = data.rt
+    te = data.te
+
+    from = op[a1]
+    to = dp[a1]
+    stopover = !isnothing(a2)
+
+    if !stopover
+        time = rt[(from, to)]
+        price = fd[(from, to)]*(1-0.25*so[a1])
+    else
+        via = op[a2]
+        if via != to && from != via
+            time = rt[(from, via)] + rt[(via, to)] + te
+        else
+            time = rt[(from, to)]
+        end
+        price = fs[(from, to)] + (fs[via, dp[a2]]*((rt[via, dp[a2]] -  rt[(to, dp[a2])])/rt[via, dp[a2]])) # Plus part of price for secondary passenger
+    end
+
+    return time, price
+end
+
+function Candidate_Route(data)
+    A = data.A
+    so = data.so
+    op = data.op
+    dp = data.dp
+    dt = data.dt
+    rt = data.rt
+    te = data.te
+    w  = data.w
+    bmin = data.bmin
+    bmax = data.bmax
+    e = data.e
+
+    direct_only = [a for a in A if so[a] == 0]
+    stopover_allowed = [a for a in A if so[a] == 1]
+
+    cand_routes = Dict{Int, Vector{Tuple{Vector{Int}, Tuple{Float64, Float64}, Vector{Int}, Union{Nothing, Float64}}}}()
+
+    for a in direct_only
+        time_price = Time_and_Price(data, a, nothing)
+        if e[op[a], dp[a]] <= bmax-bmin
+            cand_routes[a] = [([op[a], dp[a]], time_price, [a], nothing)]
+        end
+    end
+
+    for a1 in stopover_allowed
+        routes = Vector{Tuple{Vector{Int}, Tuple{Float64, Float64}, Vector{Int}, Union{Nothing, Float64}}}()
+
+        time_price = Time_and_Price(data, a1, nothing)
+        if e[op[a1], dp[a1]] <= bmax-bmin
+            push!(routes, ([op[a1], dp[a1]], time_price, [a1], nothing))
+        end
+
+        for a2 in stopover_allowed
+            if a2 != a1 && dt[a1] + rt[(op[a1], op[a2])] + te <= dt[a2] + w &&
+                e[op[a1], op[a2]] <= bmax-bmin && e[op[a2], dp[a1]] <= bmax-bmin
+                time_price = Time_and_Price(data, a1, a2)
+                if op[a1] != op[a2] && op[a2] != dp[a1]
+                    push!(routes, ([op[a1], op[a2], dp[a1]], time_price, [a1, a2], nothing))
+                else
+                    push!(routes, ([op[a1], dp[a1]], time_price, [a1, a2], nothing))
+                end
+            end
+        end
+
+        cand_routes[a1] = routes
+    end
+
+    return cand_routes
+end
+
+function return_posssible(current_time, current_VP, next_VP, base_VP, rt, ET, te)
+
+    if next_VP == base_VP
+        return (true, ET - current_time - rt[(current_VP, next_VP)])
+    end
+
+    # Remaining time budget after flying to next_VP, turning around, and returning to base.
+    maxTT = ET - current_time - rt[(current_VP, next_VP)] - te - rt[(next_VP, base_VP)]
+    # if current_VP == 2 && next_VP == 3
+    #     println("HEY")
+    # end
+
+    return (maxTT >= 0, maxTT)
+    
+end
+
+function expectedTurnaroundTime(a1, a2, current_time, data, stopover::Bool, first_trip::Bool, base_VP)
+    dt = data.dt
+    rt = data.rt
+    op = data.op
+    dp = data.dp
+    te = data.te
+    w = data.w
+    ET = data.ET
+
+
+    if !stopover
+        lowerbound = max(te, dt[a1] - current_time)
+        upperbound = min(dt[a1] - current_time + w,
+                        return_posssible(current_time, op[a1], dp[a1], base_VP, rt, ET, te)[2])
+    else
+        lowerbound = max(te, dt[a1]-current_time,
+                            dt[a2] + rt[op[a1],op[a2]] + (op[a1]!= op[a2] && op[a2] != dp[a1] ? te : 0) - current_time)
+        upperbound = min(dt[a1] - current_time + w,
+                            dt[a2] + w + rt[op[a1],op[a2]] + (op[a1]!= op[a2] && op[a2] != dp[a1] ? te : 0) - current_time,
+                            return_posssible(current_time, op[a1], (op[a1] == op[a2] || op[a2] == dp[a1] ? dp[a1] : op[a2]), base_VP, rt, ET, te)[2])
+    end
+    
+
+    # if op[a1] == 2 && (stopover == 1 ? op[a2] : dp[a1]) == 3
+    #     println("HEY")
+    # end
+
+
+    
+    if upperbound-lowerbound <= te && !first_trip
+        return nothing #No feasible solution
+    elseif upperbound < lowerbound
+        return nothing
+    else
+        return Int(rand(lowerbound:upperbound))
+    end
+end
+
+
+
+
+function alternative_route(current_time, unique_next_VPs, current_VP, base_VP, rt, ET, te, V)
+
+    cand_VP = [v for v in V if !(v in unique_next_VPs) && return_posssible(current_time, current_VP, v, base_VP, rt, ET, te)[1] && (v != current_VP || current_VP == base_VP)]
+
+    if length(cand_VP) == 1 && cand_VP[1] == base_VP
+        return base_VP, true
+    end
+
+    return rand(cand_VP), false
+
+end
+
+function k_BestRoutes(Potential_Passengers, k, current_time, Candidate_Routes, data, current_VP, base_VP, first_trip::Bool)
+    scored_routes = Tuple{Vector{Int}, Tuple{Float64, Float64}, Vector{Int}, Float64, Int}[]
+
+
+    # if current_VP == 2
+    #     println("HEY")
+    # end
+
+    if isempty(Potential_Passengers)
+        next_VP, base_only_option = alternative_route(current_time, [], current_VP, base_VP, data.rt, data.ET, data.te, data.V)
+        if next_VP == current_VP
+            return nothing
+        end
+        expected_turnaround = data.te
+        new_time = data.rt[(current_VP, next_VP)] + expected_turnaround
+        push!(scored_routes, ([current_VP, next_VP], (new_time,0), [], 0, expected_turnaround))
+        return scored_routes
+    end
+
+    
+
+    for a in Potential_Passengers
+        for route in Candidate_Routes[a]
+
+            batter_needed = data.e[(current_VP, route[1][2])]
+            if batter_needed >= (first_trip ? data.bmid-data.bmin : data.bmax-data.bmin)
+                continue
+            end
+
+            if length(route[3]) == 1
+                a2 = nothing
+                expected_turnaround = expectedTurnaroundTime(a, a2, current_time, data, false, first_trip, base_VP)
+            else
+                a2 = route[3][2]
+                expected_turnaround = expectedTurnaroundTime(a, a2, current_time, data, true, first_trip, base_VP)
+            end
+
+            if expected_turnaround === nothing
+                continue
+            end
+            
+            base_time, base_price = route[2]
+            time = base_time + current_time + expected_turnaround
+            updated_time_price = (time, base_price)
+            price_pr_time = base_price / time
+
+            push!(scored_routes, (route[1], updated_time_price, route[3], price_pr_time, expected_turnaround))
+        end
+    end
+
+    if isempty(scored_routes)
+        if base_VP == current_VP
+            return nothing
+        end
+        next_VP = base_VP
+        bool, maxTT = return_posssible(current_time, current_VP, next_VP, base_VP, data.rt, data.ET, data.te)
+        
+        expected_turnaround = rand(Int(ceil(data.te)):Int(floor(maxTT)))
+        new_time = data.rt[(current_VP, base_VP)] + expected_turnaround
+        
+        push!(scored_routes, ([current_VP, base_VP], (new_time,0), [], 0, expected_turnaround))
+    end
+
+    sort!(scored_routes, by = r -> r[4], rev = true)
+
+    unique_routes = Tuple{Vector{Int}, Tuple{Float64, Float64}, Vector{Int}, Float64, Int}[]
+    seen_route_keys = Set{Tuple{Vararg{Int}}}()
+
+    for route in scored_routes
+        route_key = Tuple(route[1])
+        if route_key in seen_route_keys
+            continue
+        end
+        push!(seen_route_keys, route_key)
+        push!(unique_routes, route)
+        length(unique_routes) == k && break
+    end
+
+    return unique_routes
+end
+
+
+
+function Construction_Heuristic(data, Candidate_Routes; maxLegs::Int=5)
+
+    V = data.V
+    N = data.N
+    A = data.A
+    bv = data.bv
+    op = data.op
+    dp = data.dp
+    te = data.te
+    dt = data.dt
+    rt = data.rt
+    w = data.w
+    ET = data.ET
+
+    k = 3 #Size of RCL (Restricted candidate list)
+
+
+    planes = planeSolution[]
+
+    passengers_served = Int[]
+
+    for n in N
+        returned = false
+        first_trip = true
+        current_time = 0
+        current_VP = bv[n]
+        base_VP = bv[n]
+
+        route = Int32[current_VP]
+        turnaroundTime = Int32[]
+        flightLegs = 0
+
+        while !returned
+
+            if flightLegs == maxLegs-1
+                poten_pass = [a for a in keys(Candidate_Routes) if op[a] == current_VP &&
+                        current_time <= dt[a] + w &&
+                        !(a in passengers_served) &&
+                        dp[a] == base_VP]
+                returned = true
+            else
+                poten_pass = [a for a in keys(Candidate_Routes) if op[a] == current_VP &&
+                            current_time <= dt[a] + w &&
+                            !(a in passengers_served)]  
+            end          
+
+            best_routes = k_BestRoutes(poten_pass, k, current_time, Candidate_Routes, data, current_VP, base_VP, first_trip)
+
+            if isnothing(best_routes)
+                returned = true
+                break
+            end
+
+            # remove entries where passengers are already served
+            best_routes = [r for r in best_routes if !any(p in passengers_served for p in r[3])]
+
+            # shuffle candidate routes and build list of unique next vertiports
+            best_routes = shuffle!(best_routes)
+            unique_next_VPs = unique([(r[1][2], (length(r[1]) > 2 ? 1 : 0)) for r in best_routes])
+
+            next_VP = unique_next_VPs[1][1]
+            stopover = unique_next_VPs[1][2]
+            passengers = best_routes[1][3]
+            idx = 1
+            base_only_option = false
+
+            while !return_posssible(current_time, current_VP, next_VP, bv[n], rt, ET, te)[1]
+                idx += 1
+                next_VP = unique_next_VPs[idx][1]
+                passengers = best_routes[idx][3]
+                if idx == length(unique_next_VPs)
+                    idx += 1
+                    next_VP, base_only_option = alternative_route(current_time, unique_next_VPs, current_VP, base_VP, rt, ET, te, V)
+                    stopover = 0
+                    passengers = []
+                    continue
+                end
+            end
+
+            push!(route, Int32(next_VP))
+            push!(turnaroundTime, best_routes[idx][5])
+            flightLegs += 1
+
+            current_time = current_time + turnaroundTime[end] + rt[(current_VP, next_VP)] 
+            current_VP = next_VP
+
+            if stopover == 1
+                next_VP = best_routes[idx][1][3]
+                can_return, maxTT = return_posssible(current_time, current_VP, next_VP, bv[n], rt, ET, te)
+                if can_return
+                    push!(route, Int32(next_VP))
+                    push!(turnaroundTime, rand([te: maxTT]))
+                    flightLegs += 1
+                    current_time = current_time + turnaroundTime[end] + rt[(current_VP, next_VP)] 
+                end
+            end
+
+            append!(passengers_served, passengers)
+            
+
+
+            first_trip = false
+
+            if base_only_option
+                returned = true
+            elseif current_VP == base_VP
+                returned = rand(Bool) #!!!!!!
+            end
+        end
+
+        push!(planes, planeSolution(
+            Int32(flightLegs),
+            route,
+            turnaroundTime
+        ))
+    end
+
+    return allPlaneSolution(planes)
+end
+
+### ------------------------------------------------------------------------- ###
+
+
 function initial_chromosome_solution(data; maxLegs::Int=5, maxTurnaround::Int=30, debug_print::Bool=false)
     #creates a random initial route plan for each plane, starting and ending at its base,
     #with demand-biased intermediate vertiports and random flight legs and turnaround times, then packs everything into your chromosome structure.
@@ -699,11 +1056,12 @@ function print_chromosome_table(evtols::allPlaneSolution)
     end
 end
 
-function generate_best_initial_solutions(data, rt; n_runs::Int=1000, top_k::Int=10, top_c::Int=3,  maxLegs::Int=5, maxTurnaround::Int=30, print_each::Bool=false)
+function generate_best_initial_solutions(data, rt, candiateroutes; n_runs::Int=1000, top_k::Int=10, top_c::Int=3,  maxLegs::Int=5, maxTurnaround::Int=30, print_each::Bool=false)
     results = NamedTuple[]
 
     for run in 1:n_runs
-        evtols_init= initial_chromosome_solution(data; maxLegs=maxLegs, maxTurnaround=maxTurnaround)
+        # evtols_init = initial_chromosome_solution(data; maxLegs=maxLegs, maxTurnaround=maxTurnaround)
+        evtols_init = Construction_Heuristic(data, candiateroutes)
 
         assignments, scheduled = assign_passengersV2(evtols_init, data, Int.(rt))
 
