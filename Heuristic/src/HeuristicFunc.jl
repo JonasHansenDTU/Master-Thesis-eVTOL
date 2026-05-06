@@ -1,4 +1,4 @@
-function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; verbose::Bool=false, progress_every::Int=0)
+function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
 
     start_ns = time_ns()
     elapsed = 0.0
@@ -19,16 +19,9 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; verbos
         if temp_obj > best_obj
             best_obj = temp_obj
             best_sol = deepcopy(temp_sol)
-            if verbose
-                println("New best Obj $(best_obj)")
-                println("Method used: Initial Heuristic")
-            end
+            println("New best Obj $(best_obj)")
+            println("Method used: Initial Heuristic")
         end
-
-        # if print_chromosome_table(temp_sol) !== nothing
-        #     print_chromosome_table(temp_sol)
-        #     println("Objective value: $(temp_obj)")
-        # end 
 
         improvement = true
         while improvement && elapsed <= Float64(MaxTime)
@@ -69,10 +62,8 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; verbos
                 if temp_obj > best_obj
                     best_obj = temp_obj
                     best_sol = deepcopy(temp_sol)
-                    if verbose
-                        println("New best Obj $(best_obj)")
-                        println("Method used: $(("Destructor", "Constructor", "Swap", "2-opt")[method_used + 1])")
-                    end
+                    println("New best Obj $(best_obj)")
+                    println("Method used: $(("Destructor", "Constructor", "Swap", "2-opt")[method_used + 1])")
                 end
             end
 
@@ -80,7 +71,7 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; verbos
         end
 
         iterations += 1
-        if verbose && progress_every > 0 && iterations % progress_every == 0
+        if iterations % 100 == 0
             println("iteration: $(iterations)")
         end
         elapsed = (time_ns() - start_ns) / 1e9

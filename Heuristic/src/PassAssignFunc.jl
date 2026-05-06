@@ -194,8 +194,7 @@ function find_one_stop_assignment!(scheduled::Vector{ScheduledLeg},
     return PassengerAssignment(a, leg1.plane, [leg1.leg_index, leg2.leg_index])
 end
 
-function find_one_stop_assignment!V2(scheduled::Vector{ScheduledLeg},
-                                   a::Int, op, dp, dt, q, w)
+function find_one_stop_assignment!V2(scheduled::Vector{ScheduledLeg}, a::Int, op, dp, dt, q, w, te)
     best_pair = nothing
     best_arrival = typemax(Int)
 
@@ -212,7 +211,8 @@ function find_one_stop_assignment!V2(scheduled::Vector{ScheduledLeg},
                 leg2 = scheduled[idx+1]
                 if leg2.plane == leg1.plane &&
                     leg2.to == dp[a] &&
-                    leg2.remaining_capacity >= q[a]
+                    leg2.remaining_capacity >= q[a] &&
+                    leg1.arr + te == leg2.dep 
 
                     if leg2.arr < best_arrival
                         best_arrival = leg2.arr
@@ -314,8 +314,8 @@ function assign_passengersV2(evtols::allPlaneSolution, data, rt::Matrix{Int})
             end
         else
             ass = find_direct_leg!V2(scheduled, a, op, dp, dt, q, w, so)
-            if ass == nothing 
-                ass = find_one_stop_assignment!V2(scheduled, a, op, dp, dt, q, w)
+            if ass === nothing 
+                ass = find_one_stop_assignment!V2(scheduled, a, op, dp, dt, q, w, te)
                 if ass !== nothing
                     push!(assignments, ass)
                     push!(assigned_groups, a)

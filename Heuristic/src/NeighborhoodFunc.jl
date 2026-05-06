@@ -134,7 +134,7 @@ function UpdateTurnAroundTimes(planes::allPlaneSolution, from::Int64, maxTurnaro
                 plane.turnaroundTime[k] = Int32(round(Int, chosen_time))
             else
                 # Choose rate (tune as needed)
-                λ = 1.0 / (maxTurnaround - te)
+                λ = 1.5
 
                 # Bounds as floats
                 a = float(te)

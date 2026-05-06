@@ -3,11 +3,11 @@ using HTTP
 using JSON3
 
 file = "inputData/Parameters.xlsx"
-sheet_name = "Prices"   # ret hvis dit ark hedder noget andet
+sheet_name = "Prices" 
 
 # -----------------------------
 # Parsing helpers
-# -----------------------------
+# --------------------------
 
 function parse_number(x)
     if ismissing(x) || x === nothing || strip(string(x)) == ""
@@ -35,7 +35,6 @@ function parse_coord(s)
     return lat, lon
 end
 
-
 # -----------------------------
 # Distance calculation
 # -----------------------------
@@ -53,7 +52,6 @@ function haversine_km(lat1, lon1, lat2, lon2)
 
     return r * c
 end
-
 
 # -----------------------------
 # OSRM drive time
@@ -98,7 +96,6 @@ function drive_time_minutes(lat1, lon1, lat2, lon2, cache)
     return minutes
 end
 
-
 # -----------------------------
 # Excel helpers
 # -----------------------------
@@ -135,7 +132,6 @@ function find_parameter_value(sheet, parameter_name)
 
     error("Could not find parameter: $parameter_name")
 end
-
 
 # -----------------------------
 # Main script

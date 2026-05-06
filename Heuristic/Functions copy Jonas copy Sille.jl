@@ -907,7 +907,7 @@ function assign_passengersV2(evtols::allPlaneSolution, data, rt::Matrix{Int})
         end
         if so[a] == 1
             ass = find_direct_leg!V2(scheduled, a, op, dp, dt, q, w, so)
-            if ass == nothing 
+            if ass === nothing 
                 ass = find_one_stop_assignment!V2(scheduled, a, op, dp, dt, q, w)
                 if ass !== nothing
                     push!(assignments, ass)
@@ -1751,8 +1751,8 @@ function Swap(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64,
 
                 cand = deepcopy(planes)
 
-                # 1) Insert new stop at idx
-                Constructor(cand.planes[n], v, idx, data)
+                # 1) Insert new stop at idx 
+                Constructor(cand.planes[n], maxTurnaround, v, idx, data)
 
                 # 2) Remove original stop (shifted to idx+1 after insertion)
                 Destructor(cand.planes[n], [Int64(idx + 1)])
