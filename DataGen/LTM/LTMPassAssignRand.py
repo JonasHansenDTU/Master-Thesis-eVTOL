@@ -1,165 +1,180 @@
+LTMPassAssignRand.py
+# %%
 import pandas as pd
 import numpy as np
+from pathlib import Path
 
-# -----------------------------
-# SETTINGS
-# -----------------------------
-NUM_DAYS = 3
-GROUPS_PER_DAY = 60
+# -------------------------
+# Paths
+# -------------------------
 
-START_MORNING = 420   # 07:00
-END_MORNING   = 720   # 12:00
-START_AFTERNOON = 840 # 14:00
-END_DAY       = 1200  # 20:00
+BASE_DIR = Path("/Users/asbb/Desktop/Speciale/Master-Thesis-eVTOL/DataGen/LTM")
+file_path = BASE_DIR / "AntalErhvervstureMellemKommuner_GMM_Basis2025.xlsx"
 
-# -----------------------------
-# LOAD DATA
-# -----------------------------
-BASE_PATH = "/Users/asbb/Desktop/Speciale/Master-Thesis-eVTOL/DataGen/LTM/"
+# -------------------------
+# Load OD data
+# -------------------------
 
-df = pd.read_excel(BASE_PATH + "AntalErhvervstureMellemKommuner_GMM_Basis2025.xlsx")
+df = pd.read_excel(file_path, sheet_name="LTM")
 
-vertiports = pd.read_excel(
-    BASE_PATH + "AntalErhvervstureMellemKommuner_GMM_Basis2025.xlsx",
-    sheet_name="VertiportID"
-)
+MODE = "fly"
+col = f"AntalErhvervsture_{MODE}"
 
-# -----------------------------
-# PREPROCESS
-# -----------------------------
+df = df[["FraKommune", "TilKommune", col]].copy()
+df.rename(columns={col: "trips"}, inplace=True)
+
+# remove zero flows
+df = df[df["trips"] > 0]
+
+# remove self trips
 df = df[df["FraKommune"] != df["TilKommune"]]
 
-df["demand"] = df["AntalErhvervsture_fly"]
-df = df[df["demand"] > 0]
+# -------------------------
+# Load vertiports
+# -------------------------
 
-# -----------------------------
-# MAP kommune → vertiport
-# -----------------------------
-kommune_to_vertiport = dict(zip(vertiports["Kommuneid"], vertiports["id"]))
+df_verti = pd.read_excel(file_path, sheet_name="VertiportID")
 
-df["origin_id"] = df["FraKommune"].map(kommune_to_vertiport)
-df["dest_id"]   = df["TilKommune"].map(kommune_to_vertiport)
+kommune_to_vertiport = dict(zip(df_verti["Kommuneid"], df_verti["id"]))
+all_vertiports = list(df_verti["id"])
 
-df = df.dropna(subset=["origin_id", "dest_id"])
+# keep only routes with vertiports
+df = df[
+    df["FraKommune"].isin(kommune_to_vertiport) &
+    df["TilKommune"].isin(kommune_to_vertiport)
+]
 
-df["origin_id"] = df["origin_id"].astype(int)
-df["dest_id"]   = df["dest_id"].astype(int)
+print(f"Ruter efter vertiport filter: {len(df)}")
 
-# -----------------------------
-# PROBABILITIES
-# -----------------------------
-probabilities = df["demand"] / df["demand"].sum()
+# -------------------------
+# Create probabilities
+# -------------------------
 
-# -----------------------------
-# TIME SAMPLING
-# -----------------------------
-def sample_departure_time():
-    r = np.random.rand()
+df["prob"] = df["trips"] / df["trips"].sum()
 
-    if r < 0.6:
-        return int(np.random.normal(loc=600, scale=90))   # morning peak
+# -------------------------
+# Group size model
+# -------------------------
+
+def sample_group_size(trips):
+    if trips < 100:
+        probs = [0.7, 0.2, 0.08, 0.02]
+    elif trips < 500:
+        probs = [0.5, 0.3, 0.15, 0.05]
     else:
-        return int(np.random.normal(loc=1020, scale=120)) # afternoon peak
+        probs = [0.3, 0.4, 0.2, 0.1]
 
+    return np.random.choice([1, 2, 3, 4], p=probs)
 
-def sample_departure_time_valid():
-    while True:
-        t = sample_departure_time()
-        if (START_MORNING <= t <= END_MORNING) or (START_AFTERNOON <= t <= END_DAY):
-            return t
+# -------------------------
+# Settings
+# -------------------------
 
-# -----------------------------
-# GROUP SIZE (FULLY RANDOM)
-# -----------------------------
-def sample_group_size():
-    return np.random.choice([1, 2, 3, 4])  # equal probability
+DAYS = 5
+GROUPS_PER_DAY = 60
 
-# -----------------------------
-# GENERATE DEMAND
-# -----------------------------
+START_TIME = 8 * 60
+END_TIME   = 22 * 60
+
+np.random.seed(42)
+
 rows = []
-group_id = 1
 
-for day in range(1, NUM_DAYS + 1):
+# -------------------------
+# Generate demand
+# -------------------------
 
-    sampled_indices = np.random.choice(df.index, size=GROUPS_PER_DAY, p=probabilities)
+for day in range(1, DAYS + 1):
 
-    used_vertiports = set()
+    # --- Demand-driven sampling ---
+    sampled_indices = np.random.choice(
+        df.index,
+        size=GROUPS_PER_DAY,
+        p=df["prob"],
+        replace=True
+    )
 
     for idx in sampled_indices:
         row = df.loc[idx]
 
-        origin = row["origin_id"]
-        dest   = row["dest_id"]
-
-        if origin == dest:
-            continue
-
-        time = sample_departure_time_valid()
-        passengers = sample_group_size()
+        passengers = sample_group_size(row["trips"])
+        time = np.random.randint(START_TIME, END_TIME)
         stopover = np.random.choice([0, 1])
 
         rows.append({
-            "group": group_id,
-            "day": day,
-            "origin": origin,
-            "destination": dest,
-            "time": int(time),
-            "number_of_passengers": int(passengers),
-            "stopover_allowed": int(stopover)
+            "origin": kommune_to_vertiport[row["FraKommune"]],
+            "destination": kommune_to_vertiport[row["TilKommune"]],
+            "time": time,
+            "number_of_passengers": passengers,
+            "stopover_allowed": stopover,
+            "day": day
         })
 
-        used_vertiports.add(origin)
-        used_vertiports.add(dest)
+    # --- Exploration: ensure all vertiports are used ---
+    used = set(
+        [r["origin"] for r in rows if r["day"] == day] +
+        [r["destination"] for r in rows if r["day"] == day]
+    )
 
-        group_id += 1
+    missing = set(all_vertiports) - used
 
-    # -----------------------------
-    # ENSURE ALL VERTIPORTS USED
-    # -----------------------------
-    all_vertiports = set(vertiports["id"])
-    missing = all_vertiports - used_vertiports
+    for vp in missing:
 
-for vp in missing:
-    # Random number of trips (1 to 5)
-    num_extra_trips = np.random.randint(1, 6)
+        other = np.random.choice([v for v in all_vertiports if v != vp])
 
-    for _ in range(num_extra_trips):
-
-        other = np.random.choice(list(all_vertiports - {vp}))
-
-        # Randomly decide direction (from or to vp)
         if np.random.rand() < 0.5:
-            origin = vp
-            destination = other
+            origin, destination = vp, other
         else:
-            origin = other
-            destination = vp
+            origin, destination = other, vp
+
+        time = np.random.randint(START_TIME, END_TIME)
+
+        # small groups for random demand
+        passengers = np.random.choice([1, 2], p=[0.8, 0.2])
+
+        stopover = np.random.choice([0, 1])
 
         rows.append({
-            "group": group_id,
-            "day": day,
             "origin": origin,
             "destination": destination,
-            "time": sample_departure_time_valid(),
-            "number_of_passengers": np.random.choice([1, 2, 3, 4]),
-            "stopover_allowed": np.random.choice([0, 1])
+            "time": time,
+            "number_of_passengers": passengers,
+            "stopover_allowed": stopover,
+            "day": day
         })
 
-        group_id += 1
+# -------------------------
+# Create dataframe
+# -------------------------
 
-# -----------------------------
-# FINAL DATAFRAME
-# -----------------------------
 df_out = pd.DataFrame(rows)
 
-df_out = df_out.sort_values(by=["day", "time"]).reset_index(drop=True)
-df_out["group"] = range(1, len(df_out) + 1)
+# -------------------------
+# Sort chronologically
+# -------------------------
 
-# -----------------------------
-# SAVE
-# -----------------------------
-output_path = BASE_PATH + "synthetic_demand.xlsx"
-df_out.to_excel(output_path, index=False)
+df_out = df_out.sort_values(["day", "time"]).reset_index(drop=True)
 
-print(f"Saved to: {output_path}")
+df_out["group"] = df_out.index + 1
+
+df_out = df_out[
+    [
+        "group",
+        "origin",
+        "destination",
+        "time",
+        "number_of_passengers",
+        "stopover_allowed",
+        "day"
+    ]
+]
+
+# -------------------------
+# Save
+# -------------------------
+
+output_file = BASE_DIR / "synthetic_demand_groups.xlsx"
+df_out.to_excel(output_file, index=False)
+
+print(f"Saved: {output_file}")
+print(df_out.head())
