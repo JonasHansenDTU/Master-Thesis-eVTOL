@@ -262,6 +262,7 @@ function load_data(excel_file::String, parameter_file::String)
     to_col   = find_col(prices, [:to])
     fd_sum_col = find_col(prices, [:fd_sum])
     fd_lookup = Dict{Tuple{Int,Int}, Float64}()
+    fd_drive_time = find_col(prices, [:bil_tid_min])
 
     for r in eachrow(prices)
         i = Int(r[from_col])
@@ -270,6 +271,35 @@ function load_data(excel_file::String, parameter_file::String)
     end
     for (i,j) in collect(keys(fd_lookup))
         fd_lookup[(j,i)] = fd_lookup[(i,j)]
+    end
+
+    drive_time_lookup = Dict{Tuple{Int,Int}, Float64}()
+
+    for r in eachrow(prices)
+        i = Int(r[from_col])
+        j = Int(r[to_col])
+        drive_time_lookup[(i,j)] = Float64(r[fd_drive_time])
+    end
+
+    for (i,j) in collect(keys(drive_time_lookup))
+        drive_time_lookup[(j,i)] = drive_time_lookup[(i,j)]
+    end
+
+    vertiports = sort(unique(vcat(
+        [i for (i, j) in keys(drive_time_lookup)],
+        [j for (i, j) in keys(drive_time_lookup)]
+    )))
+
+    end_vp = Dict{Int, Vector{Int}}()
+
+    for i in V
+        end_vp[i] = [
+            j for j in V
+            if j == i || (
+                haskey(drive_time_lookup, (i,j)) &&
+                drive_time_lookup[(i,j)] <= 60.0
+            )
+        ]
     end
 
     ###########################################################################
@@ -321,79 +351,10 @@ function load_data(excel_file::String, parameter_file::String)
         d[(a,i,j)] = (i == op[a] && j == dp[a]) ? 1 : 0
     end
 
-    function osrm_time_minutes(lat1, lon1, lat2, lon2)
-        # OSRM bruger lon,lat — ikke lat,lon
-        url = "http://router.project-osrm.org/route/v1/driving/$(lon1),$(lat1);$(lon2),$(lat2)?overview=false"
+    println("V = ", V)
+    println("keys(end_vp) = ", sort(collect(keys(end_vp))))
+    println("base vertiports = ", sort(unique([bv[n] for n in N])))
     
-        resp = HTTP.get(url)
-        data = JSON3.read(String(resp.body))
-    
-        if data.code != "Ok"
-            error("OSRM error: $(data.code)")
-        end
-    
-        return data.routes[1].duration / 60.0
-    end
-    
-    function drive_time_key(lat1, lon1, lat2, lon2)
-        return (
-            round(lat1, digits=6),
-            round(lon1, digits=6),
-            round(lat2, digits=6),
-            round(lon2, digits=6)
-        )
-    end
-    
-    function drive_time_minutes(lat1, lon1, lat2, lon2, cache)
-        key = drive_time_key(lat1, lon1, lat2, lon2)
-        if haskey(cache, key)
-            return cache[key]
-        end
-        minutes = osrm_time_minutes(lat1, lon1, lat2, lon2)
-        cache[key] = minutes
-        sleep(0.2)
-        return minutes
-    end
-
-    # Precompute allowed end vps for each eVTOL
-    drive_time_cache = Dict{Tuple{Float64, Float64, Float64, Float64}, Float64}()
-    if isfile("drive_time_cache.csv")
-        cache_df = CSV.read("drive_time_cache.csv", DataFrame)
-        for row in eachrow(cache_df)
-            key = (row.lat1, row.lon1, row.lat2, row.lon2)
-            drive_time_cache[key] = row.minutes
-        end
-    end
-
-    end_vp = Dict{Int, Vector{Int}}()
-    for n in N
-        base_vp = bv[n]
-        if lat_col !== nothing && lon_col !== nothing
-            base_lat = infra[base_vp, lat_col]
-            base_lon = infra[base_vp, lon_col]
-        elseif coord_col !== nothing
-            base_lat, base_lon = parse.(Float64, split(strip(infra[base_vp, coord_col], ['(', ')']), ","))
-        else
-            error("No latitude/longitude or coordinates column found.")
-        end
-        allowed = Int[]
-        for v in V
-            if lat_col !== nothing && lon_col !== nothing
-                lat = infra[v, lat_col]
-                lon = infra[v, lon_col]
-            elseif coord_col !== nothing
-                lat, lon = parse.(Float64, split(strip(infra[v, coord_col], ['(', ')']), ","))
-            else
-                error("No latitude/longitude or coordinates column found.")
-            end
-            drivetime = drive_time_minutes(base_lat, base_lon, lat, lon, drive_time_cache)
-            if drivetime <= 60
-                push!(allowed, v)
-            end
-        end
-        end_vp[n] = allowed
-    end
-
     return (
         infra = infra,
         pax = pax,
@@ -403,7 +364,7 @@ function load_data(excel_file::String, parameter_file::String)
         T = collect(T), T_no0 = collect(T_no0),
         bv = bv,
         lat = lat, lon = lon,
-        dist = dist, fd = fd_lookup, fs = fs, c = c, e = e, rt = rt, end_vp = end_vp, drive_time_cache = drive_time_cache,
+        dist = dist, fd = fd_lookup, fs = fs, c = c, e = e, rt = rt, end_vp = end_vp,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
         cap_v = cap_v, cap_u = cap_u, opening_cost = opening_cost,
         bmax = bmax, bmid = bmid, b_penalty = b_penalty, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3
@@ -442,7 +403,6 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     so = data.so
     p  = data.p
     end_vp = data.end_vp
-    drive_time_cache = data.drive_time_cache
 
     cap_v        = data.cap_v
     cap_u        = data.cap_u
@@ -551,7 +511,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     # (6.3) eVTOL returns to its base vertiport or another vertiport withing 60 minute drive
     @constraint(model, [n in N],
         sum(x[bv[n], j, m, n] for j in V, m in M_no0) ==
-        sum(x[j, vp, m, n] for j in V, vp in end_vp[n], m in M_no0)
+        sum(x[j, vp, m, n] for j in V, m in M_no0, vp in end_vp[bv[n]])
     )
 
     # (6.4) eVTOL 
@@ -983,7 +943,7 @@ end
 # Usage
 ###############################################################################
 
-excel_file = joinpath("inputData/inputDataHumongous.xlsx")
+excel_file = joinpath("inputData/inputDataGiant.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()
@@ -1263,17 +1223,3 @@ timings["Pretty printing"] = t_pretty
 timings["Total script"] = time() - total_start
 
 print_timing_summary(timings)
-
-drive_time_cache = data.drive_time_cache
-
-cache_df = DataFrame(
-    lat1 = Float64[],
-    lon1 = Float64[],
-    lat2 = Float64[],
-    lon2 = Float64[],
-    minutes = Float64[]
-)
-for ((lat1, lon1, lat2, lon2), minutes) in drive_time_cache
-    push!(cache_df, (lat1, lon1, lat2, lon2, minutes))
-end
-CSV.write("drive_time_cache.csv", cache_df)
