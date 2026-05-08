@@ -137,11 +137,11 @@ function expectedTurnaroundTime(a1, a2, current_time, data, stopover::Bool, firs
 
 
     if !stopover
-        lowerbound = max(te, dt[a1] - current_time)
+        lowerbound = max((first_trip ? 0 : te), dt[a1] - current_time)
         upperbound = min(dt[a1] - current_time + w,
                         return_posssible(current_time, op[a1], dp[a1], base_VP, rt, ET, te)[2])
     else
-        lowerbound = max(te, dt[a1]-current_time,
+        lowerbound = max((first_trip ? 0 : te), dt[a1]-current_time,
                             dt[a2] + rt[op[a1],op[a2]] + (op[a1]!= op[a2] && op[a2] != dp[a1] ? te : 0) - current_time)
         upperbound = min(dt[a1] - current_time + w,
                             dt[a2] + w + rt[op[a1],op[a2]] + (op[a1]!= op[a2] && op[a2] != dp[a1] ? te : 0) - current_time,
@@ -276,12 +276,15 @@ function Construction_Heuristic(data, Candidate_Routes; maxLegs::Int=5)
     w = data.w
     ET = data.ET
 
-    k = 3 #Size of RCL (Restricted candidate list)
+    k = 4 #Size of RCL (Restricted candidate list)
 
 
     planes = planeSolution[]
 
     passengers_served = Int[]
+
+
+
 
     for n in N
         returned = false
@@ -309,7 +312,7 @@ function Construction_Heuristic(data, Candidate_Routes; maxLegs::Int=5)
             end          
 
             best_routes = k_BestRoutes(poten_pass, k, current_time, Candidate_Routes, data, current_VP, base_VP, first_trip)
-
+            
             if isnothing(best_routes)
                 returned = true
                 break
@@ -317,6 +320,11 @@ function Construction_Heuristic(data, Candidate_Routes; maxLegs::Int=5)
 
             # remove entries where passengers are already served
             best_routes = [r for r in best_routes if !any(p in passengers_served for p in r[3])]
+
+            if isempty(best_routes)
+                returned = true
+                break
+            end
 
             # shuffle candidate routes and build list of unique next vertiports
             best_routes = shuffle!(best_routes)
@@ -370,6 +378,275 @@ function Construction_Heuristic(data, Candidate_Routes; maxLegs::Int=5)
             elseif current_VP == base_VP
                 returned = rand(Bool) #!!!!!!
             end
+        end
+
+        push!(planes, planeSolution(
+            Int32(flightLegs),
+            route,
+            turnaroundTime
+        ))
+    end
+
+    return allPlaneSolution(planes)
+end
+
+
+function Construction_Heuristic2(data, Candidate_Routes; maxLegs::Int=5)
+
+    V = data.V
+    N = data.N
+    A = data.A
+    bv = data.bv
+    op = data.op
+    dp = data.dp
+    te = data.te
+    dt = data.dt
+    rt = data.rt
+    w = data.w
+    ET = data.ET
+
+    k = 4 #Size of RCL (Restricted candidate list)
+    nPlanes = length(N)
+    weights = build_vertiport_weights(V, op, dp, A)
+
+    planes = planeSolution[]
+
+    passengers_served = Int[]
+
+    # Split N into two random subsets
+    split_ratio = rand()
+    split_idx = max(1, Int(round(length(N) * split_ratio)))
+    N_shuffled = shuffle(N)
+    N1 = N_shuffled[1:split_idx]
+    N2 = N_shuffled[split_idx+1:end]
+
+    for n in N1
+        returned = false
+        first_trip = true
+        current_time = 0
+        current_VP = bv[n]
+        base_VP = bv[n]
+
+        route = Int32[current_VP]
+        turnaroundTime = Int32[]
+        flightLegs = 0
+
+        while !returned
+
+            if flightLegs == maxLegs-1
+                poten_pass = [a for a in keys(Candidate_Routes) if op[a] == current_VP &&
+                        current_time <= dt[a] + w &&
+                        !(a in passengers_served) &&
+                        dp[a] == base_VP]
+                returned = true
+            else
+                poten_pass = [a for a in keys(Candidate_Routes) if op[a] == current_VP &&
+                            current_time <= dt[a] + w &&
+                            !(a in passengers_served)]
+            end
+
+            best_routes = k_BestRoutes(poten_pass, k, current_time, Candidate_Routes, data, current_VP, base_VP, first_trip)
+
+            if isnothing(best_routes)
+                returned = true
+                break
+            end
+
+            # remove entries where passengers are already served
+            best_routes = [r for r in best_routes if !any(p in passengers_served for p in r[3])]
+
+            if isempty(best_routes)
+                returned = true
+                break
+            end
+
+            # shuffle candidate routes and keep one full route tuple per next vertiport
+            best_routes = shuffle!(best_routes)
+            unique_routes = best_routes[1:0]
+            seen_next_VPs = Set{Int}()
+
+            for r in best_routes
+                next_vp = r[1][2]
+                if next_vp in seen_next_VPs
+                    continue
+                end
+                push!(seen_next_VPs, next_vp)
+                push!(unique_routes, r)
+            end
+
+            selected_route = nothing
+            base_only_option = false
+
+            for r in unique_routes
+                next_vp = r[1][2]
+                if return_posssible(current_time, current_VP, next_vp, bv[n], rt, ET, te)[1]
+                    selected_route = r
+                    break
+                end
+            end
+
+            if selected_route === nothing
+                next_VP, base_only_option = alternative_route(current_time, collect(seen_next_VPs), current_VP, base_VP, rt, ET, te, V)
+                stopover = 0
+                passengers = Int[]
+                can_return, maxTT = return_posssible(current_time, current_VP, next_VP, bv[n], rt, ET, te)
+                selected_turnaround = can_return ? rand(Int(ceil(te)):Int(floor(maxTT))) : Int(te)
+            else
+                next_VP = selected_route[1][2]
+                stopover = (length(selected_route[1]) > 2 ? 1 : 0)
+                passengers = selected_route[3]
+                selected_turnaround = selected_route[5]
+            end
+
+            push!(route, Int32(next_VP))
+            push!(turnaroundTime, selected_turnaround)
+            flightLegs += 1
+
+            current_time = current_time + turnaroundTime[end] + rt[(current_VP, next_VP)]
+            current_VP = next_VP
+
+            if stopover == 1 && selected_route !== nothing
+                next_VP = selected_route[1][3]
+                can_return, maxTT = return_posssible(current_time, current_VP, next_VP, bv[n], rt, ET, te)
+                if can_return
+                    push!(route, Int32(next_VP))
+                    push!(turnaroundTime, rand(Int(ceil(te)):Int(floor(maxTT))))
+                    flightLegs += 1
+                    current_time = current_time + turnaroundTime[end] + rt[(current_VP, next_VP)]
+                end
+            end
+
+            append!(passengers_served, passengers)
+
+            first_trip = false
+
+            if base_only_option
+                returned = true
+            elseif current_VP == base_VP
+                returned = rand(Bool) #!!!!!!
+            end
+        end
+
+        push!(planes, planeSolution(
+            Int32(flightLegs),
+            route,
+            turnaroundTime
+        ))
+    end
+
+    choices = [i for i in 0:(maxLegs * nPlanes) if i != 1]
+    total_flight_legs = rand(choices)
+
+    allowed_legs = zeros(Int, nPlanes)
+
+    while true
+        remaining = total_flight_legs
+        allowed_legs .= 0
+        feasible_distribution = true
+
+        for n in 1:(nPlanes - 1)
+            feasible_choices = Int[]
+
+            for x in 0:maxLegs
+                rem_after = remaining - x
+                if x != 1 && rem_after >= 0
+                    max_possible_rest = maxLegs * (nPlanes - n)
+                    if (rem_after == 0 || rem_after >= 2) && rem_after <= max_possible_rest
+                        push!(feasible_choices, x)
+                    end
+                end
+            end
+
+            if isempty(feasible_choices)
+                feasible_distribution = false
+                break
+            end
+
+            choice = rand(feasible_choices)
+            allowed_legs[n] = choice
+            remaining -= choice
+        end
+
+        if feasible_distribution &&
+           remaining <= maxLegs &&
+           remaining != 1 &&
+           remaining >= 0
+            allowed_legs[nPlanes] = remaining
+            allowed_legs = shuffle!(allowed_legs)
+            break
+        end
+    end
+
+    ### ------------ Random Assignments --------- ###
+
+    for n in N2
+        base = bv[n]
+
+        # choose number of legs
+        flightLegs = allowed_legs[n]
+
+        # route always starts at base
+        route = Int32[base]
+
+        if flightLegs > 0
+            # choose intermediate nodes for first (flightLegs-1) legs
+            current = base
+            for k in 1:(flightLegs - 1)
+                candidates = [v for v in V if v != current]
+                cand_weights = [weights[findfirst(==(v), V)] for v in candidates]
+                nxt = weighted_choice(candidates, cand_weights)
+                push!(route, Int32(nxt))
+                current = nxt
+            end
+
+            # final node forced back to base
+            if current == base
+                # if already at base, pick another node first when possible
+                candidates = [v for v in V if v != base]
+                if !isempty(candidates)
+                    nxt = rand(candidates)
+                    route[end] = Int32(nxt)
+                end
+            end
+            push!(route, Int32(base))
+        end
+
+        turnaroundTime = Int32[]
+        current_time = 0
+        current_VP = base
+        for k in 1:flightLegs
+            common_a = [a for (a, v) in op if v == current_VP && dp[a] == route[k+1]]
+
+            Candidate_Pass = [dt[a] for a in common_a if
+                current_time + te - w <= dt[a] <= current_time + maxTurnaround &&
+                dt[a] + rt[(op[a], dp[a])] <= ET
+            ]
+            if !isempty(Candidate_Pass)
+                chosen_time = max(te, rand(Candidate_Pass) - current_time)
+                push!(turnaroundTime, round(Int32, chosen_time))
+            else
+                # Choose rate (tune as needed)
+                λ = 1.0 / (maxTurnaround - te)
+
+                # Bounds as floats
+                a = float(te)
+                b = float(maxTurnaround)
+
+                # Sample from truncated exponential using inverse CDF
+                u = rand()
+                x = a - log(1 - u * (1 - exp(-λ * (b - a)))) / λ
+
+                # Convert to integer safely
+                x_int = floor(Int, x)
+
+                # Optional: clamp just in case of floating-point edge rounding
+                x_int = clamp(x_int, Int(te), Int(maxTurnaround))
+
+                # Store result
+                push!(turnaroundTime, x_int)
+            end
+            current_time += turnaroundTime[end] + rt[(current_VP, route[(k+1)])]
+            current_VP = route[(k+1)]
         end
 
         push!(planes, planeSolution(
@@ -1061,7 +1338,7 @@ function generate_best_initial_solutions(data, rt, candiateroutes; n_runs::Int=1
 
     for run in 1:n_runs
         # evtols_init = initial_chromosome_solution(data; maxLegs=maxLegs, maxTurnaround=maxTurnaround)
-        evtols_init = Construction_Heuristic(data, candiateroutes)
+        evtols_init = Construction_Heuristic2(data, candiateroutes)
 
         assignments, scheduled = assign_passengersV2(evtols_init, data, Int.(rt))
 

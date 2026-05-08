@@ -296,6 +296,7 @@ function assign_passengersV2(evtols::allPlaneSolution, data, rt::Matrix{Int})
     w = data.w
     fd = data.fd
     fs = data.fs
+    te = data.te
     cap_u = Int(round(data.cap_u))
 
     scheduled = build_scheduled_legs(evtols, rt, cap_u)

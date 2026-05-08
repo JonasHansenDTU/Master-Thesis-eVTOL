@@ -357,42 +357,42 @@ function load_data(excel_file::String, parameter_file::String)
 
     # Precompute allowed end vps for each eVTOL
     drive_time_cache = Dict{Tuple{Float64, Float64, Float64, Float64}, Float64}()
-    if isfile("drive_time_cache.csv")
-        cache_df = CSV.read("drive_time_cache.csv", DataFrame)
-        for row in eachrow(cache_df)
-            key = (row.lat1, row.lon1, row.lat2, row.lon2)
-            drive_time_cache[key] = row.minutes
-        end
-    end
+    # if isfile("drive_time_cache.csv")
+    #     cache_df = CSV.read("drive_time_cache.csv", DataFrame)
+    #     for row in eachrow(cache_df)
+    #         key = (row.lat1, row.lon1, row.lat2, row.lon2)
+    #         drive_time_cache[key] = row.minutes
+    #     end
+    # end
 
     end_vp = Dict{Int, Vector{Int}}()
-    for n in N
-        base_vp = bv[n]
-        if lat_col !== nothing && lon_col !== nothing
-            base_lat = infra[base_vp, lat_col]
-            base_lon = infra[base_vp, lon_col]
-        elseif coord_col !== nothing
-            base_lat, base_lon = parse.(Float64, split(strip(infra[base_vp, coord_col], ['(', ')']), ","))
-        else
-            error("No latitude/longitude or coordinates column found.")
-        end
-        allowed = Int[]
-        for v in V
-            if lat_col !== nothing && lon_col !== nothing
-                lat = infra[v, lat_col]
-                lon = infra[v, lon_col]
-            elseif coord_col !== nothing
-                lat, lon = parse.(Float64, split(strip(infra[v, coord_col], ['(', ')']), ","))
-            else
-                error("No latitude/longitude or coordinates column found.")
-            end
-            drivetime = drive_time_minutes(base_lat, base_lon, lat, lon, drive_time_cache)
-            if drivetime <= 60
-                push!(allowed, v)
-            end
-        end
-        end_vp[n] = allowed
-    end
+    # for n in N
+    #     base_vp = bv[n]
+    #     if lat_col !== nothing && lon_col !== nothing
+    #         base_lat = infra[base_vp, lat_col]
+    #         base_lon = infra[base_vp, lon_col]
+    #     elseif coord_col !== nothing
+    #         base_lat, base_lon = parse.(Float64, split(strip(infra[base_vp, coord_col], ['(', ')']), ","))
+    #     else
+    #         error("No latitude/longitude or coordinates column found.")
+    #     end
+    #     allowed = Int[]
+    #     for v in V
+    #         if lat_col !== nothing && lon_col !== nothing
+    #             lat = infra[v, lat_col]
+    #             lon = infra[v, lon_col]
+    #         elseif coord_col !== nothing
+    #             lat, lon = parse.(Float64, split(strip(infra[v, coord_col], ['(', ')']), ","))
+    #         else
+    #             error("No latitude/longitude or coordinates column found.")
+    #         end
+    #         drivetime = drive_time_minutes(base_lat, base_lon, lat, lon, drive_time_cache)
+    #         if drivetime <= 60
+    #             push!(allowed, v)
+    #         end
+    #     end
+    #     end_vp[n] = allowed
+    # end
 
     return (
         infra = infra,
@@ -551,7 +551,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     # (6.3) eVTOL returns to its base vertiport or another vertiport withing 60 minute drive
     @constraint(model, [n in N],
         sum(x[bv[n], j, m, n] for j in V, m in M_no0) ==
-        sum(x[j, vp, m, n] for j in V, vp in end_vp[n], m in M_no0)
+        sum(x[j, bv[n], m, n] for j in V, m in M_no0)
     )
 
     # (6.4) eVTOL 
@@ -705,9 +705,14 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
         arr[m,n] >= arr[m-1,n] + sum((te + rt[(i,j)]) * x[i,j,m,n] for i in V, j in V)
     )
 
+    # (6.26) Arrival time lower bound
+    # @constraint(model, [m in M_no0, n in N],
+    #   arr[m,n] >= arr[m-1,n] + sum((te + rt[(i,j)]) * x[i,j,m,n] for i in V, j in V)
+    # )
+
     # (6.26b) Arrival time lower bound
     @constraint(model, [n in N],
-        arr[1,n] >= arr[1-1,n] + sum((rt[(i,j)]) * x[i,j,1,n] for i in V, j in V)
+        arr[1,n] >= sum((rt[(i,j)]) * x[i,j,1,n] for i in V, j in V)
     )
 
     # (6.27) Departure time = arrival time - travel time
@@ -989,7 +994,7 @@ println("Using Excel file: ", excel_file)
 total_start = time()
 model, data, timings = solve_instance(excel_file, parameter_file)
 
-# t_export = @elapsed export_solution_snapshots(model, data)
+t_export = @elapsed export_solution_snapshots(model, data)
 # timings["Snapshot export"] = t_export
 
 ###############################################################################
