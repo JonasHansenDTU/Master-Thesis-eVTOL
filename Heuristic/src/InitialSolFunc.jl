@@ -391,7 +391,7 @@ function Construction_Heuristic(data, Candidate_Routes; maxLegs::Int=5)
 end
 
 
-function Construction_Heuristic2(data, Candidate_Routes; maxLegs::Int=5)
+function Construction_Heuristic2(data, Candidate_Routes; maxLegs::Int=3)
 
     V = data.V
     N = data.N
@@ -406,10 +406,9 @@ function Construction_Heuristic2(data, Candidate_Routes; maxLegs::Int=5)
     ET = data.ET
 
     k = 4 #Size of RCL (Restricted candidate list)
-    nPlanes = length(N)
     weights = build_vertiport_weights(V, op, dp, A)
 
-    planes = planeSolution[]
+    planes = Vector{planeSolution}(undef, length(N))
 
     passengers_served = Int[]
 
@@ -419,6 +418,8 @@ function Construction_Heuristic2(data, Candidate_Routes; maxLegs::Int=5)
     N_shuffled = shuffle(N)
     N1 = N_shuffled[1:split_idx]
     N2 = N_shuffled[split_idx+1:end]
+
+    nPlanes = length(N2)
 
     for n in N1
         returned = false
@@ -527,133 +528,137 @@ function Construction_Heuristic2(data, Candidate_Routes; maxLegs::Int=5)
             end
         end
 
-        push!(planes, planeSolution(
+        planes[n] = planeSolution(
             Int32(flightLegs),
             route,
             turnaroundTime
-        ))
+        )
     end
 
-    choices = [i for i in 0:(maxLegs * nPlanes) if i != 1]
-    total_flight_legs = rand(choices)
+    if nPlanes > 0
+        choices = [i for i in 0:(maxLegs * nPlanes) if i != 1]
+        total_flight_legs = rand(choices)
 
-    allowed_legs = zeros(Int, nPlanes)
+        allowed_legs = zeros(Int, nPlanes)
 
-    while true
-        remaining = total_flight_legs
-        allowed_legs .= 0
-        feasible_distribution = true
+        while true
+            remaining = total_flight_legs
+            allowed_legs .= 0
+            feasible_distribution = true
 
-        for n in 1:(nPlanes - 1)
-            feasible_choices = Int[]
+            for (i, n) in enumerate(N2)
+                feasible_choices = Int[]
 
-            for x in 0:maxLegs
-                rem_after = remaining - x
-                if x != 1 && rem_after >= 0
-                    max_possible_rest = maxLegs * (nPlanes - n)
-                    if (rem_after == 0 || rem_after >= 2) && rem_after <= max_possible_rest
-                        push!(feasible_choices, x)
+                for x in 0:maxLegs
+                    rem_after = remaining - x
+                    if x != 1 && rem_after >= 0
+                        max_possible_rest = maxLegs * (nPlanes - i)
+                        if (rem_after == 0 || rem_after >= 2) && rem_after <= max_possible_rest
+                            push!(feasible_choices, x)
+                        end
                     end
                 end
+
+                if isempty(feasible_choices)
+                    feasible_distribution = false
+                    break
+                end
+
+                choice = rand(feasible_choices)
+                allowed_legs[i] = choice
+                remaining -= choice
             end
 
-            if isempty(feasible_choices)
-                feasible_distribution = false
+            if feasible_distribution &&
+                remaining <= maxLegs &&
+                remaining != 1 &&
+                remaining >= 0
+                allowed_legs[nPlanes] = remaining
+                allowed_legs = shuffle!(allowed_legs)
                 break
             end
-
-            choice = rand(feasible_choices)
-            allowed_legs[n] = choice
-            remaining -= choice
         end
 
-        if feasible_distribution &&
-           remaining <= maxLegs &&
-           remaining != 1 &&
-           remaining >= 0
-            allowed_legs[nPlanes] = remaining
-            allowed_legs = shuffle!(allowed_legs)
-            break
-        end
-    end
+        ### ------------ Random Assignments --------- ###
 
-    ### ------------ Random Assignments --------- ###
+        for (i, n) in enumerate(N2)
+            first_trip = true
+            base = bv[n]
 
-    for n in N2
-        base = bv[n]
+            # choose number of legs (map using position in N2)
+            flightLegs = allowed_legs[i]
 
-        # choose number of legs
-        flightLegs = allowed_legs[n]
+            # route always starts at base
+            route = Int32[base]
 
-        # route always starts at base
-        route = Int32[base]
-
-        if flightLegs > 0
-            # choose intermediate nodes for first (flightLegs-1) legs
-            current = base
-            for k in 1:(flightLegs - 1)
-                candidates = [v for v in V if v != current]
-                cand_weights = [weights[findfirst(==(v), V)] for v in candidates]
-                nxt = weighted_choice(candidates, cand_weights)
-                push!(route, Int32(nxt))
-                current = nxt
-            end
-
-            # final node forced back to base
-            if current == base
-                # if already at base, pick another node first when possible
-                candidates = [v for v in V if v != base]
-                if !isempty(candidates)
-                    nxt = rand(candidates)
-                    route[end] = Int32(nxt)
+            if flightLegs > 0
+                # choose intermediate nodes for first (flightLegs-1) legs
+                current = base
+                for k in 1:(flightLegs - 1)
+                    candidates = [v for v in V if v != current]
+                    cand_weights = [weights[findfirst(==(v), V)] for v in candidates]
+                    nxt = weighted_choice(candidates, cand_weights)
+                    push!(route, Int32(nxt))
+                    current = nxt
                 end
+
+                # final node forced back to base
+                if current == base
+                    # if already at base, pick another node first when possible
+                    candidates = [v for v in V if v != base]
+                    if !isempty(candidates)
+                        nxt = rand(candidates)
+                        route[end] = Int32(nxt)
+                    end
+                end
+                push!(route, Int32(base))
             end
-            push!(route, Int32(base))
-        end
 
-        turnaroundTime = Int32[]
-        current_time = 0
-        current_VP = base
-        for k in 1:flightLegs
-            common_a = [a for (a, v) in op if v == current_VP && dp[a] == route[k+1]]
+            turnaroundTime = Int32[]
+            current_time = 0
+            current_VP = base
+            for k in 1:flightLegs
+                common_a = [a for (a, v) in op if v == current_VP && dp[a] == route[k+1]]
 
-            Candidate_Pass = [dt[a] for a in common_a if
-                current_time + te - w <= dt[a] <= current_time + maxTurnaround &&
-                dt[a] + rt[(op[a], dp[a])] <= ET
-            ]
-            if !isempty(Candidate_Pass)
-                chosen_time = max(te, rand(Candidate_Pass) - current_time)
-                push!(turnaroundTime, round(Int32, chosen_time))
-            else
-                # Choose rate (tune as needed)
-                λ = 1.0 / (maxTurnaround - te)
+                Candidate_Pass = [dt[a] for a in common_a if
+                    current_time + te - w <= dt[a] <= current_time + maxTurnaround &&
+                    dt[a] + rt[(op[a], dp[a])] <= ET
+                ]
+                if !isempty(Candidate_Pass)
+                    chosen_time = max(te, rand(Candidate_Pass) - current_time)
+                    push!(turnaroundTime, round(Int32, chosen_time))
+                else
+                    # Choose rate (tune as needed)
+                    λ = 1.0 / (maxTurnaround - te)
 
-                # Bounds as floats
-                a = float(te)
-                b = float(maxTurnaround)
+                    # Bounds as floats
+                    a = float(first_trip ? 0 : te)
+                    b = float(maxTurnaround)
 
-                # Sample from truncated exponential using inverse CDF
-                u = rand()
-                x = a - log(1 - u * (1 - exp(-λ * (b - a)))) / λ
+                    # Sample from truncated exponential using inverse CDF
+                    u = rand()
+                    x = a - log(1 - u * (1 - exp(-λ * (b - a)))) / λ
 
-                # Convert to integer safely
-                x_int = floor(Int, x)
+                    # Convert to integer safely
+                    x_int = floor(Int, x)
 
-                # Optional: clamp just in case of floating-point edge rounding
-                x_int = clamp(x_int, Int(te), Int(maxTurnaround))
+                    # Optional: clamp just in case of floating-point edge rounding
+                    x_int = clamp(x_int, Int(te), Int(maxTurnaround))
 
-                # Store result
-                push!(turnaroundTime, x_int)
+                    # Store result
+                    push!(turnaroundTime, x_int)
+                end
+                current_time += turnaroundTime[end] + rt[(current_VP, route[(k+1)])]
+                current_VP = route[(k+1)]
             end
-            current_time += turnaroundTime[end] + rt[(current_VP, route[(k+1)])]
-            current_VP = route[(k+1)]
-        end
 
-        push!(planes, planeSolution(
-            Int32(flightLegs),
-            route,
-            turnaroundTime
-        ))
+            planes[n] = planeSolution(
+                Int32(flightLegs),
+                route,
+                turnaroundTime
+            )
+            first_trip = false
+        end
     end
 
     return allPlaneSolution(planes)
@@ -1347,6 +1352,12 @@ function generate_best_initial_solutions(data, rt, candiateroutes; n_runs::Int=1
 
         fitness = fitnessFunction(evtols_init,assignments,Float32(data.bmax), Float32(data.bmid), Float32(data.bmin),data.dist, Float32(data.ec),
                         Float32(data.battery_per_km), Int.(rt), Int(round(data.ET)), maximum(Int.(data.T)), maximum(data.V), data.cap_v, data)
+
+        # if evtols_init.planes[3].flightLegs > 0
+        #     if evtols_init.planes[3].route[2] == 5
+        #         print("Hey")
+        #     end
+        # end
 
         push!(results, (run = run, fitness = fitness, evtols = evtols_init, assignments = assignments, scheduled = scheduled, P = P))
 

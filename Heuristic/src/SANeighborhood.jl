@@ -58,8 +58,8 @@ function ConstructSA(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::F
 
         
         v = rand(V)
-        if v == base
-            return init_obj, planes
+        while v == base
+            v = rand(V)
         end
 
         temp_sol = deepcopy(planes)

@@ -988,7 +988,7 @@ end
 # Usage
 ###############################################################################
 
-excel_file = joinpath("inputData/inputDataGiant.xlsx")
+excel_file = joinpath("inputData/inputData.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()
@@ -1263,8 +1263,146 @@ function print_results_pretty(model::Model, data)
     println()
 end
 
-t_pretty = @elapsed Base.invokelatest(print_results_pretty, model, data)
-timings["Pretty printing"] = t_pretty
+function print_results_maincall_style(model::Model, data)
+    if !has_values(model)
+        println("No solution available.")
+        return
+    end
+
+    A = data.A
+    V = data.V
+    N = data.N
+    M = data.M
+    M_no0 = data.M_no0
+    bv = data.bv
+    op = data.op
+    dp = data.dp
+    dt = data.dt
+    q = data.q
+    cap_u = Int(round(data.cap_u))
+
+    println("Best solution:")
+    println("Objective Value: $(objective_value(model))")
+
+    println("Chromosome table:")
+    println("-----------------")
+    for n in N
+        flown = Tuple{Int,Int,Int}[]
+        for m in M_no0, i in V, j in V
+            if value(model[:x][i,j,m,n]) > 0.5
+                push!(flown, (m, i, j))
+            end
+        end
+        sort!(flown, by = t -> t[1])
+
+        route = Int[]
+        if isempty(flown)
+            push!(route, bv[n])
+        else
+            push!(route, flown[1][2])
+            for (_, _, j) in flown
+                push!(route, j)
+            end
+        end
+
+        turnaround = Int[]
+        prev_arr = 0.0
+        for (m, _, _) in flown
+            dep_m = value(model[:dep][m,n])
+            push!(turnaround, Int(round(max(0.0, dep_m - prev_arr))))
+            prev_arr = value(model[:arr][m,n])
+        end
+
+        print("eVTOL", n, ": ")
+        print(length(flown), " | ")
+        for v in route
+            print(v, " ")
+        end
+        print("| ")
+        for t in turnaround
+            print(t, " ")
+        end
+        println()
+    end
+
+    println("Battery Levels:")
+    for n in N
+        levels = [round(value(model[:u][m,n]), digits=2) for m in M]
+        println("Plane ", n, ": ", levels)
+    end
+
+    println("Passenger assignments:")
+    println("----------------------")
+    for a in A
+        assigned_plane = nothing
+        for n in N
+            if value(model[:ss][a,n]) > 0.5
+                assigned_plane = n
+                break
+            end
+        end
+
+        if assigned_plane !== nothing
+            legs = Int[]
+            for m in M_no0
+                if value(model[:s][a,m,assigned_plane]) > 0.5
+                    push!(legs, m)
+                end
+            end
+            println(
+                "Group ", a,
+                " | plane ", assigned_plane,
+                " | legs ", legs,
+                " | ", op[a], " -> ", dp[a],
+                " | q=", q[a],
+                " | dt=", dt[a]
+            )
+        end
+    end
+
+    scheduled = Tuple{Int,Int,Int,Int,Int,Int,Int}[]
+    for n in N, m in M_no0, i in V, j in V
+        if value(model[:x][i,j,m,n]) > 0.5
+            dep_m = Int(round(value(model[:dep][m,n])))
+            arr_m = Int(round(value(model[:arr][m,n])))
+            used = sum((q[a] for a in A if value(model[:s][a,m,n]) > 0.5); init=0)
+            cap_left = cap_u - used
+            push!(scheduled, (n, m, i, j, dep_m, arr_m, cap_left))
+        end
+    end
+
+    if isempty(scheduled)
+        println("Schedule is empty.")
+        return
+    end
+
+    sort!(scheduled, by = x -> (x[1], x[2]))
+
+    println("Schedule")
+    println("========")
+    current_plane = -1
+    for (n, m, from, to, dep_m, arr_m, cap_left) in scheduled
+        if n != current_plane
+            current_plane = n
+            println()
+            println("Plane $(current_plane)")
+            println("-" ^ 72)
+            @printf("%-6s %-6s %-6s %-6s %-8s %-8s %-8s\n",
+                    "Leg", "From", "To", "Dep", "Arr", "Dur", "CapLeft")
+            println("-" ^ 72)
+        end
+
+        dur = arr_m - dep_m
+        @printf("%-6d %-6d %-6d %-6d %-8d %-8d %-8d\n",
+                m, from, to, dep_m, arr_m, dur, cap_left)
+    end
+
+    println()
+    println("Total legs: $(length(scheduled))")
+end
+
+t_pretty = @elapsed Base.invokelatest(print_results_maincall_style, model, data)
+timings["MainCall-style printing"] = t_pretty
 timings["Total script"] = time() - total_start
 
 print_timing_summary(timings)

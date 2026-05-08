@@ -12,11 +12,12 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
     
     while elapsed <= Float64(MaxTime)
         nr = 1
+        idx = rand(1:nr)
         T = 100
         Best_sols = generate_best_initial_solutions(data, rt, candiateroutes; n_runs = 20, top_k = nr, top_c, maxLegs=6, maxTurnaround)
 
-        temp_obj = Best_sols[rand(1:nr)].fitness
-        temp_sol = deepcopy(Best_sols[nr].evtols)
+        temp_obj = Best_sols[idx].fitness
+        temp_sol = deepcopy(Best_sols[idx].evtols)
 
         if temp_obj > best_obj
             best_obj = temp_obj
@@ -38,19 +39,19 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
             cand_obj = des_obj
             cand_sol = des_sol
 
-            if con_obj > cand_obj
+            if con_obj > cand_obj || rand() < exp(-1/(T))
                 cand_obj = con_obj
                 cand_sol = con_sol
                 method_used = 1
             end
 
-            if swap_obj > cand_obj
+            if swap_obj > cand_obj || rand() < exp(-1/(T))
                 cand_obj = swap_obj
                 cand_sol = swap_sol
                 method_used = 2
             end
 
-            if two_opt_obj > cand_obj
+            if two_opt_obj > cand_obj || rand() < exp(-1/(T))
                 cand_obj = two_opt_obj
                 cand_sol = two_opt_sol
                 method_used = 3
@@ -97,12 +98,13 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
 
     
     while elapsed <= Float64(MaxTime)
-        nr = 5
-        T = 1000
+        nr = 2
+        idx = rand(1:nr)
+        T = 50
         Best_sols = generate_best_initial_solutions(data, rt, candiateroutes; n_runs = 10, top_k = nr, top_c, maxLegs=6, maxTurnaround)
 
-        temp_obj = Best_sols[rand(1:nr)].fitness
-        temp_sol = deepcopy(Best_sols[nr].evtols)
+        temp_obj = Best_sols[idx].fitness
+        temp_sol = deepcopy(Best_sols[idx].evtols)
 
         if temp_obj > best_obj
             best_obj = temp_obj
@@ -118,7 +120,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
 
             cand_obj = temp_obj
             cand_sol = deepcopy(temp_sol)
-            n_perm = 10
+            n_perm = 2
 
             for _ in 1:n_perm
                 if rand(Bool)
@@ -168,6 +170,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
         iterations += 1
         if iterations % 100 == 0
             println("iteration: $(iterations)")
+            println("Obj In this iteration $(temp_obj)")
         end
         elapsed = (time_ns() - start_ns) / 1e9
     end

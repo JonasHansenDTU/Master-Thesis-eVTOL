@@ -102,6 +102,7 @@ function UpdateTurnAroundTimes(planes::allPlaneSolution, from::Int64, maxTurnaro
     ET = data.ET
 
     for plane in planes.planes
+        first_trip = true
         flightLegs = Int(plane.flightLegs)
         if flightLegs == 0
             continue
@@ -125,10 +126,10 @@ function UpdateTurnAroundTimes(planes::allPlaneSolution, from::Int64, maxTurnaro
             common_a = [a for (a, v) in op if v == current_VP && dp[a] == route[k+1]]
 
             candidate_pass = [dt[a] for a in common_a if
-                current_time + te - w <= dt[a] <= current_time + maxTurnaround &&
+                current_time + (first_trip ? 0 : te) - w <= dt[a] <= current_time + maxTurnaround &&
                 dt[a] + rt[(op[a], dp[a])] <= ET]
 
-            if !isempty(candidate_pass)
+            if !isempty(candidate_pass) && rand() <= 0.4
                 # deterministic: latest feasible passenger time in the window
                 chosen_time = max(maximum(candidate_pass) - current_time, te)
                 plane.turnaroundTime[k] = Int32(round(Int, chosen_time))
@@ -137,7 +138,7 @@ function UpdateTurnAroundTimes(planes::allPlaneSolution, from::Int64, maxTurnaro
                 λ = 1.5
 
                 # Bounds as floats
-                a = float(te)
+                a = float(first_trip ? 0 : te)
                 b = float(maxTurnaround)
 
                 # Sample from truncated exponential using inverse CDF
@@ -147,14 +148,13 @@ function UpdateTurnAroundTimes(planes::allPlaneSolution, from::Int64, maxTurnaro
                 # Convert to integer safely
                 x_int = floor(Int, x)
 
-                # Optional: clamp just in case of floating-point edge rounding
-                x_int = clamp(x_int, Int(te), Int(maxTurnaround))
                 plane.turnaroundTime[k] = x_int
             end
 
             next_VP = Int(route[k + 1])
             current_time += Int(plane.turnaroundTime[k]) + rt[(current_VP, next_VP)]
             current_VP = next_VP
+            first_trip = false
         end
     end
 end
@@ -417,3 +417,4 @@ function two_opt_Loop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::
     
     return best_obj, best_sol
 end
+
