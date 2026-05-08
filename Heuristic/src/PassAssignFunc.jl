@@ -543,4 +543,6 @@ function export_solution_snapshots(evtols::allPlaneSolution, scheduled::Vector{S
     snapshots = DataFrame(rows)
     CSV.write(out_csv, snapshots)
     println("Snapshot export written: ", out_csv, " (rows=", nrow(snapshots), ")")
-    re
+    return snapshots
+
+end
