@@ -7,12 +7,17 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
     best_obj = -Inf
     best_sol = allPlaneSolution(planeSolution[])
 
-    while elapsed <= Float64(MaxTime)
-        nr = rand(1:5)
-        Best_sols = generate_best_initial_solutions(data, rt; n_runs = 100, top_k = nr, top_c, maxLegs=6, maxTurnaround)
+    candiateroutes = Candidate_Route(data)
 
-        temp_obj = Best_sols[nr].fitness
-        temp_sol = deepcopy(Best_sols[nr].evtols)
+    
+    while elapsed <= Float64(MaxTime)
+        nr = 1
+        idx = rand(1:nr)
+        T = 100
+        Best_sols = generate_best_initial_solutions(data, rt, candiateroutes; n_runs = 20, top_k = nr, top_c, maxLegs=6, maxTurnaround)
+
+        temp_obj = Best_sols[idx].fitness
+        temp_sol = deepcopy(Best_sols[idx].evtols)
 
         if temp_obj > best_obj
             best_obj = temp_obj
@@ -34,25 +39,25 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
             cand_obj = des_obj
             cand_sol = des_sol
 
-            if con_obj > cand_obj
+            if con_obj > cand_obj || rand() < exp(-1/(T))
                 cand_obj = con_obj
                 cand_sol = con_sol
                 method_used = 1
             end
 
-            if swap_obj > cand_obj
+            if swap_obj > cand_obj || rand() < exp(-1/(T))
                 cand_obj = swap_obj
                 cand_sol = swap_sol
                 method_used = 2
             end
 
-            if two_opt_obj > cand_obj
+            if two_opt_obj > cand_obj || rand() < exp(-1/(T))
                 cand_obj = two_opt_obj
                 cand_sol = two_opt_sol
                 method_used = 3
             end
 
-            if cand_obj > temp_obj
+            if cand_obj > temp_obj || rand() < exp(-1/(T))
                 temp_obj = cand_obj
                 temp_sol = deepcopy(cand_sol)
                 improvement = true
@@ -64,6 +69,7 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
                     println("Method used: $(("Destructor", "Constructor", "Swap", "2-opt")[method_used + 1])")
                 end
             end
+            T = T * 0.95
 
             elapsed = (time_ns() - start_ns) / 1e9
         end
@@ -71,6 +77,100 @@ function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
         iterations += 1
         if iterations % 100 == 0
             println("iteration: $(iterations)")
+            println("Obj In this iteration $(temp_obj)")
+        end
+        elapsed = (time_ns() - start_ns) / 1e9
+    end
+
+    return best_obj, best_sol, iterations
+end
+
+function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
+
+    start_ns = time_ns()
+    elapsed = 0.0
+    iterations = 0
+
+    best_obj = -Inf
+    best_sol = allPlaneSolution(planeSolution[])
+
+    candiateroutes = Candidate_Route(data)
+
+    
+    while elapsed <= Float64(MaxTime)
+        nr = 2
+        idx = rand(1:nr)
+        T = 50
+        Best_sols = generate_best_initial_solutions(data, rt, candiateroutes; n_runs = 10, top_k = nr, top_c, maxLegs=6, maxTurnaround)
+
+        temp_obj = Best_sols[idx].fitness
+        temp_sol = deepcopy(Best_sols[idx].evtols)
+
+        if temp_obj > best_obj
+            best_obj = temp_obj
+            best_sol = deepcopy(temp_sol)
+            println("New best Obj $(best_obj)")
+            println("Method used: Initial Heuristic")
+        end
+
+        improvement = true
+        while improvement && elapsed <= Float64(MaxTime)
+            improvement = false
+            method_used = 0
+
+            cand_obj = temp_obj
+            cand_sol = deepcopy(temp_sol)
+            n_perm = 2
+
+            for _ in 1:n_perm
+                if rand(Bool)
+                    next_obj, next_sol = DestructSA(cand_sol, maxTurnaround, cand_obj, data, rt)
+                    next_method = 0
+                else
+                    next_obj, next_sol = ConstructSA(cand_sol, maxTurnaround, cand_obj, data, rt)
+                    next_method = 1
+                end
+
+                if next_obj > cand_obj || rand() < exp((cand_obj - next_obj) / T)
+                    cand_obj = next_obj
+                    cand_sol = deepcopy(next_sol)
+                    method_used = next_method
+                end
+            end
+
+            # if swap_obj > cand_obj
+            #     cand_obj = swap_obj
+            #     cand_sol = swap_sol
+            #     method_used = 2
+            # end
+
+            # if two_opt_obj > cand_obj
+            #     cand_obj = two_opt_obj
+            #     cand_sol = two_opt_sol
+            #     method_used = 3
+            # end
+
+            if cand_obj > temp_obj || (rand() < exp((temp_obj - cand_obj) / T) && temp_obj > cand_obj)
+                temp_obj = cand_obj
+                temp_sol = deepcopy(cand_sol)
+                improvement = true
+
+                if temp_obj > best_obj
+                    best_obj = temp_obj
+                    best_sol = deepcopy(temp_sol)
+                    println("New best Obj $(best_obj)")
+                    println("Method used: $(("Destructor", "Constructor")[method_used + 1])")
+                end
+            end
+
+            elapsed = (time_ns() - start_ns) / 1e9
+            T = max(T *0.9, 0.0001)
+        end
+
+        iterations += 1
+        if iterations % 100 == 0
+            println("iteration: $(iterations)")
+            println("Obj In this iteration $(temp_obj)")
         end
         elapsed = (time_ns() - start_ns) / 1e9
     end
