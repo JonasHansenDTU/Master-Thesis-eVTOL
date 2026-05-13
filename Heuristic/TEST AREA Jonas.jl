@@ -41,7 +41,7 @@ end
 
 candiateroutes = Candidate_Route(data)
 
-iter = 10
+iter = 1000
 objs = zeros(iter)
 P_values = []
 evtols_init_values = []
@@ -66,6 +66,8 @@ for i in 1:iter
     objs[i] = fitness
     push!(P_values, P)
     push!(results, (fitness=fitness, P=P, evtols_init=evtols_init, assignments=assignments, scheduled=scheduled))
+
+    # Repair(evtols_init, data)
 end
 
 sorted_indices = sortperm(objs, rev=true)

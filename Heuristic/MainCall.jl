@@ -37,8 +37,11 @@ for i in data.V, j in data.V
 end
 
 maxTurnaround = 100
-Maxtime = Int32(20)
+Maxtime = Int32(3000)
 top_c = 4
+Random.seed!(1234)
+
+
 
 # (best_obj, best_sol, iterations) = Heuristic(maxTurnaround, Maxtime, data, rt, top_c)
 (best_obj, best_sol, iterations) = HeuristicSA(maxTurnaround, Maxtime, data, rt, top_c)

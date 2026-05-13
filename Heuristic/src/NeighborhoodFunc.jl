@@ -129,9 +129,9 @@ function UpdateTurnAroundTimes(planes::allPlaneSolution, from::Int64, maxTurnaro
                 current_time + (first_trip ? 0 : te) - w <= dt[a] <= current_time + maxTurnaround &&
                 dt[a] + rt[(op[a], dp[a])] <= ET]
 
-            if !isempty(candidate_pass) && rand() <= 0.4
+            if !isempty(candidate_pass) && rand() <= 0.5
                 # deterministic: latest feasible passenger time in the window
-                chosen_time = max(maximum(candidate_pass) - current_time, te)
+                chosen_time = max(maximum(candidate_pass) - current_time, (first_trip ? 0 : te))
                 plane.turnaroundTime[k] = Int32(round(Int, chosen_time))
             else
                 # Choose rate (tune as needed)
@@ -181,6 +181,95 @@ function obj(planes::allPlaneSolution, data, rt)
 
     return fitness
 end
+
+function Filter(plane::planeSolution, rt, e, te, ec, ET, bmin, bmid, bmax)
+
+
+    flightLegs = plane.flightLegs
+
+    if flightLegs <= 1
+        return true, false
+    end
+
+    Total_traveltime = 0
+    Total_battery_needed = 0
+    
+    for i in 1:flightLegs
+        Total_traveltime += rt[(plane.route[i], plane.route[i+1])]
+        Total_battery_needed += e[(plane.route[i], plane.route[i+1])]
+        if e[(plane.route[i], plane.route[i+1])] > (i == 1 ? bmid : bmax) - bmin        # Check if there are parts of the route using > bmax-bmin (or bmid-bmin if first trip)
+            return false, true
+        end
+    end
+
+    minimum_turnaround = (flightLegs-1)*te
+    maximum_battery_charge = (ET-Total_traveltime)*ec
+
+
+    Feasible_Turnaround = Total_traveltime + minimum_turnaround <= ET                   #Enough Time to complete the route?
+    Feasible_Battery = bmid + maximum_battery_charge - Total_battery_needed >= bmin     #Feasible to charge battery in route?
+
+
+     # TimeToCharge = ET - Total_traveltime >= (bmin-bmid + Total_battery_needed)*1/ec     #Connect the two and see if there can be time to charge and make it back (Turns out to be identical to Feasible_Battery)
+
+
+    return (Feasible_Turnaround && Feasible_Battery) , false
+end
+
+
+function assign_Turnaround(Planes::allPlaneSolution, data)
+
+    N = data.N
+    bmin = data.bmin
+    bmid = data.bmid
+    bmax = data.bmax
+    e = data.e
+    ec = data.ec
+    ET = data.ET
+    te = data.te
+    rt = data.rt
+
+    for plane in Planes.planes
+
+        #Only look at planes with infeasible routes
+
+
+        first_trip = true
+        m = plane.flightLegs
+        CurrrentBattery = 80
+
+        max_turnaorund = ET - (m-2)*te
+                
+        for i in 1:m
+            max_turnaorund -= rt[(plane.route[i],plane.route[i+1])]
+        end
+
+        b_target = 80
+
+        for i in 1:m
+
+            if first_trip
+                plane.turnaroundTime[i] = 0
+                first_trip = false
+            else
+                
+                max_turnaorund -= plane.turnaroundTime[i-1]
+                
+                CurrrentBattery -= e[(plane.route[i], plane.route[i+1])] 
+
+                timeToBTarget = round((b_target - CurrrentBattery)/ec)
+
+                plane.turnaroundTime[i] = max(min(max_turnaorund, timeToBTarget),te)
+
+            end
+
+        end
+
+    end
+    
+end
+
+
 
 function DestructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64, data, rt)
 
@@ -418,3 +507,125 @@ function two_opt_Loop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::
     return best_obj, best_sol
 end
 
+
+
+function RemoveVP(plane, data)
+
+    ET = data.ET
+    rt2 = data.rt
+    te = data.te
+    ec = data.ec
+    e = data.e
+    bmid = data.bmid
+    bmin = data.bmin
+    bmax = data.bmax
+    
+
+    
+    m = Int(plane.flightLegs)
+
+    for idx in 2:m
+        temp_plane = deepcopy(plane)
+
+        Destructor(temp_plane, [idx])
+
+        if has_consecutive_duplicates(temp_plane.route)
+            continue
+        end
+
+        Possible, SingleRouteBattery = Filter(temp_plane, rt2, e, te, ec, ET, bmin, bmid, bmax)
+
+        if Possible 
+            return temp_plane
+        end
+    end
+
+    return nothing
+end
+
+
+function addVP(plane, data)
+
+
+    ET = data.ET
+    rt2 = data.rt
+    te = data.te
+    ec = data.ec
+    e = data.e
+    bmid = data.bmid
+    bmin = data.bmin
+    bmax = data.bmax
+    V = data.V
+
+    m = Int(plane.flightLegs)
+
+    for idx in 2:(m+1)
+        for v in V
+            temp_plane = deepcopy(plane)
+            if temp_plane.route[idx] != v && temp_plane.route[idx - 1] != v
+                Constructor(temp_plane, v, idx, data)
+                
+
+                Possible, SingleRouteBattery = Filter(temp_plane, rt2, e, te, ec, ET, bmin, bmid, bmax)
+
+                if Possible 
+                    return temp_plane
+                end
+
+            end
+        end
+    end
+    return nothing
+end
+
+function Repair(planes::allPlaneSolution, data, rt, newobj)
+    ET = data.ET
+    rt2 = data.rt
+    te = data.te
+    ec = data.ec
+    e = data.e
+    bmid = data.bmid
+    bmin = data.bmin
+    bmax = data.bmax
+    N = data.N
+
+    #Find planes with infeasible routes
+   
+    for (i, plane) in enumerate(planes.planes)
+        Changed = true
+        if plane.flightLegs > 1
+            while newobj <= -900000 && Changed
+                Possible, SingleRouteBattery = Filter(plane, rt2, e, te, ec, ET, bmin, bmid, bmax)
+
+                if Possible
+                    assign_Turnaround(planes, data) #Update to only do on infeasible routes.
+                    # newobj = obj(planes, data, rt)
+                    Changed = false
+                else
+                    plane_copy = deepcopy(plane)
+
+                    if !SingleRouteBattery
+                        newp = RemoveVP(plane, data)
+                        if newp === nothing
+                            newp = addVP(plane_copy, data)
+                        end
+                    else
+                        newp = addVP(plane, data)
+                        if newp === nothing
+                            newp = RemoveVP(plane_copy, data)
+                        end
+                    end
+
+                    if newp === nothing
+                        return nothing
+                    end
+
+                    planes.planes[i] = newp
+                    plane = newp
+                end
+            end
+        end
+    end
+
+    return 0
+end
