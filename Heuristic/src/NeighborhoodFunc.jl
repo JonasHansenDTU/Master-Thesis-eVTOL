@@ -102,7 +102,7 @@ function UpdateTurnAroundTimes(planes::allPlaneSolution, from::Int64, maxTurnaro
     ET = data.ET
 
     for plane in planes.planes
-        first_trip = true
+        first_trip = (from == 1 ? true : false)
         flightLegs = Int(plane.flightLegs)
         if flightLegs == 0
             continue
@@ -135,7 +135,7 @@ function UpdateTurnAroundTimes(planes::allPlaneSolution, from::Int64, maxTurnaro
                 plane.turnaroundTime[k] = Int32(round(Int, chosen_time))
             else
                 # Choose rate (tune as needed)
-                λ = 1.5
+                λ = 1.2
 
                 # Bounds as floats
                 a = float(first_trip ? 0 : te)

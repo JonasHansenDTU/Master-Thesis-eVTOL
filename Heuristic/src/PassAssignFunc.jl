@@ -131,7 +131,7 @@ function find_direct_leg!V2(scheduled::Vector{ScheduledLeg}, a::Int, op, dp, dt,
     if so[a] == 1
         best.remaining_capacity -= q[a]
     else 
-        best.remaining_capacity = 0 #Makes sure that the direct only passengers ride alone
+        best.remaining_capacity -= q[a] #Makes sure that the direct only passengers ride alone
     end
 
     return PassengerAssignment(a, best.plane, [best.leg_index])

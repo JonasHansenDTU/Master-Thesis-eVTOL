@@ -39,74 +39,53 @@ end
 
 ### --------------------------- ###
 
-candiateroutes = Candidate_Route(data)
+# Test target solution feasibility
+println("\n========== TESTING TARGET SOLUTION FEASIBILITY ==========\n")
 
-iter = 1000
-objs = zeros(iter)
-P_values = []
-evtols_init_values = []
-results = []
+# Create the target solution
+evtol1 = planeSolution(2, [1, 3, 1], [47, 34])
+evtol2 = planeSolution(0, [1], Int64[])
+evtol3 = planeSolution(3, [2, 5, 4, 2], [0, 30, 30])
+evtol4 = planeSolution(2, [2, 3, 2], [0, 38])
 
+target_solution = allPlaneSolution([evtol1, evtol2, evtol3, evtol4])
 
+println("Target Solution:")
+println("  eVTOL1: $(evtol1.flightLegs) | $(Int.(evtol1.route)) | $(Int.(evtol1.turnaroundTime))")
+println("  eVTOL2: $(evtol2.flightLegs) | $(Int.(evtol2.route)) |")
+println("  eVTOL3: $(evtol3.flightLegs) | $(Int.(evtol3.route)) | $(Int.(evtol3.turnaroundTime))")
+println("  eVTOL4: $(evtol4.flightLegs) | $(Int.(evtol4.route)) | $(Int.(evtol4.turnaroundTime))")
 
+# Test feasibility using FeasibilityCheck (P function)
+println("\nRunning feasibility check...")
+P = FeasibilityCheck(
+    Float32(data.bmax),
+    Float32(data.bmid),
+    Float32(data.bmin),
+    data.dist,
+    Float32(data.ec),
+    Float32(data.battery_per_km),
+    target_solution,
+    Int.(rt),
+    Int(round(data.ET)),
+    Int(maximum(data.T)),
+    Int(maximum(data.V)),
+    data.cap_v,
+    data.b_penalty
+)
 
-for i in 1:iter
+println("\nPenalty Vector P:")
+println("  P = $P")
+println("  Sum(P) = $(sum(P))")
 
-    evtols_init = Construction_Heuristic(data, candiateroutes)
-    push!(evtols_init_values, evtols_init)
-
-    assignments, scheduled = assign_passengersV2(evtols_init, data, Int.(rt))
-
-    P = FeasibilityCheck(Float32(data.bmax),Float32(data.bmid), Float32(data.bmin),data.dist,Float32(data.ec),Float32(data.battery_per_km),
-                evtols_init,Int.(rt),Int(round(data.ET)),maximum(Int.(data.T)),maximum(data.V),data.cap_v, data.b_penalty)
-
-    fitness = fitnessFunction(evtols_init,assignments,Float32(data.bmax), Float32(data.bmid), Float32(data.bmin),data.dist, Float32(data.ec),
-                    Float32(data.battery_per_km), Int.(rt), Int(round(data.ET)), maximum(Int.(data.T)), maximum(data.V), data.cap_v, data)
-
-    objs[i] = fitness
-    push!(P_values, P)
-    push!(results, (fitness=fitness, P=P, evtols_init=evtols_init, assignments=assignments, scheduled=scheduled))
-
-    # Repair(evtols_init, data)
+if sum(P) < 1_000_000
+    println("✓ Solution is FEASIBLE (penalty < 1,000,000)")
+else
+    println("✗ Solution is INFEASIBLE (penalty ≥ 1,000,000)")
 end
 
-sorted_indices = sortperm(objs, rev=true)
-println("Top 10 entries:")
-println(objs[sorted_indices[1:10]])
+println("\n========================================================\n")
 
-sorted_results = sort(results, by = x -> x.fitness, rev = true)
+Objective = obj(target_solution, data, Int.(rt))
 
-println("\nTop 5 entries with associated P values:")
-for i in 1:5
-    r = sorted_results[i]
-    println("Fitness: $(r.fitness), P: $(r.P)")
-end
-
-zero_p_count = sum(sum(P) == 0 for P in P_values)
-zero_p_percentage = (zero_p_count / length(P_values)) * 100
-println("\nPercentage of objs with sum(P) == 0: $(zero_p_percentage)%")
-
-# For solutions with P != 0, print which indices of P are nonzero and overall distribution
-nonzero_indices_list = []
-max_len = maximum(length.(P_values))
-counts = zeros(Int, max_len)
-for (run_idx, P) in enumerate(P_values)
-    if sum(P) != 0
-        inds = findall(!=(0), P)
-        push!(nonzero_indices_list, (run=run_idx, indices=inds))
-        for i in inds
-            counts[i] += 1
-        end
-        # println("Run $(run_idx): nonzero P indices -> $(inds)")
-    end
-end
-
-println("\nDistribution (count of runs where P[index] != 0):")
-for i in 1:length(counts)
-    if counts[i] > 0
-        println("Index $(i): $(counts[i])")
-    end
-end
-
-
-println("hey")
+println("Objective =  $(Objective)")
