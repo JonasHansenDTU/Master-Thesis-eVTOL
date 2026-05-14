@@ -23,7 +23,7 @@ for file in source_files
     include(joinpath(src_dir, file))
 end
 
-excel_file = joinpath("inputData/inputDataHumongous.xlsx")
+excel_file = joinpath("inputData/inputData.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 data = load_data(excel_file, parameter_file)
 
@@ -36,7 +36,7 @@ for i in data.V, j in data.V
 end
 
 maxTurnaround = 100
-Maxtime = Int32(600)
+Maxtime = Int32(60)
 top_c = 4
 
 (best_obj, best_sol, iterations) = Heuristic(maxTurnaround, Maxtime, data, rt, top_c)

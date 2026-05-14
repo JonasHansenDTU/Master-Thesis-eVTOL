@@ -607,7 +607,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
 
     # (6.19) eVTOL starts with mid battery
     @constraint(model, [n in N], 
-        u[0,n] == bmid
+        u[0,n] == bmid 
     )
 
     # (6.20) Battery cannot exceed max
@@ -943,7 +943,7 @@ end
 # Usage
 ###############################################################################
 
-excel_file = joinpath("inputData/inputDataGiant.xlsx")
+excel_file = joinpath("inputData/inputDataHumongous.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()

@@ -417,3 +417,16 @@ function two_opt_Loop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::
     
     return best_obj, best_sol
 end
+
+function repairTurnaroundTime(planes::allPlaneSolution, data, init_obj::Float64)
+    N = data.N
+    best_obj = init_obj
+    best_sol = deepcopy(planes)
+    maxTurnaround = data.maxTurnaround 
+    rt = data.rt
+    te = data.te
+    ET = data.ET
+
+    
+
+end 
