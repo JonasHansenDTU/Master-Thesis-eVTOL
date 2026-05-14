@@ -677,7 +677,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
 
     # (6.19) eVTOL starts with mid battery
     @constraint(model, [n in N], 
-        u[0,n] == bmid
+        u[0,n] == bmid 
     )
 
     # (6.20) Battery cannot exceed max
@@ -1018,7 +1018,7 @@ end
 # Usage
 ###############################################################################
 
-excel_file = joinpath("inputData/inputDataGiant.xlsx")
+excel_file = joinpath("inputData/inputDataHumongous.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()
@@ -1436,17 +1436,3 @@ timings["MainCall-style printing"] = t_pretty
 timings["Total script"] = time() - total_start
 
 print_timing_summary(timings)
-
-drive_time_cache = data.drive_time_cache
-
-cache_df = DataFrame(
-    lat1 = Float64[],
-    lon1 = Float64[],
-    lat2 = Float64[],
-    lon2 = Float64[],
-    minutes = Float64[]
-)
-for ((lat1, lon1, lat2, lon2), minutes) in drive_time_cache
-    push!(cache_df, (lat1, lon1, lat2, lon2, minutes))
-end
-CSV.write("drive_time_cache.csv", cache_df)
