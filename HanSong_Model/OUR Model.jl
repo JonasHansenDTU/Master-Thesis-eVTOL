@@ -675,32 +675,37 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
         sum(s[a,m,n] * q[a] for a in A) <= cap_u
     )
 
-    # (6.19) eVTOL starts with mid battery
+    # (6.19) Seat capacity
+    @constraint(model, [a in A, m in M, n in N; so[a] == 0],
+        sum(s[b,m,n] for b in A) <= 1 + (length(A)-1) * (1 - s[a,m,n])
+    )
+
+    # (6.20) eVTOL starts with mid battery
     @constraint(model, [n in N], 
         u[0,n] == bmid 
     )
 
-    # (6.20) Battery cannot exceed max
+    # (6.21) Battery cannot exceed max
     @constraint(model, [m in M, n in N], 
         u[m,n] <= bmax
     )
 
-    # (6.21) Battery must stay above minimum
+    # (6.22) Battery must stay above minimum
     @constraint(model, [m in M, n in N], 
         u[m,n] >= bmin
     )
 
-    # (6.22) Penalize battery above bmid
+    # (6.23) Penalize battery above bmid
     @constraint(model, [m in M_no0, n in N], 
         over_bmid[m,n] >= u[m,n] - bmid
     )
 
-    # (6.23a) First operation from a vertiport only reflects energy consumption
+    # (6.24a) First operation from a vertiport only reflects energy consumption
     @constraint(model, [i in V, j in V, n in N],
         u[1,n] <= u[0,n] - e[(i,j)] * x[i,j,1,n] + (1 - x[i,j,1,n]) * M2a
     )
 
-    # (6.23b)
+    # (6.24b)
     @constraint(model, [i in V, j in V, n in N],
         u[1,n] >= u[0,n] - e[(i,j)] * x[i,j,1,n] - (1 - x[i,j,1,n]) * M2b
     )
@@ -1018,7 +1023,7 @@ end
 # Usage
 ###############################################################################
 
-excel_file = joinpath("inputData/inputData.xlsx")
+excel_file = joinpath("inputData/inputDataGiant.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()
