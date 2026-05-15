@@ -165,8 +165,7 @@ function build_pool_candidate(pool::Vector{SingleRoutePoolEntry}, data, rt; max_
             continue
         end
 
-        # Ensure descending score order and remove already-selected routes
-        sort!(compatible_routes, by = e -> e.score, rev = true)
+        # Preserve the already-sorted pool order; filtering keeps that order.
         filtered = [e for e in compatible_routes if !(single_route_key(e.plane) in selected_keys)]
         if isempty(filtered)
             cand_planes[pos] = planeSolution(Int32(0), Int32[base_port], Int32[])
