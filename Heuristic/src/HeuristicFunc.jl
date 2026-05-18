@@ -174,7 +174,7 @@ function build_pool_candidate(pool::Vector{SingleRoutePoolEntry}, data, rt; max_
 
         # Randomly pick from the top 10 (or fewer if not available)
         # top_k = min(100, length(filtered))
-        choice = filtered
+        choice = filtered[rand(1:length(filtered))]
 
         # Apply chosen route and mark its key as used
         key = single_route_key(choice.plane)
