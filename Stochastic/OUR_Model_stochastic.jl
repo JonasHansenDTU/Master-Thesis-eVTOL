@@ -528,7 +528,7 @@ function build_model(excel_file::String, parameter_file::String;
         #  on how long the previous flight actually took under this scenario)
         @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
             charge[sc,m,n] <= ec*(arr[sc,m,n] - arr[sc,m-1,n] - rt_sc(i,j)) +
-                              (1 - x[sc,i,j,m,n])*M2c)
+                              (1 - x[sc,i,j,m,n])*M2c*10)
 
         # (6.25a) Battery update — subsequent operations
         @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
@@ -671,7 +671,7 @@ end
 # Usage
 ###############################################################################
 
-excel_file     = joinpath("inputData/inputDataHumongous.xlsx")
+excel_file     = joinpath("inputData/inputData.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 println("Using Excel file: ", excel_file)
 
