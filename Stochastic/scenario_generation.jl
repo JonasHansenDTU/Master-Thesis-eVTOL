@@ -81,11 +81,11 @@ end
 
 const SCENARIOS = [
     # Wind still
-    (wx=  0.0, wy=  0.0, phi=1.00, label="Still / Mild"),
+    (wx=  0.0, wy=  1.0, phi=1.00, label="Still / Mild"),
     (wx=  0.0, wy=  0.0, phi=1.20, label="Still / Cold"),
-    # Moderate north wind  (blowing northward, wy > 0)
-    (wx=  0.0, wy= 30.0, phi=1.00, label="N-30 / Mild"),
-    (wx=  0.0, wy= 30.0, phi=1.20, label="N-30 / Cold"),
+    # # Moderate north wind  (blowing northward, wy > 0)
+    # (wx=  0.0, wy= 30.0, phi=1.00, label="N-30 / Mild"),
+    # (wx=  0.0, wy= 30.0, phi=1.20, label="N-30 / Cold"),
     # # Moderate south wind  (blowing southward, wy < 0)
     # (wx=  0.0, wy=-30.0, phi=1.00, label="S-30 / Mild"),
     # (wx=  0.0, wy=-30.0, phi=1.20, label="S-30 / Cold"),
@@ -136,6 +136,7 @@ function generate_scenarios(V, lat, lon, rt, e, time_per_km)
     # division by zero or physically impossible values under extreme headwinds.
     v_air = 1.0 / time_per_km
     v_min = 0.1 * v_air
+    km_per_hour_to_km_per_min = 1.0 / 60.0
 
     n_scenarios = length(SCENARIOS)
     S    = 1:n_scenarios
@@ -152,21 +153,18 @@ function generate_scenarios(V, lat, lon, rt, e, time_per_km)
                                    scen.wx, scen.wy)
 
             # Travel-time multiplier:
-            #   gamma_t = v_air / max(v_min, v_air + h)
+            #   gamma_t = v_air / max(v_min, v_air + h/60)
             # h > 0 (headwind)  => effective airspeed decreases => gamma_t > 1
             # h < 0 (tailwind)  => effective airspeed increases => gamma_t < 1
-            gamma_t = v_air / max(v_min, v_air + h)
+            gamma_t = v_air / max(v_min, v_air + h * km_per_hour_to_km_per_min)
 
             # Battery multiplier combines wind effect (same aerodynamic origin
             # as travel time) with temperature effect (phi, route-independent).
             gamma_e = scen.phi * gamma_t
 
-            # -----------------
-            gamma_t = 1
-            gamma_e = 1
-            # -----------------
+            
 
-            rt_s[(sc, i, j)] = gamma_t * rt[(i, j)]
+            rt_s[(sc, i, j)] = 0.9 * rt[(i, j)]
             e_s[(sc, i, j)]  = gamma_e * e[(i, j)]
         end
     end
