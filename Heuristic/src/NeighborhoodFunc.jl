@@ -1,8 +1,22 @@
-function Destructor(plane::planeSolution, idxs::Vector{Int64})
+function Destructor(plane::planeSolution, idxs::Vector{Int64}, data)
     m = Int(plane.flightLegs)
 
     if m == 2 && !isempty(idxs)
         base = plane.route[1]
+        endpoint = plane.route[2]
+        
+        # Check if endpoint is valid single-leg endpoint (in end_vp and not base)
+        end_VP_choices = data.end_vp[Int(base)]
+        if endpoint in end_VP_choices && endpoint != base
+            # Preserve as single-leg route
+            resize!(plane.route, 2)
+            empty!(plane.turnaroundTime)
+            insert!(plane.turnaroundTime, 1, Int32(data.te))
+            plane.flightLegs = Int32(1)
+            return
+        end
+        
+        # Otherwise reset to base (0 legs)
         resize!(plane.route, 1)
         plane.route[1] = base
         empty!(plane.turnaroundTime)
@@ -35,8 +49,17 @@ function Constructor(plane::planeSolution, VP::Int, idx::Int, data)
 
     if plane.flightLegs == 0
         base = Int32(plane.route[1])
-
-        # Build first tour as base -> VP -> base
+        end_VP_choices = data.end_vp[Int(base)]
+        
+        # Try to create single-leg route if VP is in allowed endpoints and not base
+        if VP != base && VP in end_VP_choices
+            insert!(plane.route, 2, Int32(VP))
+            insert!(plane.turnaroundTime, 1, te32)
+            plane.flightLegs = 1
+            return
+        end
+        
+        # Otherwise fall back to two-leg base-return route
         insert!(plane.route, 2, Int32(VP))
         insert!(plane.route, 3, base)
 
@@ -284,7 +307,7 @@ function DestructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::
         for idx in 2:m
             temp_sol = deepcopy(planes)
 
-            Destructor(temp_sol.planes[n], [idx])
+            Destructor(temp_sol.planes[n], [idx], data)
 
             if has_consecutive_duplicates(temp_sol.planes[n].route)
                 continue
@@ -427,7 +450,7 @@ function Swap(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64,
                 Constructor(cand.planes[n], v, idx, data)
 
                 # 2) Remove original stop (shifted to idx+1 after insertion)
-                Destructor(cand.planes[n], [Int64(idx + 1)])
+                Destructor(cand.planes[n], [Int64(idx + 1)], data)
 
                 new_obj = obj(cand, data, rt)
 
@@ -527,7 +550,7 @@ function RemoveVP(plane, data)
     for idx in 2:m
         temp_plane = deepcopy(plane)
 
-        Destructor(temp_plane, [idx])
+        Destructor(temp_plane, [idx], data)
 
         if has_consecutive_duplicates(temp_plane.route)
             continue
