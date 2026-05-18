@@ -147,7 +147,6 @@ function load_data(excel_file::String, parameter_file::String)
         b = Int(r[base_vp_col])
         bv[n] = b
     end
-
     
     bad_bases = sort([b for b in values(bv) if !(b in V)])
     if !isempty(bad_bases)
@@ -233,7 +232,6 @@ function load_data(excel_file::String, parameter_file::String)
         end
     end
 
-
     ###########################################################################
     # Prices
     ###########################################################################
@@ -242,6 +240,7 @@ function load_data(excel_file::String, parameter_file::String)
     to_col   = find_col(prices, [:to])
     fd_sum_col = find_col(prices, [:fd_sum])
     fd_lookup = Dict{Tuple{Int,Int}, Float64}()
+    fd_drive_time = find_col(prices, [:bil_tid_min])
 
     for r in eachrow(prices)
         i = Int(r[from_col])
@@ -250,6 +249,36 @@ function load_data(excel_file::String, parameter_file::String)
     end
     for (i,j) in collect(keys(fd_lookup))
         fd_lookup[(j,i)] = fd_lookup[(i,j)]
+    end
+
+    drive_time_lookup = Dict{Tuple{Int,Int}, Float64}()
+
+    for r in eachrow(prices)
+        i = Int(r[from_col])
+        j = Int(r[to_col])
+        drive_time_lookup[(i,j)] = Float64(r[fd_drive_time])
+    end
+
+    for (i,j) in collect(keys(drive_time_lookup))
+        drive_time_lookup[(j,i)] = drive_time_lookup[(i,j)]
+    end
+
+    end_vp = Dict{Int, Vector{Int}}()
+
+    for i in V
+        end_vp[i] = Int[]
+        for j in V
+            if j == i
+                push!(end_vp[i], j)
+            elseif haskey(drive_time_lookup, (i,j)) && drive_time_lookup[(i,j)] <= 60.0
+                push!(end_vp[i], j)
+            end
+        end
+    end
+    
+    println("end_vp:")
+    for i in sort(collect(keys(end_vp)))
+        println("Vertiport ", i, " -> ", sort(end_vp[i]))
     end
 
     ###########################################################################
@@ -310,10 +339,9 @@ function load_data(excel_file::String, parameter_file::String)
         T = collect(T), T_no0 = collect(T_no0),
         bv = bv,
         lat = lat, lon = lon,
-        dist = dist, fd = fd_lookup, fs = fs, c = c, e = e, rt = rt,
+        dist = dist, fd = fd_lookup, fs = fs, c = c, e = e, rt = rt, end_vp = end_vp,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
-        cap_v = cap_v, cap_u = cap_u, opening_cost = opening_cost,
-        bmax = bmax, bmid = bmid, b_penalty = b_penalty, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3,
-        battery_per_km = battery_per_km
+        cap_v = cap_v, cap_u = cap_u, opening_cost = opening_cost, battery_per_km,
+        bmax = bmax, bmid = bmid, b_penalty = b_penalty, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3
     )
 end
