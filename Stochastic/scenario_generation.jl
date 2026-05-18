@@ -182,6 +182,7 @@ function generate_scenarios(V, lat, lon, rt, e, time_per_km)
 
         for i in V, j in V
 <<<<<<< HEAD
+<<<<<<< HEAD
 
             i == j && continue
 =======
@@ -205,6 +206,28 @@ function generate_scenarios(V, lat, lon, rt, e, time_per_km)
             # Travel-time multiplier
             ###################################################################
 
+=======
+
+            i == j && continue
+
+            ###################################################################
+            # Headwind component
+            ###################################################################
+
+            h = headwind_component(
+                lat[i],
+                lon[i],
+                lat[j],
+                lon[j],
+                wx,
+                wy
+            )
+
+            ###################################################################
+            # Travel-time multiplier
+            ###################################################################
+
+>>>>>>> 1dcf7bb (DDDD)
             gamma_t =
                 v_air / max(v_min, v_air + h)
 
@@ -226,6 +249,7 @@ function generate_scenarios(V, lat, lon, rt, e, time_per_km)
                 scen.phi *
                 gamma_t *
                 e[(i,j)]
+<<<<<<< HEAD
 
 <<<<<<< HEAD
 =======
@@ -237,6 +261,9 @@ function generate_scenarios(V, lat, lon, rt, e, time_per_km)
             rt_s[(sc, i, j)] = gamma_t * rt[(i, j)]
             e_s[(sc, i, j)]  = gamma_e * e[(i, j)]
 >>>>>>> 674bb64 (Fixed error and made feasible.)
+=======
+
+>>>>>>> 1dcf7bb (DDDD)
         end
     end
 
