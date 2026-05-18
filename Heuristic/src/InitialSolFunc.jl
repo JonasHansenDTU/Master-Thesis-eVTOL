@@ -110,20 +110,35 @@ function Candidate_Route(data)
     return cand_routes
 end
 
-function return_posssible(current_time, current_VP, next_VP, base_VP, rt, ET, te)
+# function return_posssible(current_time, current_VP, next_VP, base_VP, rt, ET, te)
 
-    if next_VP == base_VP
+#     if next_VP == base_VP
+#         return (true, ET - current_time - rt[(current_VP, next_VP)])
+#     end
+
+#     # Remaining time budget after flying to next_VP, turning around, and returning to base.
+#     maxTT = ET - current_time - rt[(current_VP, next_VP)] - te - rt[(next_VP, base_VP)]
+#     # if current_VP == 2 && next_VP == 3
+#     #     println("HEY")
+#     # end
+
+#     return (maxTT >= 0, maxTT)
+    
+# end
+
+function return_posssible(current_time, current_VP, next_VP, end_VP_choices::Vector{Int}, rt, ET, te)
+
+    if next_VP in end_VP_choices
         return (true, ET - current_time - rt[(current_VP, next_VP)])
     end
 
-    # Remaining time budget after flying to next_VP, turning around, and returning to base.
-    maxTT = ET - current_time - rt[(current_VP, next_VP)] - te - rt[(next_VP, base_VP)]
-    # if current_VP == 2 && next_VP == 3
-    #     println("HEY")
-    # end
+    maxTT = maximum([
+        ET - current_time - rt[(current_VP, next_VP)] - te - rt[(next_VP, end_VP)]
+        for end_VP in end_VP_choices
+    ])
 
     return (maxTT >= 0, maxTT)
-    
+
 end
 
 function expectedTurnaroundTime(a1, a2, current_time, data, stopover::Bool, first_trip::Bool, base_VP)
@@ -164,6 +179,36 @@ function expectedTurnaroundTime(a1, a2, current_time, data, stopover::Bool, firs
     end
 end
 
+function expectedTurnaroundTime(a1, a2, current_time, data, stopover::Bool, first_trip::Bool, end_VP_choices::Vector{Int})
+    dt = data.dt
+    rt = data.rt
+    op = data.op
+    dp = data.dp
+    te = data.te
+    w = data.w
+    ET = data.ET
+
+    if !stopover
+        lowerbound = max((first_trip ? 0 : te), dt[a1] - current_time)
+        upperbound = min(dt[a1] - current_time + w,
+                        return_posssible(current_time, op[a1], dp[a1], end_VP_choices, rt, ET, te)[2])
+    else
+        lowerbound = max((first_trip ? 0 : te), dt[a1]-current_time,
+                            dt[a2] + rt[op[a1],op[a2]] + (op[a1]!= op[a2] && op[a2] != dp[a1] ? te : 0) - current_time)
+        upperbound = min(dt[a1] - current_time + w,
+                            dt[a2] + w + rt[op[a1],op[a2]] + (op[a1]!= op[a2] && op[a2] != dp[a1] ? te : 0) - current_time,
+                            return_posssible(current_time, op[a1], (op[a1] == op[a2] || op[a2] == dp[a1] ? dp[a1] : op[a2]), end_VP_choices, rt, ET, te)[2])
+    end
+
+    if upperbound-lowerbound <= te && !first_trip
+        return nothing
+    elseif upperbound < lowerbound
+        return nothing
+    else
+        return Int(rand(lowerbound:upperbound))
+    end
+end
+
 
 
 
@@ -173,6 +218,20 @@ function alternative_route(current_time, unique_next_VPs, current_VP, base_VP, r
 
     if length(cand_VP) == 1 && cand_VP[1] == base_VP
         return base_VP, true
+    end
+
+    return rand(cand_VP), false
+
+end
+
+function alternative_route(current_time, unique_next_VPs, current_VP, end_VP_choices::Vector{Int}, rt, ET, te, V)
+
+    cand_VP = [v for v in V if !(v in unique_next_VPs) && return_posssible(current_time, current_VP, v, end_VP_choices, rt, ET, te)[1] && (v != current_VP || current_VP in end_VP_choices)]
+
+    if isempty(cand_VP)
+        return rand(end_VP_choices), true
+    elseif length(cand_VP) == 1 && cand_VP[1] in end_VP_choices
+        return cand_VP[1], true
     end
 
     return rand(cand_VP), false
@@ -260,6 +319,80 @@ function k_BestRoutes(Potential_Passengers, k, current_time, Candidate_Routes, d
     return unique_routes
 end
 
+function k_BestRoutes(Potential_Passengers, k, current_time, Candidate_Routes, data, current_VP, end_VP_choices::Vector{Int}, first_trip::Bool)
+    scored_routes = Tuple{Vector{Int}, Tuple{Float64, Float64}, Vector{Int}, Float64, Int}[]
+
+    if isempty(Potential_Passengers)
+        next_VP, base_only_option = alternative_route(current_time, [], current_VP, end_VP_choices, data.rt, data.ET, data.te, data.V)
+        if next_VP == current_VP
+            return nothing
+        end
+        expected_turnaround = data.te
+        new_time = data.rt[(current_VP, next_VP)] + expected_turnaround
+        push!(scored_routes, ([current_VP, next_VP], (new_time,0), [], 0, expected_turnaround))
+        return scored_routes
+    end
+
+    for a in Potential_Passengers
+        for route in Candidate_Routes[a]
+
+            batter_needed = data.e[(current_VP, route[1][2])]
+            if batter_needed >= (first_trip ? data.bmid-data.bmin : data.bmax-data.bmin)
+                continue
+            end
+
+            if length(route[3]) == 1
+                a2 = nothing
+                expected_turnaround = expectedTurnaroundTime(a, a2, current_time, data, false, first_trip, end_VP_choices)
+            else
+                a2 = route[3][2]
+                expected_turnaround = expectedTurnaroundTime(a, a2, current_time, data, true, first_trip, end_VP_choices)
+            end
+
+            if expected_turnaround === nothing
+                continue
+            end
+
+            base_time, base_price = route[2]
+            time = base_time + current_time + expected_turnaround
+            updated_time_price = (time, base_price)
+            price_pr_time = base_price / time
+
+            push!(scored_routes, (route[1], updated_time_price, route[3], price_pr_time, expected_turnaround))
+        end
+    end
+
+    if isempty(scored_routes)
+        if current_VP in end_VP_choices
+            return nothing
+        end
+        next_VP = rand(end_VP_choices)
+        bool, maxTT = return_posssible(current_time, current_VP, next_VP, end_VP_choices, data.rt, data.ET, data.te)
+
+        expected_turnaround = rand(Int(ceil(data.te)):Int(floor(maxTT)))
+        new_time = data.rt[(current_VP, next_VP)] + expected_turnaround
+
+        push!(scored_routes, ([current_VP, next_VP], (new_time,0), [], 0, expected_turnaround))
+    end
+
+    sort!(scored_routes, by = r -> r[4], rev = true)
+
+    unique_routes = Tuple{Vector{Int}, Tuple{Float64, Float64}, Vector{Int}, Float64, Int}[]
+    seen_route_keys = Set{Tuple{Vararg{Int}}}()
+
+    for route in scored_routes
+        route_key = Tuple(route[1])
+        if route_key in seen_route_keys
+            continue
+        end
+        push!(seen_route_keys, route_key)
+        push!(unique_routes, route)
+        length(unique_routes) == k && break
+    end
+
+    return unique_routes
+end
+
 
 
 function Construction_Heuristic(data, Candidate_Routes; maxLegs::Int=5)
@@ -292,6 +425,7 @@ function Construction_Heuristic(data, Candidate_Routes; maxLegs::Int=5)
         current_time = 0
         current_VP = bv[n]
         base_VP = bv[n]
+        end_VP_choices = data.end_vp[base_VP]
 
         route = Int32[current_VP]
         turnaroundTime = Int32[]
@@ -303,7 +437,7 @@ function Construction_Heuristic(data, Candidate_Routes; maxLegs::Int=5)
                 poten_pass = [a for a in keys(Candidate_Routes) if op[a] == current_VP &&
                         current_time <= dt[a] + w &&
                         !(a in passengers_served) &&
-                        dp[a] == base_VP]
+                        dp[a] in end_VP_choices]
                 returned = true
             else
                 poten_pass = [a for a in keys(Candidate_Routes) if op[a] == current_VP &&
@@ -311,7 +445,7 @@ function Construction_Heuristic(data, Candidate_Routes; maxLegs::Int=5)
                             !(a in passengers_served)]  
             end          
 
-            best_routes = k_BestRoutes(poten_pass, k, current_time, Candidate_Routes, data, current_VP, base_VP, first_trip)
+            best_routes = k_BestRoutes(poten_pass, k, current_time, Candidate_Routes, data, current_VP, end_VP_choices, first_trip)
             
             if isnothing(best_routes)
                 returned = true
@@ -336,13 +470,13 @@ function Construction_Heuristic(data, Candidate_Routes; maxLegs::Int=5)
             idx = 1
             base_only_option = false
 
-            while !return_posssible(current_time, current_VP, next_VP, bv[n], rt, ET, te)[1]
+            while !return_posssible(current_time, current_VP, next_VP, end_VP_choices, rt, ET, te)[1]
                 idx += 1
                 next_VP = unique_next_VPs[idx][1]
                 passengers = best_routes[idx][3]
                 if idx == length(unique_next_VPs)
                     idx += 1
-                    next_VP, base_only_option = alternative_route(current_time, unique_next_VPs, current_VP, base_VP, rt, ET, te, V)
+                    next_VP, base_only_option = alternative_route(current_time, unique_next_VPs, current_VP, end_VP_choices, rt, ET, te, V)
                     stopover = 0
                     passengers = []
                     continue
@@ -358,7 +492,7 @@ function Construction_Heuristic(data, Candidate_Routes; maxLegs::Int=5)
 
             if stopover == 1
                 next_VP = best_routes[idx][1][3]
-                can_return, maxTT = return_posssible(current_time, current_VP, next_VP, bv[n], rt, ET, te)
+                can_return, maxTT = return_posssible(current_time, current_VP, next_VP, end_VP_choices, rt, ET, te)
                 if can_return
                     push!(route, Int32(next_VP))
                     push!(turnaroundTime, rand([te: maxTT]))
@@ -375,7 +509,7 @@ function Construction_Heuristic(data, Candidate_Routes; maxLegs::Int=5)
 
             if base_only_option
                 returned = true
-            elseif current_VP == base_VP
+            elseif current_VP in end_VP_choices
                 returned = rand(Bool) #!!!!!!
             end
         end
@@ -427,6 +561,7 @@ function Construction_Heuristic2(data, Candidate_Routes; maxLegs::Int=3)
         current_time = 0
         current_VP = bv[n]
         base_VP = bv[n]
+        end_VP_choices = data.end_vp[base_VP]
 
         route = Int32[current_VP]
         turnaroundTime = Int32[]
@@ -438,7 +573,7 @@ function Construction_Heuristic2(data, Candidate_Routes; maxLegs::Int=3)
                 poten_pass = [a for a in keys(Candidate_Routes) if op[a] == current_VP &&
                         current_time <= dt[a] + w &&
                         !(a in passengers_served) &&
-                        dp[a] == base_VP]
+                        dp[a] in end_VP_choices]
                 returned = true
             else
                 poten_pass = [a for a in keys(Candidate_Routes) if op[a] == current_VP &&
@@ -480,17 +615,17 @@ function Construction_Heuristic2(data, Candidate_Routes; maxLegs::Int=3)
 
             for r in unique_routes
                 next_vp = r[1][2]
-                if return_posssible(current_time, current_VP, next_vp, bv[n], rt, ET, te)[1]
+                if return_posssible(current_time, current_VP, next_vp, end_VP_choices, rt, ET, te)[1]
                     selected_route = r
                     break
                 end
             end
 
             if selected_route === nothing
-                next_VP, base_only_option = alternative_route(current_time, collect(seen_next_VPs), current_VP, base_VP, rt, ET, te, V)
+                next_VP, base_only_option = alternative_route(current_time, collect(seen_next_VPs), current_VP, end_VP_choices, rt, ET, te, V)
                 stopover = 0
                 passengers = Int[]
-                can_return, maxTT = return_posssible(current_time, current_VP, next_VP, bv[n], rt, ET, te)
+                can_return, maxTT = return_posssible(current_time, current_VP, next_VP, end_VP_choices, rt, ET, te)
                 selected_turnaround = can_return ? rand(Int(ceil(te)):Int(floor(maxTT))) : Int(te)
             else
                 next_VP = selected_route[1][2]
@@ -508,7 +643,7 @@ function Construction_Heuristic2(data, Candidate_Routes; maxLegs::Int=3)
 
             if stopover == 1 && selected_route !== nothing
                 next_VP = selected_route[1][3]
-                can_return, maxTT = return_posssible(current_time, current_VP, next_VP, bv[n], rt, ET, te)
+                can_return, maxTT = return_posssible(current_time, current_VP, next_VP, end_VP_choices, rt, ET, te)
                 if can_return
                     push!(route, Int32(next_VP))
                     push!(turnaroundTime, rand(Int(ceil(te)):Int(floor(maxTT))))
@@ -523,7 +658,7 @@ function Construction_Heuristic2(data, Candidate_Routes; maxLegs::Int=3)
 
             if base_only_option
                 returned = true
-            elseif current_VP == base_VP
+            elseif current_VP in end_VP_choices
                 returned = rand(Bool) #!!!!!!
             end
         end
@@ -584,6 +719,7 @@ function Construction_Heuristic2(data, Candidate_Routes; maxLegs::Int=3)
         for (i, n) in enumerate(N2)
             first_trip = true
             base = bv[n]
+            end_VP_choices = data.end_vp[base]
 
             # choose number of legs (map using position in N2)
             flightLegs = allowed_legs[i]
@@ -602,16 +738,21 @@ function Construction_Heuristic2(data, Candidate_Routes; maxLegs::Int=3)
                     current = nxt
                 end
 
-                # final node forced back to base
-                if current == base
-                    # if already at base, pick another node first when possible
-                    candidates = [v for v in V if v != base && v != route[end-1]]
-                    if !isempty(candidates)
-                        nxt = rand(candidates)
-                        route[end] = Int32(nxt)
-                    end
+                # final node closes at a valid endpoint; include base when allowed, but never repeat the current vertiport
+                end_candidates = unique(vcat(end_VP_choices, [base]))
+                end_candidates = [v for v in end_candidates if v != current]
+
+                if flightLegs == 1
+                    end_candidates = [v for v in end_candidates if v != base]
                 end
-                push!(route, Int32(base))
+
+                if isempty(end_candidates)
+                    flightLegs = 0
+                    route = Int32[base]
+                    turnaroundTime = Int32[]
+                else
+                    push!(route, Int32(rand(end_candidates)))
+                end
             end
 
             turnaroundTime = Int32[]
@@ -640,7 +781,7 @@ function Construction_Heuristic2(data, Candidate_Routes; maxLegs::Int=3)
                     x = a - log(1 - u * (1 - exp(-λ * (b - a)))) / λ
 
                     # Convert to integer safely
-                    x_int = floor(Int, x)
+                    x_int = floor(Int, x)   
 
                     # Optional: clamp just in case of floating-point edge rounding
                     x_int = clamp(x_int, Int(te), Int(maxTurnaround))
