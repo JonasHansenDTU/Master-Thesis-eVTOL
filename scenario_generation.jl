@@ -130,56 +130,141 @@ Returns:
     S           : 1:length(SCENARIOS)  (scenario index set)
     pi_s        : Dict{Int, Float64}   equal probabilities 1/|S|
 """
+
 function generate_scenarios(V, lat, lon, rt, e, time_per_km)
 
-    # Nominal airspeed in km/min; minimum set to 10% of nominal to avoid
-    # division by zero or physically impossible values under extreme headwinds.
+    ###########################################################################
+    # Nominal airspeed
+    ###########################################################################
+
+    # time_per_km is minutes per km
+    # therefore v_air is km/min
+
     v_air = 1.0 / time_per_km
+
+    # minimum effective airspeed safeguard
     v_min = 0.1 * v_air
 
+    ###########################################################################
+    # Scenario indexing
+    ###########################################################################
+
     n_scenarios = length(SCENARIOS)
-    S    = 1:n_scenarios
+
+    S = 1:n_scenarios
+
+    ###########################################################################
+    # Equal probabilities
+    ###########################################################################
+
     pi_s = Dict(sc => 1.0 / n_scenarios for sc in S)
 
+    ###########################################################################
+    # Scenario-dependent parameters
+    ###########################################################################
+
     rt_s = Dict{Tuple{Int,Int,Int}, Float64}()
+
     e_s  = Dict{Tuple{Int,Int,Int}, Float64}()
 
+    ###########################################################################
+    # Generate stochastic parameters
+    ###########################################################################
+
     for (sc, scen) in enumerate(SCENARIOS)
+
+        #######################################################################
+        # Convert wind from km/h -> km/min
+        #######################################################################
+
+        wx = scen.wx / 60.0
+        wy = scen.wy / 60.0
+
         for i in V, j in V
+
             i == j && continue
 
-            h = headwind_component(lat[i], lon[i], lat[j], lon[j],
-                                   scen.wx, scen.wy)
+            ###################################################################
+            # Headwind component
+            ###################################################################
 
-            # Travel-time multiplier:
-            #   gamma_t = v_air / max(v_min, v_air + h)
-            # h > 0 (headwind)  => effective airspeed decreases => gamma_t > 1
-            # h < 0 (tailwind)  => effective airspeed increases => gamma_t < 1
-            gamma_t = v_air / max(v_min, v_air + h)
+            h = headwind_component(
+                lat[i],
+                lon[i],
+                lat[j],
+                lon[j],
+                wx,
+                wy
+            )
 
-            # Battery multiplier combines wind effect (same aerodynamic origin
-            # as travel time) with temperature effect (phi, route-independent).
-            gamma_e = scen.phi * gamma_t
+            ###################################################################
+            # Travel-time multiplier
+            ###################################################################
 
-            rt_s[(sc, i, j)] = gamma_t * rt[(i, j)]
-            e_s[(sc, i, j)]  = gamma_e * e[(i, j)]
+            gamma_t =
+                v_air / max(v_min, v_air + h)
+
+            ###################################################################
+            # Scenario travel time
+            ###################################################################
+
+            rt_s[(sc,i,j)] =
+                gamma_t * rt[(i,j)]
+
+            ###################################################################
+            # Scenario battery consumption
+            #
+            # Wind already affects battery through travel time.
+            # Temperature multiplier applied independently.
+            ###################################################################
+
+            e_s[(sc,i,j)] =
+                scen.phi *
+                gamma_t *
+                e[(i,j)]
+
         end
     end
 
+    ###########################################################################
+    # Console summary
+    ###########################################################################
+
     println("Scenario generation complete:")
     println("  $(n_scenarios) scenarios × $(length(V)*(length(V)-1)) route pairs")
-    println("  v_air = $(round(v_air * 60, digits=1)) km/h  ",
-            "(v_min = $(round(v_min * 60, digits=1)) km/h)")
+
+    println(
+        "  v_air = ",
+        round(v_air * 60, digits=1),
+        " km/h",
+        "  (v_min = ",
+        round(v_min * 60, digits=1),
+        " km/h)"
+    )
+
     println()
-    println(lpad("sc", 4), " | ", lpad("label", 14),
-            " | ", lpad("wx", 6), " | ", lpad("wy", 6),
-            " | ", lpad("phi", 5))
+
+    println(
+        lpad("sc", 4), " | ",
+        lpad("label", 14), " | ",
+        lpad("wx", 6), " | ",
+        lpad("wy", 6), " | ",
+        lpad("phi", 5)
+    )
+
     println("-" ^ 48)
+
     for (sc, scen) in enumerate(SCENARIOS)
-        println(lpad(sc, 4), " | ", rpad(scen.label, 14),
-                " | ", lpad(scen.wx, 6), " | ", lpad(scen.wy, 6),
-                " | ", lpad(scen.phi, 5))
+
+        println(
+            lpad(sc, 4), " | ",
+            rpad(scen.label, 14), " | ",
+            lpad(scen.wx, 6), " | ",
+            lpad(scen.wy, 6), " | ",
+            lpad(scen.phi, 5)
+        )
     end
+
     println()
 
     return rt_s, e_s, S, pi_s
