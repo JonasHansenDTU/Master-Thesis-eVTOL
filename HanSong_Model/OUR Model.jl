@@ -313,7 +313,7 @@ function load_data(excel_file::String, parameter_file::String)
     e    = Dict{Tuple{Int,Int},Float64}()
     rt   = Dict{Tuple{Int,Int},Int}()
   
-
+    
     for i in V, j in V
         dij = haversine_km(lat[i], lon[i], lat[j], lon[j])
         dist[(i,j)] = dij
@@ -516,7 +516,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
         sum(x[i,j,m,n] for i in V, j in end_vp[bv[n]]) >=
         sum(x[i,j,m,n] for i in V, j in V) - sum(x[i,j,m+1,n] for i in V, j in V)
     )
-    
+
     # (6.3b) eVTOL returns to its base vertiport or another vertiport withing 60 minute drive
     @constraint(model, [n in N],
         sum(x[i,j,maximum(M),n] for i in V, j in end_vp[bv[n]]) >=
