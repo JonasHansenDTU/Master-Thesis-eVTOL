@@ -165,8 +165,7 @@ function build_pool_candidate(pool::Vector{SingleRoutePoolEntry}, data, rt; max_
             continue
         end
 
-        # Ensure descending score order and remove already-selected routes
-        sort!(compatible_routes, by = e -> e.score, rev = true)
+        # Preserve the already-sorted pool order; filtering keeps that order.
         filtered = [e for e in compatible_routes if !(single_route_key(e.plane) in selected_keys)]
         if isempty(filtered)
             cand_planes[pos] = planeSolution(Int32(0), Int32[base_port], Int32[])
@@ -174,8 +173,8 @@ function build_pool_candidate(pool::Vector{SingleRoutePoolEntry}, data, rt; max_
         end
 
         # Randomly pick from the top 10 (or fewer if not available)
-        top_k = min(100, length(filtered))
-        choice = filtered[rand(1:top_k)]
+        # top_k = min(100, length(filtered))
+        choice = filtered[rand(1:length(filtered))]
 
         # Apply chosen route and mark its key as used
         key = single_route_key(choice.plane)
@@ -369,6 +368,9 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
     candiateroutes = Candidate_Route(data)
     single_route_pool = SingleRoutePoolEntry[]
 
+
+    max_size = length(data.N)*length(data.V) 
+
     
     while elapsed <= Float64(MaxTime)
         nr = 5
@@ -380,7 +382,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
         temp_sol = deepcopy(Best_sols[idx].evtols)
 
         for best_sol_candidate in Best_sols
-            single_route_pool = collect_feasible_single_plane_routes(best_sol_candidate.evtols, data, rt; pool=single_route_pool, max_size=max(1, top_c * 10))
+            single_route_pool = collect_feasible_single_plane_routes(best_sol_candidate.evtols, data, rt; pool=single_route_pool, max_size=max_size)
         end
 
         if temp_obj > best_obj
@@ -390,7 +392,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
             println("Method used: Initial Heuristic")
         end
 
-        single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max(1, top_c * 10))
+        single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max_size)
 
         if !isempty(single_route_pool)
             pool_sol = build_pool_candidate(single_route_pool, data, rt; max_routes=min(2, length(single_route_pool)))
@@ -399,7 +401,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
                 if pool_obj > temp_obj || rand() < 0.1
                     temp_sol = pool_sol
                     temp_obj = pool_obj
-                    single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max(1, top_c * 10))
+                    single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max_size)
                 end
             end
         end
@@ -440,7 +442,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
                 temp_obj = cand_obj
                 temp_sol = deepcopy(cand_sol)
                 improvement = true
-                single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max(1, top_c * 10))
+                single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max_size)
 
                 if temp_obj > best_obj
                     best_obj = temp_obj

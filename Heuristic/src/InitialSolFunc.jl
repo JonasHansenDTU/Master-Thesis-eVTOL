@@ -605,7 +605,7 @@ function Construction_Heuristic2(data, Candidate_Routes; maxLegs::Int=3)
                 # final node forced back to base
                 if current == base
                     # if already at base, pick another node first when possible
-                    candidates = [v for v in V if v != base]
+                    candidates = [v for v in V if v != base && v != route[end-1]]
                     if !isempty(candidates)
                         nxt = rand(candidates)
                         route[end] = Int32(nxt)
