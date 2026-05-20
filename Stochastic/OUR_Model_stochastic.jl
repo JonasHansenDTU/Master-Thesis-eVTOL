@@ -164,8 +164,8 @@ function load_data(excel_file::String, parameter_file::String)
     te                    = params["te"]
     w                     = params["w"]
     ET                    = params["ET"]
-    # M1  = 1;  M2a = 0;  M2b = bmax;  M2c = bmax + ec * ET;  M3 = ET
-    M1  = 1000;  M2a = 1000;  M2b = 1000;  M2c = 1000;  M3 = 1000
+    M1  = 1;  M2a = 0;  M2b = bmax;  M2c = bmax + ec * ET;  M3 = ET
+ 
 
 
     M          = 0:6
