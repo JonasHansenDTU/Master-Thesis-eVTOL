@@ -82,7 +82,14 @@ end
 const SCENARIOS = [
     # Wind still
     (wx=  0.0, wy=  0.0, phi=1.00, label="Still / Mild"),
+    (wx=  0.0, wy=  0.0, phi=1.00, label="Still / Mild"),
     (wx=  0.0, wy=  0.0, phi=1.20, label="Still / Cold"),
+    # Moderate north wind  (blowing northward, wy > 0)
+    (wx=  0.0, wy= 30.0, phi=1.00, label="N-30 / Mild"),
+    (wx=  0.0, wy= 30.0, phi=1.20, label="N-30 / Cold"),
+    # Moderate south wind  (blowing southward, wy < 0)
+    (wx=  0.0, wy=-30.0, phi=1.00, label="S-30 / Mild"),
+    (wx=  0.0, wy=-30.0, phi=1.20, label="S-30 / Cold"),
     # # Moderate north wind  (blowing northward, wy > 0)
     (wx=  0.0, wy= 30.0, phi=1.00, label="N-30 / Mild"),
     (wx=  0.0, wy= 30.0, phi=1.20, label="N-30 / Cold"),
@@ -90,23 +97,23 @@ const SCENARIOS = [
     # (wx=  0.0, wy=-30.0, phi=1.00, label="S-30 / Mild"),
     # (wx=  0.0, wy=-30.0, phi=1.20, label="S-30 / Cold"),
     # # Moderate east wind   (blowing eastward,  wx > 0)
-    # (wx= 30.0, wy=  0.0, phi=1.00, label="E-30 / Mild"),
-    # (wx= 30.0, wy=  0.0, phi=1.20, label="E-30 / Cold"),
+    (wx= 30.0, wy=  0.0, phi=1.00, label="E-30 / Mild"),
+    (wx= 30.0, wy=  0.0, phi=1.20, label="E-30 / Cold"),
     # # Moderate west wind   (blowing westward,  wx < 0)
-    # (wx=-30.0, wy=  0.0, phi=1.00, label="W-30 / Mild"),
-    # (wx=-30.0, wy=  0.0, phi=1.20, label="W-30 / Cold"),
+    (wx=-30.0, wy=  0.0, phi=1.00, label="W-30 / Mild"),
+    (wx=-30.0, wy=  0.0, phi=1.20, label="W-30 / Cold"),
     # # Strong north wind
-    # (wx=  0.0, wy= 60.0, phi=1.00, label="N-60 / Mild"),
-    # (wx=  0.0, wy= 60.0, phi=1.20, label="N-60 / Cold"),
+    (wx=  0.0, wy= 60.0, phi=1.00, label="N-60 / Mild"),
+    (wx=  0.0, wy= 60.0, phi=1.20, label="N-60 / Cold"),
     # # Strong south wind
-    # (wx=  0.0, wy=-60.0, phi=1.00, label="S-60 / Mild"),
-    # (wx=  0.0, wy=-60.0, phi=1.20, label="S-60 / Cold"),
+    (wx=  0.0, wy=-60.0, phi=1.00, label="S-60 / Mild"),
+    (wx=  0.0, wy=-60.0, phi=1.20, label="S-60 / Cold"),
     # # Strong east wind
-    # (wx= 60.0, wy=  0.0, phi=1.00, label="E-60 / Mild"),
-    # (wx= 60.0, wy=  0.0, phi=1.20, label="E-60 / Cold"),
+    (wx= 60.0, wy=  0.0, phi=1.00, label="E-60 / Mild"),
+    (wx= 60.0, wy=  0.0, phi=1.20, label="E-60 / Cold"),
     # # Strong west wind
-    # (wx=-60.0, wy=  0.0, phi=1.00, label="W-60 / Mild"),
-    # (wx=-60.0, wy=  0.0, phi=1.20, label="W-60 / Cold"),
+    (wx=-60.0, wy=  0.0, phi=1.00, label="W-60 / Mild"),
+    (wx=-60.0, wy=  0.0, phi=1.20, label="W-60 / Cold"),
 ]
 
 ###############################################################################
@@ -164,6 +171,7 @@ function generate_scenarios(V, lat, lon, rt, e, time_per_km)
 
             
 
+            rt_s[(sc, i, j)] = Int(round(0.9 * rt[(i, j)]))
             rt_s[(sc, i, j)] = Int(round(gamma_t * rt[(i, j)]))
             e_s[(sc, i, j)]  = gamma_e * e[(i, j)]
         end
