@@ -81,11 +81,11 @@ end
 
 const SCENARIOS = [
     # Wind still
-    (wx=  0.0, wy=  1.0, phi=1.00, label="Still / Mild"),
+    (wx=  0.0, wy=  0.0, phi=1.00, label="Still / Mild"),
     (wx=  0.0, wy=  0.0, phi=1.20, label="Still / Cold"),
     # # Moderate north wind  (blowing northward, wy > 0)
-    # (wx=  0.0, wy= 30.0, phi=1.00, label="N-30 / Mild"),
-    # (wx=  0.0, wy= 30.0, phi=1.20, label="N-30 / Cold"),
+    (wx=  0.0, wy= 30.0, phi=1.00, label="N-30 / Mild"),
+    (wx=  0.0, wy= 30.0, phi=1.20, label="N-30 / Cold"),
     # # Moderate south wind  (blowing southward, wy < 0)
     # (wx=  0.0, wy=-30.0, phi=1.00, label="S-30 / Mild"),
     # (wx=  0.0, wy=-30.0, phi=1.20, label="S-30 / Cold"),
@@ -164,7 +164,7 @@ function generate_scenarios(V, lat, lon, rt, e, time_per_km)
 
             
 
-            rt_s[(sc, i, j)] = 0.9 * rt[(i, j)]
+            rt_s[(sc, i, j)] = Int(round(gamma_t * rt[(i, j)]))
             e_s[(sc, i, j)]  = gamma_e * e[(i, j)]
         end
     end
