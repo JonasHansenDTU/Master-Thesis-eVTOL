@@ -8,8 +8,8 @@ import matplotlib.pyplot as plt
 GROUPS_PER_DAY = 100
 
 # Operating hours (minutes from midnight)
-START_DAY = 420   # 07:00
-END_DAY = 1200    # 20:00
+START_DAY = 0   # 07:00
+END_DAY = 780    # 20:00
 
 # -----------------------------
 # LOAD DATA
@@ -87,7 +87,7 @@ def sample_departure_time():
 
         # Around 09:00
         return int(np.random.normal(
-            loc=540,
+            loc=120,
             scale=50
         ))
 
@@ -98,7 +98,7 @@ def sample_departure_time():
 
         # Around 16:30
         return int(np.random.normal(
-            loc=990,
+            loc=570,
             scale=110
         ))
 
