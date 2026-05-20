@@ -7,12 +7,9 @@ import matplotlib.pyplot as plt
 # -----------------------------
 GROUPS_PER_DAY = 100
 
-# Operating windows (minutes from midnight)
-START_MORNING = 420    # 07:00
-END_MORNING = 720      # 12:00
-
-START_AFTERNOON = 840  # 14:00
-END_DAY = 1200         # 20:00
+# Operating hours (minutes from midnight)
+START_DAY = 420   # 07:00
+END_DAY = 1200    # 20:00
 
 # -----------------------------
 # LOAD DATA
@@ -24,35 +21,33 @@ df = pd.read_excel(
     BASE_PATH + "AntalErhvervstureMellemKommuner_GMM_Basis2025.xlsx"
 )
 
-# Load vertiport sheet
+# Load vertiport mapping
 vertiports = pd.read_excel(
     BASE_PATH + "AntalErhvervstureMellemKommuner_GMM_Basis2025.xlsx",
-    sheet_name="VertiportID"
+    sheet_name="VertiportIDGiant"
 )
 
 # -----------------------------
-# PREPROCESS
+# PREPROCESSING
 # -----------------------------
 
-# Remove trips from municipality to itself
+# Remove self-loops
 df = df[df["FraKommune"] != df["TilKommune"]]
 
-# Only use air travel demand
+# Use only air travel demand
 df["demand"] = df["AntalErhvervsture_fly"]
 
 # Remove OD pairs with zero demand
 df = df[df["demand"] > 0]
 
 # -----------------------------
-# MAP MUNICIPALITY -> VERTIPORT
+# MAP MUNICIPALITIES TO VERTIPORTS
 # -----------------------------
 
-# Create dictionary for mapping
 kommune_to_vertiport = dict(
     zip(vertiports["Kommuneid"], vertiports["id"])
 )
 
-# Map municipality IDs to vertiport IDs
 df["origin_id"] = df["FraKommune"].map(kommune_to_vertiport)
 df["dest_id"] = df["TilKommune"].map(kommune_to_vertiport)
 
@@ -64,10 +59,10 @@ df["origin_id"] = df["origin_id"].astype(int)
 df["dest_id"] = df["dest_id"].astype(int)
 
 # -----------------------------
-# DEMAND PROBABILITIES
+# PROBABILITY DISTRIBUTION
 # -----------------------------
 
-# Higher demand = higher probability
+# Higher observed demand -> higher sampling probability
 probabilities = df["demand"] / df["demand"].sum()
 
 # -----------------------------
@@ -76,59 +71,58 @@ probabilities = df["demand"] / df["demand"].sum()
 
 def sample_departure_time():
     """
-    Generates realistic departure times.
+    Creates realistic demand throughout the day:
 
-    Morning:
-    - Shorter operating window
-    - More concentrated demand
-
-    Afternoon:
-    - Longer operating window
-    - More spread-out demand
+    - Strong morning peak
+    - Very low demand around lunch
+    - Broader afternoon demand
     """
 
     r = np.random.rand()
 
-    # 45% morning departures
+    # -----------------------------
+    # MORNING PEAK (45%)
+    # -----------------------------
     if r < 0.45:
 
-        # Peak around 09:00
-        return int(np.random.normal(loc=540, scale=45))
+        # Around 09:00
+        return int(np.random.normal(
+            loc=540,
+            scale=50
+        ))
 
-    # 55% afternoon departures
+    # -----------------------------
+    # AFTERNOON DEMAND (55%)
+    # -----------------------------
     else:
 
-        # Peak around 16:30
-        return int(np.random.normal(loc=990, scale=140))
+        # Around 16:30
+        return int(np.random.normal(
+            loc=990,
+            scale=110
+        ))
 
 
 def sample_departure_time_valid():
     """
-    Continues generating departure times
-    until they fall within valid operating hours
+    Keeps generating times until
+    they fall within operating hours
     """
 
     while True:
 
         t = sample_departure_time()
 
-        if (
-            START_MORNING <= t <= END_MORNING
-        ) or (
-            START_AFTERNOON <= t <= END_DAY
-        ):
+        if START_DAY <= t <= END_DAY:
             return t
 
 # -----------------------------
-# GROUP SIZE
+# PASSENGER GROUP SIZE
 # -----------------------------
 
 def sample_group_size():
-    """
-    Random passenger group size
-    between 1 and 4 passengers
-    """
 
+    # Fully random group size
     return np.random.choice([1, 2, 3, 4])
 
 # -----------------------------
@@ -154,18 +148,18 @@ for idx in sampled_indices:
     origin = row["origin_id"]
     destination = row["dest_id"]
 
-    # Extra safety check
+    # Extra safety
     if origin == destination:
         continue
 
-    # Generate trip attributes
+    # Generate attributes
     departure_time = sample_departure_time_valid()
 
     passengers = sample_group_size()
 
     stopover = np.random.choice([0, 1])
 
-    # Save trip
+    # Save generated trip
     rows.append({
         "group": group_id,
         "origin": origin,
@@ -190,15 +184,17 @@ missing = all_vertiports - used_vertiports
 
 for vp in missing:
 
-    # Random number of extra trips
+    # Random number of additional trips
     num_extra_trips = np.random.randint(1, 6)
 
     for _ in range(num_extra_trips):
 
-        # Random counterpart vertiport
-        other = np.random.choice(list(all_vertiports - {vp}))
+        # Select random counterpart vertiport
+        other = np.random.choice(
+            list(all_vertiports - {vp})
+        )
 
-        # Random trip direction
+        # Randomize trip direction
         if np.random.rand() < 0.5:
             origin = vp
             destination = other
@@ -223,16 +219,16 @@ for vp in missing:
 
 df_out = pd.DataFrame(rows)
 
-# Sort chronologically by departure time
+# Sort chronologically
 df_out = df_out.sort_values(
     by=["time"]
 ).reset_index(drop=True)
 
-# Reassign group IDs after sorting
+# Reassign IDs after sorting
 df_out["group"] = range(1, len(df_out) + 1)
 
 # -----------------------------
-# SAVE EXCEL FILE
+# SAVE OUTPUT
 # -----------------------------
 
 output_path = "inputData/LTM_demand.xlsx"
@@ -242,10 +238,9 @@ df_out.to_excel(output_path, index=False)
 print(f"Saved to: {output_path}")
 
 # -----------------------------
-# DEMAND VISUALIZATION
+# VISUALIZE DEMAND
 # -----------------------------
 
-# Convert minutes to hours
 hours = df_out["time"] / 60
 
 plt.figure(figsize=(10, 5))
@@ -256,7 +251,7 @@ plt.xlabel("Time of Day")
 plt.ylabel("Number of Passenger Groups")
 plt.title("Synthetic eVTOL Demand Throughout the Day")
 
-# Visualize break period
+# Visual reference for lunch period
 plt.axvline(12, linestyle="--")
 plt.axvline(14, linestyle="--")
 
