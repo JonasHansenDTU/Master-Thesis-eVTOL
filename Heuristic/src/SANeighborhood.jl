@@ -73,12 +73,21 @@ function ConstructSA(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::F
         end_candidates = [v for v in end_VP_choices if v != base]
         
         if isempty(end_candidates)
-            # Fallback: build 2-leg route returning to base
+            # Fallback: build 2-leg route base -> random_non_base -> base
+            non_base = [v for v in V if v != base]
+            if isempty(non_base)
+                return init_obj, planes
+            end
+
             temp_sol = deepcopy(planes)
             te32 = Int32(data.te)
-            insert!(temp_sol.planes[n].route, 2, Int32(base))
+            mid = Int32(rand(non_base))
+
+            insert!(temp_sol.planes[n].route, 2, mid)
             insert!(temp_sol.planes[n].turnaroundTime, 1, te32)
-            temp_sol.planes[n].flightLegs = 1
+            insert!(temp_sol.planes[n].route, 3, Int32(base))
+            insert!(temp_sol.planes[n].turnaroundTime, 2, te32)
+            temp_sol.planes[n].flightLegs = Int32(2)
 
             new_obj = obj(temp_sol, data, rt)
 
@@ -93,7 +102,6 @@ function ConstructSA(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::F
 
             return new_obj, temp_sol
         end
-        
         endpoint = rand(end_candidates)
 
         temp_sol = deepcopy(planes)

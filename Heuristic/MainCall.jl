@@ -24,7 +24,7 @@ for file in source_files
     include(joinpath(src_dir, file))
 end
 
-excel_file = joinpath("inputData/inputDataGiant.xlsx")
+excel_file = joinpath("inputData/LTM_demand.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 data = load_data(excel_file, parameter_file)
 
@@ -64,5 +64,5 @@ assignments, scheduled = assign_passengersV2(best_sol, data, Int.(rt))
 print_assignments(assignments, data)
 
 # Export solution snapshots for visualization
-#snapshots = export_solution_snapshots(best_sol, scheduled, assignments, battery_levels, data)
+# snapshots = export_solution_snapshots(best_sol, scheduled, assignments, battery_levels, data)
 print_schedule_pretty(scheduled) 
