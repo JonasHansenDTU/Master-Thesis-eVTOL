@@ -924,11 +924,10 @@ function export_solution_snapshots(model::Model, data; out_csv::String = joinpat
         ))
     end
 
-    snapshots = DataFrame(rows)
-    
-    # Append infrastructure nodes as vertiport markers
+    # Append infrastructure nodes as vertiport markers before materializing the table,
+    # so columns like :op can be inferred with a compatible element type.
     for j in V
-        push!(snapshots, (
+        push!(rows, (
             time = -1,
             evtol_id = -1,
             state = "vertiport",
@@ -951,6 +950,8 @@ function export_solution_snapshots(model::Model, data; out_csv::String = joinpat
             y_to = lat[j]
         ))
     end
+
+    snapshots = DataFrame(rows)
     
     CSV.write(out_csv, snapshots)
     println("Snapshot export written: ", out_csv, " (rows=", nrow(snapshots), ")")

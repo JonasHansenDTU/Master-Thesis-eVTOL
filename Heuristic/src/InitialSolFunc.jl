@@ -566,7 +566,8 @@ function Construction_Heuristic2(data, Candidate_Routes; maxLegs::Int=3)
     passengers_served = Int[]
 
     # Split N into two random subsets
-    split_ratio = rand()
+    # Split N into two random subsets, biased toward random generation (larger N2)
+    split_ratio = rand()^2   # mean ~0.33 instead of 0.5
     split_idx = max(1, Int(round(length(N) * split_ratio)))
     N_shuffled = shuffle(N)
     N1 = N_shuffled[1:split_idx]
