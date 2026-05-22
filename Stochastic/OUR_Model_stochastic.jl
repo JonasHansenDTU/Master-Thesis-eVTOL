@@ -301,7 +301,7 @@ function build_model(excel_file::String, parameter_file::String;
     @variable(model, y[n in N], Bin)
 
     # ss[a,n] = 1 if eVTOL n is committed to serve passenger group a
-    @variable(model, ss[a in A, n in N], Bin)
+    @variable(model, ss[a in A, n in N], Bin) # Move to second stage as it should be flexible
 
     # z[a] = 1 if passenger group a is routed via a stopover
     @variable(model, z[a in A], Bin)

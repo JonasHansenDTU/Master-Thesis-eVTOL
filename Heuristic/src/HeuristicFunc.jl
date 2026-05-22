@@ -76,9 +76,33 @@ function check_turnaround_times(sol::allPlaneSolution, sol_name::String="")
     return issues
 end
 
+function check_route_endpoints(sol::allPlaneSolution, data, sol_name::String="")
+    issues = false
+    label = isempty(sol_name) ? "" : "[$sol_name] "
+
+    for (pidx, plane) in enumerate(sol.planes)
+        if plane.flightLegs <= 0
+            continue
+        end
+
+        base = Int(plane.route[1])
+        endpoint = Int(plane.route[end])
+        end_VP_choices = get(data.end_vp, base, Int[])
+
+        if !(endpoint in end_VP_choices)
+            println("WARNING: $(label)Plane $pidx ends at vertiport $endpoint, not in end_vp[$base]=$(sort(collect(end_VP_choices)))")
+            println("         Route: $(Int.(plane.route))")
+            issues = true
+        end
+    end
+
+    return issues
+end
+
 function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; pool=SingleRoutePoolEntry[], max_size::Int=50, max_duplicates::Int=3)
     # Store up to max_duplicates entries per route shape (key)
     routes_by_key = Dict{Any, Vector{SingleRoutePoolEntry}}()
+    existing_base_ports = Set(Int(entry.plane.route[1]) for entry in pool)
 
     # Add existing pool entries
     for entry in pool
@@ -126,8 +150,46 @@ function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; p
 
     sort!(pool, by = entry -> entry.score, rev = true)
 
+    entries_by_base = Dict{Int, Vector{SingleRoutePoolEntry}}()
+
+    for entry in pool
+        base_port = Int(entry.plane.route[1])
+        if !haskey(entries_by_base, base_port)
+            entries_by_base[base_port] = SingleRoutePoolEntry[]
+        end
+        push!(entries_by_base[base_port], entry)
+    end
+
+    base_representatives = Tuple{SingleRoutePoolEntry, Bool}[]
+    remainder = SingleRoutePoolEntry[]
+
+    for base_port in sort(collect(keys(entries_by_base)))
+        if isempty(entries_by_base[base_port])
+            continue
+        end
+
+        entries = entries_by_base[base_port]
+        sort!(entries, by = entry -> entry.score, rev = true)
+        push!(base_representatives, (entries[1], !(base_port in existing_base_ports)))
+
+        if length(entries) > 1
+            append!(remainder, entries[2:end])
+        end
+    end
+
+    sort!(base_representatives, by = x -> (x[2] ? 0 : 1, -x[1].score))
+    sort!(remainder, by = entry -> entry.score, rev = true)
+
+    pool = [x[1] for x in base_representatives[1:min(max_size, length(base_representatives))]]
     if length(pool) > max_size
+        sort!(pool, by = entry -> entry.score, rev = true)
         resize!(pool, max_size)
+        return pool
+    end
+
+    extra_capacity = max_size - length(pool)
+    if extra_capacity > 0 && !isempty(remainder)
+        append!(pool, remainder[1:min(extra_capacity, length(remainder))])
     end
 
     return pool
@@ -369,14 +431,18 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
     single_route_pool = SingleRoutePoolEntry[]
 
 
-    max_size = length(data.N)*length(data.V) 
+    max_size = Int(round(length(data.N)*length(data.V)))*4
 
     
     while elapsed <= Float64(MaxTime)
         nr = 5
         idx = rand(1:nr)
-        T = 50
+        T = 100
         Best_sols = generate_best_initial_solutions(data, rt, candiateroutes; n_runs = 10, top_k = nr, top_c, maxLegs=6, maxTurnaround)
+
+        for (idx, best_sol_candidate) in enumerate(Best_sols)
+            check_route_endpoints(best_sol_candidate.evtols, data, "Initial solution $(idx)")
+        end
 
         temp_obj = Best_sols[idx].fitness
         temp_sol = deepcopy(Best_sols[idx].evtols)
@@ -397,11 +463,13 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
         if !isempty(single_route_pool)
             pool_sol = build_pool_candidate(single_route_pool, data, rt; max_routes=min(2, length(single_route_pool)))
             if pool_sol !== nothing
+                check_route_endpoints(pool_sol, data, "Pool candidate")
                 pool_obj = obj(pool_sol, data, rt)
                 if pool_obj > temp_obj || rand() < 0.1
                     temp_sol = pool_sol
                     temp_obj = pool_obj
                     single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max_size)
+                    check_route_endpoints(temp_sol, data, "Accepted pool candidate")
                 end
             end
         end
@@ -423,6 +491,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
                     cand_obj, cand_sol = ConstructSA(cand_sol, maxTurnaround, cand_obj, data, rt)
                     next_method = 1
                 end
+                check_route_endpoints(cand_sol, data, "Candidate after $(next_method == 0 ? "DestructSA" : "ConstructSA")")
             end
 
             # out = 0
@@ -441,6 +510,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
             if cand_obj > temp_obj || (rand() < exp((temp_obj - cand_obj) / T) && temp_obj > cand_obj)
                 temp_obj = cand_obj
                 temp_sol = deepcopy(cand_sol)
+                check_route_endpoints(temp_sol, data, "Accepted candidate")
                 improvement = true
                 single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max_size)
 
