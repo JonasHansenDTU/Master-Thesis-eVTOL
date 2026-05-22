@@ -2,6 +2,8 @@ mutable struct SingleRoutePoolEntry
     plane::planeSolution
     score::Float64
     source_plane::Int64
+    assignments::Vector{Any}
+    diversity_score::Float64
 end
 
 function single_route_key(plane::planeSolution)
@@ -32,7 +34,30 @@ end
 
 function score_single_plane_solution(plane::planeSolution, data, rt)
     single_sol = allPlaneSolution([deepcopy(plane)])
-    return obj(single_sol, data, rt)
+    
+    # Get passenger assignments for this single plane route
+    assignments, scheduled = assign_passengersV2(single_sol, data, Int.(rt))
+    
+    # Compute the objective value directly
+    fitness = fitnessFunction(
+        single_sol,
+        assignments,
+        Float32(data.bmax),
+        Float32(data.bmid),
+        Float32(data.bmin),
+        data.dist,
+        Float32(data.ec),
+        Float32(data.battery_per_km),
+        Int.(rt),
+        Int(round(data.ET)),
+        maximum(Int.(data.T)),
+        maximum(data.V),
+        data.cap_v,
+        data
+    )
+    
+    # Return both the fitness value and the passenger assignments
+    return fitness, assignments
 end
 
 function is_single_plane_feasible(plane::planeSolution, data, rt)
@@ -99,9 +124,92 @@ function check_route_endpoints(sol::allPlaneSolution, data, sol_name::String="")
     return issues
 end
 
-function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; pool=SingleRoutePoolEntry[], max_size::Int=50, max_duplicates::Int=3)
+function get_passenger_set(assignments::Vector{Any})
+    """Extract set of passenger group IDs from assignments."""
+    passenger_groups = Set{Int}()
+    for ass in assignments
+        push!(passenger_groups, ass.group)
+    end
+    return passenger_groups
+end
+
+function get_served_od_pairs(assignments::Vector{Any}, data)
+    """Extract set of (origin, destination) tuples served by assignments."""
+    od_pairs = Set{Tuple{Int,Int}}()
+    op = data.op
+    dp = data.dp
+    for ass in assignments
+        group_id = ass.group
+        origin = op[group_id]
+        destination = dp[group_id]
+        push!(od_pairs, (origin, destination))
+    end
+    return od_pairs
+end
+
+function compute_diversity_metrics(entry::SingleRoutePoolEntry, pool::Vector{SingleRoutePoolEntry}, data)
+    """Compute hybrid diversity score: coverage_spread + od_region_diversity.
+    
+    Returns a score in [0, 1] where higher is more diverse.
+    Diversity is computed relative to OTHER ROUTES FROM THE SAME BASE vertiport.
+    - coverage_spread: How many unique passengers NOT served by other same-base routes
+    - od_region_diversity: How many unique OD pairs NOT served by other same-base routes
+    
+    Metric: diversity_score = (unique_passengers / total_passengers) * 0.5 + (unique_od_pairs / total_od_pairs) * 0.5
+    
+    This prevents routes from the same base from all targeting the same passengers.
+    """
+    if isempty(entry.assignments)
+        return 0.0  # Empty routes have no diversity benefit
+    end
+    
+    # Get this entry's passengers and OD pairs
+    entry_passengers = get_passenger_set(entry.assignments)
+    entry_od_pairs = get_served_od_pairs(entry.assignments, data)
+    
+    # Get this entry's base vertiport
+    entry_base = Int(entry.plane.route[1])
+    
+    # Get all passengers and OD pairs from OTHER routes with the SAME base vertiport
+    # This ensures diversity is computed relative to competing routes from the same base
+    pool_passengers = Set{Int}()
+    pool_od_pairs = Set{Tuple{Int,Int}}()
+    for other_entry in pool
+        if other_entry === entry  # Skip self
+            continue
+        end
+        # Only compare against routes from the same base vertiport
+        if Int(other_entry.plane.flightLegs) > 0
+            other_base = Int(other_entry.plane.route[1])
+            if other_base == entry_base
+                union!(pool_passengers, get_passenger_set(other_entry.assignments))
+                union!(pool_od_pairs, get_served_od_pairs(other_entry.assignments, data))
+            end
+        end
+    end
+    
+    # Compute coverage spread: unique passengers not in pool
+    unique_passengers = setdiff(entry_passengers, pool_passengers)
+    coverage_spread = isempty(entry_passengers) ? 0.0 : length(unique_passengers) / length(entry_passengers)
+    
+    # Compute OD region diversity: unique OD pairs not in pool
+    unique_od_pairs = setdiff(entry_od_pairs, pool_od_pairs)
+    od_diversity = isempty(entry_od_pairs) ? 0.0 : length(unique_od_pairs) / length(entry_od_pairs)
+    
+    # Hybrid score: weighted average
+    diversity_score = 0.5 * coverage_spread + 0.5 * od_diversity
+    
+    return diversity_score
+end
+
+function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; pool=SingleRoutePoolEntry[], max_size::Int=50, max_duplicates::Int=3, debug::Bool=false)
     # Store up to max_duplicates entries per route shape (key)
     routes_by_key = Dict{Any, Vector{SingleRoutePoolEntry}}()
+    
+    if debug
+        active_routes = sum((1 for p in sol.planes if Int(p.flightLegs) > 0); init=0)
+        println("\n--- Processing solution with $active_routes active routes (pool has $(length(pool)) entries) ---")
+    end
 
     # Add existing pool entries
     for entry in pool
@@ -123,8 +231,17 @@ function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; p
         end
 
         key = single_route_key(plane)
-        score = score_single_plane_solution(plane, data, rt)
-        new_entry = SingleRoutePoolEntry(deepcopy(plane), score, Int64(idx))
+        fitness, assignments = score_single_plane_solution(plane, data, rt)
+        diversity = compute_diversity_metrics(SingleRoutePoolEntry(deepcopy(plane), fitness, Int64(idx), deepcopy(assignments), 0.0), pool, data)
+        new_entry = SingleRoutePoolEntry(deepcopy(plane), fitness, Int64(idx), deepcopy(assignments), diversity)
+        
+        # Debug output: show what routes are being added to the pool
+        if debug && Int(plane.flightLegs) > 0
+            base_port = Int(plane.route[1])
+            passenger_groups = [ass.group for ass in assignments]
+            groups_str = isempty(passenger_groups) ? "none" : join(passenger_groups, ",")
+            println("  [ADD] Plane $idx (base $base_port): legs=$(Int(plane.flightLegs)), route=$(Int.(plane.route)), diversity=$(round(diversity*100; digits=1))%, passengers=[$groups_str]")
+        end
 
         if !haskey(routes_by_key, key)
             routes_by_key[key] = SingleRoutePoolEntry[]
@@ -143,18 +260,20 @@ function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; p
         end
 
         if isempty(routes_by_key[empty_key])
-            push!(routes_by_key[empty_key], SingleRoutePoolEntry(empty_plane, 0.0, Int64(0)))
+            push!(routes_by_key[empty_key], SingleRoutePoolEntry(empty_plane, 0.0, Int64(0), [], 0.0))
         else
-            routes_by_key[empty_key][1] = SingleRoutePoolEntry(empty_plane, 0.0, Int64(0))
+            routes_by_key[empty_key][1] = SingleRoutePoolEntry(empty_plane, 0.0, Int64(0), [], 0.0)
             resize!(routes_by_key[empty_key], 1)
         end
     end
 
-    # For each route shape, keep only top max_duplicates by score.
+    # For each route shape, keep only top max_duplicates by diversity first, then fitness.
     # Empty routes are kept as exactly one entry per base.
+    # Ranking: (diversity_score DESC, fitness_score DESC)
     for key in keys(routes_by_key)
         entries = routes_by_key[key]
-        sort!(entries, by = e -> e.score, rev = true)
+        # Sort by (-diversity_score, -fitness_score) to sort both descending
+        sort!(entries, by = e -> (-e.diversity_score, -e.score))
 
         if key[1] == 0
             routes_by_key[key] = entries[1:1]
@@ -173,7 +292,8 @@ function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; p
     sort!(empty_entries, by = e -> Int(e.plane.route[1]))
 
     non_empty_entries = [e for e in all_entries if Int(e.plane.flightLegs) > 0]
-    sort!(non_empty_entries, by = e -> e.score, rev = true)
+    # Maintain diversity-first ranking: sort by (-diversity, -fitness) to preserve priority
+    sort!(non_empty_entries, by = e -> (-e.diversity_score, -e.score))
 
     # Group active routes by start base to preserve cross-base diversity.
     entries_by_base = Dict{Int, Vector{SingleRoutePoolEntry}}()
@@ -186,7 +306,8 @@ function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; p
     end
 
     for entries in values(entries_by_base)
-        sort!(entries, by = e -> e.score, rev = true)
+        # Maintain diversity-first ranking within each base
+        sort!(entries, by = e -> (-e.diversity_score, -e.score))
     end
 
     # Reserve room for empties, then allocate active routes with a soft per-base quota.
@@ -479,7 +600,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
     single_route_pool = SingleRoutePoolEntry[]
 
 
-    max_size = Int(round(length(data.N)*length(data.V)))*4
+    max_size = Int(round(length(data.N)*length(data.V)))
 
     
     while elapsed <= Float64(MaxTime)
@@ -496,7 +617,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
         temp_sol = deepcopy(Best_sols[idx].evtols)
 
         for best_sol_candidate in Best_sols
-            single_route_pool = collect_feasible_single_plane_routes(best_sol_candidate.evtols, data, rt; pool=single_route_pool, max_size=max_size)
+            single_route_pool = collect_feasible_single_plane_routes(best_sol_candidate.evtols, data, rt; pool=single_route_pool, max_size=max_size, debug=true)
         end
 
         if temp_obj > best_obj
@@ -584,10 +705,42 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
 
     println("\n========== FINAL POOL SOLUTIONS ==========")
     println("Total pool entries: $(length(single_route_pool))")
+    println("Legend: [idx] flightLegs=N, route=(...), diversity_score=D, fitness_score=F, passengers=[...]")
+    println()
+    
+    # Group by base vertiport for better readability
+    entries_by_base = Dict{Int, Vector{Tuple{Int, SingleRoutePoolEntry}}}()
     for (idx, entry) in enumerate(single_route_pool)
-        key = single_route_key(entry.plane)
-        println("  [$idx] flightLegs=$(key[1]), route=$(key[2]), score=$(entry.score)")
+        if Int(entry.plane.flightLegs) > 0
+            base = Int(entry.plane.route[1])
+            if !haskey(entries_by_base, base)
+                entries_by_base[base] = []
+            end
+            push!(entries_by_base[base], (idx, entry))
+        else
+            if !haskey(entries_by_base, -1)
+                entries_by_base[-1] = []
+            end
+            push!(entries_by_base[-1], (idx, entry))
+        end
     end
+    
+    for (base, entries) in sort(collect(entries_by_base), by=x->x[1])
+        if base == -1
+            println("--- Empty Routes (Inactive Planes) ---")
+        else
+            println("--- Base Vertiport $base ---")
+        end
+        for (idx, entry) in entries
+            key = single_route_key(entry.plane)
+            passenger_groups = [ass.group for ass in entry.assignments]
+            groups_str = isempty(passenger_groups) ? "none" : join(passenger_groups, ",")
+            diversity_pct = round(entry.diversity_score * 100; digits=1)
+            println("  [$idx] flightLegs=$(key[1]), route=$(key[2]), div=$(diversity_pct)%, fitness=$(round(entry.score; digits=1)), passengers=[$(groups_str)]")
+        end
+        println()
+    end
+    
     println("=========================================\n")
 
     return best_obj, best_sol, iterations

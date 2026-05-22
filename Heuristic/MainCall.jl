@@ -37,7 +37,7 @@ for i in data.V, j in data.V
 end
 
 maxTurnaround = 100
-Maxtime = Int32(100)
+Maxtime = Int32(30)
 top_c = 4
 # Random.seed!(1234)
 
