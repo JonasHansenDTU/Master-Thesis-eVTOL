@@ -92,12 +92,30 @@ rt_s, e_s, S, pi_s = generate_scenarios(
 # Run two-stage stochastic heuristic
 ###############################################################################
 
-result = stochastic_heuristic(
-    data, rt_s, e_s, S, pi_s;
-    maxTurnaround            = maxTurnaround,
-    MaxTime                  = MaxTime,
-    top_c                    = top_c,
-    sa_iters_per_scenario    = sa_iters_per_scenario,
+# Build rt matrix exactly as original MainCall.jl does
+Vmax = maximum(data.V)
+rt = zeros(Vmax, Vmax)
+for i in data.V, j in data.V
+    rt[i,j] = data.rt[(i,j)]
+end
+
+# First stage — identical to original MainCall.jl
+det_obj, first_sol, iterations = HeuristicSA(maxTurnaround, MaxTime, data, rt, top_c)
+println("First-stage det_obj = $(round(det_obj, digits=2)), iterations = $iterations")
+
+# Second stage — evaluate expected objective across scenarios
+exp_obj, scenario_results = expected_objective(
+    first_sol, data, rt_s, e_s, S, pi_s;
+    maxTurnaround         = maxTurnaround,
+    sa_iters_per_scenario = sa_iters_per_scenario,
+)
+
+result = (
+    expected_obj     = exp_obj,
+    first_stage_sol  = first_sol,
+    scenario_results = scenario_results,
+    det_obj          = det_obj,
+    iterations       = iterations,
 )
 
 ###############################################################################
@@ -115,7 +133,7 @@ println("FIRST-STAGE SOLUTION — DETERMINISTIC DETAILS")
 println("="^72)
 
 Vmax = maximum(data.V)
-rt_det = zeros(Vmax, Vmax)
+rt_det = zeros(Int, Vmax, Vmax)
 for i in data.V, j in data.V
     rt_det[i, j] = data.rt[(i, j)]
 end

@@ -357,8 +357,7 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
         rt_det[i, j] = data.rt[(i, j)]
     end
 
-    det_obj, first_sol, iters = HeuristicSA(maxTurnaround, MaxTime, data,
-                                             rt_det, top_c)
+    det_obj, first_sol, iters = HeuristicSA(maxTurnaround, MaxTime, data, data.rt, top_c)
 
     println("[First stage] Done.  det_obj = $(round(det_obj, digits=2))  " *
             "iterations = $iters")
