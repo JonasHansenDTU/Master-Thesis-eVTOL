@@ -239,7 +239,6 @@ function Filter(plane::planeSolution, rt, e, te, ec, ET, bmin, bmid, bmax)
     return (Feasible_Turnaround && Feasible_Battery) , false
 end
 
-
 function assign_Turnaround(Planes::allPlaneSolution, data)
 
     N = data.N
@@ -291,8 +290,6 @@ function assign_Turnaround(Planes::allPlaneSolution, data)
     end
     
 end
-
-
 
 function DestructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64, data, rt)
 
@@ -530,8 +527,6 @@ function two_opt_Loop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::
     return best_obj, best_sol
 end
 
-
-
 function RemoveVP(plane, data)
 
     ET = data.ET
@@ -565,7 +560,6 @@ function RemoveVP(plane, data)
 
     return nothing
 end
-
 
 function addVP(plane, data)
 

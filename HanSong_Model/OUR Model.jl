@@ -285,22 +285,22 @@ function load_data(excel_file::String, parameter_file::String)
         drive_time_lookup[(j,i)] = drive_time_lookup[(i,j)]
     end
 
-    end_vp = Dict{Int, Vector{Int}}()
+endVP = Dict{Int, Vector{Int}}()
 
     for i in V
-        end_vp[i] = Int[]
+        endVP[i] = Int[]
         for j in V
             if j == i
-                push!(end_vp[i], j)
+                push!(endVP[i], j)
             elseif haskey(drive_time_lookup, (i,j)) && drive_time_lookup[(i,j)] <= 60.0
-                push!(end_vp[i], j)
+                push!(endVP[i], j)
             end
         end
     end
     
-    println("end_vp:")
-    for i in sort(collect(keys(end_vp)))
-        println("Vertiport ", i, " -> ", sort(end_vp[i]))
+    println("endVP:")
+    for i in sort(collect(keys(endVP)))
+        println("Vertiport ", i, " -> ", sort(endVP[i]))
     end
 
     ###########################################################################
@@ -361,7 +361,7 @@ function load_data(excel_file::String, parameter_file::String)
         T = collect(T), T_no0 = collect(T_no0),
         bv = bv,
         lat = lat, lon = lon,
-        dist = dist, fd = fd_lookup, fs = fs, c = c, e = e, rt = rt, end_vp = end_vp,
+        dist = dist, fd = fd_lookup, fs = fs, c = c, e = e, rt = rt, endVP = endVP,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
         cap_v = cap_v, cap_u = cap_u, opening_cost = opening_cost,
         bmax = bmax, bmid = bmid, b_penalty = b_penalty, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3
@@ -399,7 +399,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     q  = data.q
     so = data.so
     p  = data.p
-    end_vp = data.end_vp
+    endVP = data.endVP
 
     cap_v        = data.cap_v
     cap_u        = data.cap_u
@@ -505,21 +505,15 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
         sum(x[bv[n], j, 1, n] for j in V) == y[n]
     )
 
-    # # (6.3) eVTOL returns to its base vertiport or another vertiport withing 60 minute drive
-    # @constraint(model, [n in N],
-    #     sum(x[bv[n], j, m, n] for j in V, m in M_no0) ==
-    #     sum(x[j, vp, m, n] for j in V, m in M_no0, vp in end_vp[bv[n]])
-    # )
-
     # (6.3a) eVTOL returns to its base vertiport or another vertiport withing 60 minute drive
     @constraint(model, [m in M_mid, n in N],
-        sum(x[i,j,m,n] for i in V, j in end_vp[bv[n]]) >=
+        sum(x[i,j,m,n] for i in V, j in endVP[bv[n]]) >=
         sum(x[i,j,m,n] for i in V, j in V) - sum(x[i,j,m+1,n] for i in V, j in V)
     )
 
     # (6.3b) eVTOL returns to its base vertiport or another vertiport withing 60 minute drive
     @constraint(model, [n in N],
-        sum(x[i,j,maximum(M),n] for i in V, j in end_vp[bv[n]]) >=
+        sum(x[i,j,maximum(M),n] for i in V, j in endVP[bv[n]]) >=
         sum(x[i,j,maximum(M),n] for i in V, j in V)
     )
 
@@ -593,12 +587,12 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
         2 * k[a,i,j,m,n] <= d[(a,i,j)] + x[i,j,m,n] + z[a] * M1
     )
 
-    # (6.16)
+    # (6.16) Upper limit on how many k's can be 1 for each passenger group,
     @constraint(model, [a in A],
         sum(k[a,i,j,m,n] for m in M, i in V, j in V, n in N) <= 1 + z[a]
     )
 
-    # (6.17a) Layover service linkage (alternative version)
+    # (6.17a) Layover service linkage 
     @constraint(model, [a in A, i in V, k_node in V, j in V, m in M_no_last, n in N],
         k[a,i,k_node,m,n] + k[a,k_node,j,m+1,n] <=
         x[i,k_node,m,n] + x[k_node,j,m+1,n] + (1 - z[a]) * M1
@@ -644,14 +638,9 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
         u[1,n] <= u[0,n] - e[(i,j)] * x[i,j,1,n] + (1 - x[i,j,1,n]) * M2a
     )
 
-    # (6.24b)
+    # (6.24b) First operation from a vertiport only reflects energy consumption
     @constraint(model, [i in V, j in V, n in N],
         u[1,n] >= u[0,n] - e[(i,j)] * x[i,j,1,n] - (1 - x[i,j,1,n]) * M2b
-    )
-
-    @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
-        charge[m,n] <= ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) +
-                  (1 - x[i,j,m,n]) * M2c
     )
 
     # (6.25a) Battery update between operations
@@ -661,50 +650,51 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
                   (1 - x[i,j,m,n]) * M2c
     )
 
-    # (6.25b)
+    # (6.25b) Battery update between operations
     @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
         u[m,n] >= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                  charge[m,n] -
                   (1 - x[i,j,m,n]) * M2c*2
     )
 
-    # (6.26) Operation 0 starts at time 0
+    # (6.26) Charging level at each operation 
+    @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
+        charge[m,n] <= ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) +
+                  (1 - x[i,j,m,n]) * M2c
+    )
+
+    # (6.27) Operation 0 starts at time 0
     @constraint(model, [n in N], 
         arr[0,n] == 0
     )
 
-    # (6.27a) Arrival time lower bound
+    # (6.28a) Arrival time lower bound
     @constraint(model, [m in 2:maximum(M), n in N],
         arr[m,n] >= arr[m-1,n] + sum((te + rt[(i,j)]) * x[i,j,m,n] for i in V, j in V)
     )
 
-    # (6.26) Arrival time lower bound
-    # @constraint(model, [m in M_no0, n in N],
-    #   arr[m,n] >= arr[m-1,n] + sum((te + rt[(i,j)]) * x[i,j,m,n] for i in V, j in V)
-    # )
-
-    # (6.27b) Arrival time lower bound
+    # (6.28b) Arrival time lower bound
     @constraint(model, [n in N],
         arr[1,n] >= sum((rt[(i,j)]) * x[i,j,1,n] for i in V, j in V)
     )
 
-    # (6.28) Departure time = arrival time - travel time
+    # (6.29) Departure time = arrival time - travel time
     @constraint(model, [m in M, n in N],
         arr[m,n] == dep[m,n] + sum(rt[(i,j)] * x[i,j,m,n] for i in V, j in V)
     )
 
-    # (6.29) Minimum layover time
+    # (6.30) Minimum layover time
     @constraint(model, [a in A, n in N, m in M_no_last],
         dep[m+1,n] <= arr[m,n] + te + (2 - s[a,m,n] - s[a,m+1,n]) * M3
     )
 
-    # (6.30) Earliest arrival time at destination
+    # (6.31) Earliest arrival time at destination
     @constraint(model, [a in A, i in V, j in V, m in M_no0, n in N],
         d[(a,i,j)] * dt[a] - (1 - (s[a,m,n] - s[a,m-1,n])) * M3 <=
         arr[m,n] - sum(rt[(i,k_node)] * x[i,k_node,m,n] for k_node in V)
     )
 
-    # (6.31) Maximum waiting time
+    # (6.32) Maximum waiting time
     @constraint(model, [a in A, m in M_no0, n in N],
         arr[m,n]
         - sum(rt[(i,j)] * x[i,j,m,n] for i in V, j in V)
@@ -712,39 +702,39 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
         - (1 - (s[a,m,n] - s[a,m-1,n])) * M3 <= w
     )
 
-    # (6.32) eVTOL is either parked or flying at each time t
+    # (6.33) eVTOL is either parked or flying at each time t
     @constraint(model, [n in N, t in T],
         sum(is_p[j,n,t] for j in V) +
         sum(is_o[i,j,m,n,t] for i in V, j in V, m in M) == 1
     )
 
-    # (6.33) Travel time occupancy relation
+    # (6.34) Travel time occupancy relation
     @constraint(model, [i in V, j in V, m in M, n in N],
         rt[(i,j)] * x[i,j,m,n] == sum(is_o[i,j,m,n,t] for t in T)
     )
 
-    # (6.34) Departure time bound from occupancy
+    # (6.35) Departure time bound from occupancy
     @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
         dep[m,n] <= t + M3 * (1 - is_o[i,j,m,n,t]) - 1
     )
 
-    # (6.35) Arrival time bound from occupancy
+    # (6.36) Arrival time bound from occupancy
     @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
         arr[m,n] >= t - M3 * (1 - is_o[i,j,m,n,t])
     )
 
-    # (6.36) Initial parking at base vertiport
+    # (6.37) Initial parking at base vertiport
     @constraint(model, [n in N],
         is_p[bv[n], n, 0] == 1
     )
 
-    # (6.37) Parking state propagation
+    # (6.38) Parking state propagation
     @constraint(model, [j in V, n in N, t in T_no0],
         is_p[j,n,t] <= is_p[j,n,t-1] +
                        sum(is_o[i,j,m,n,t-1] for i in V, m in M)
     )
 
-    # (6.38) Parking capacity at vertiports
+    # (6.39) Parking capacity at vertiports
     @constraint(model, [j in V, t in T],
         sum(is_p[j,n,t] for n in N) <= cap_v[j]
     )
@@ -1021,7 +1011,7 @@ function print_results_pretty(model::Model, data)
     p = data.p
     d = data.d
     dist = data.dist
-    end_vp = data.end_vp
+    endVP = data.endVP
 
     section("SETS")
     println("Vertices (V): ", V)
