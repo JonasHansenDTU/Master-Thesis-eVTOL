@@ -206,10 +206,10 @@ function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; p
     # Store up to max_duplicates entries per route shape (key)
     routes_by_key = Dict{Any, Vector{SingleRoutePoolEntry}}()
     
-    if debug
-        active_routes = sum((1 for p in sol.planes if Int(p.flightLegs) > 0); init=0)
-        println("\n--- Processing solution with $active_routes active routes (pool has $(length(pool)) entries) ---")
-    end
+    # if debug
+    #     active_routes = sum((1 for p in sol.planes if Int(p.flightLegs) > 0); init=0)
+    #     println("\n--- Processing solution with $active_routes active routes (pool has $(length(pool)) entries) ---")
+    # end
 
     # Add existing pool entries
     for entry in pool
@@ -240,7 +240,7 @@ function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; p
             base_port = Int(plane.route[1])
             passenger_groups = [ass.group for ass in assignments]
             groups_str = isempty(passenger_groups) ? "none" : join(passenger_groups, ",")
-            println("  [ADD] Plane $idx (base $base_port): legs=$(Int(plane.flightLegs)), route=$(Int.(plane.route)), diversity=$(round(diversity*100; digits=1))%, passengers=[$groups_str]")
+            # println("  [ADD] Plane $idx (base $base_port): legs=$(Int(plane.flightLegs)), route=$(Int.(plane.route)), diversity=$(round(diversity*100; digits=1))%, passengers=[$groups_str]")
         end
 
         if !haskey(routes_by_key, key)
@@ -600,7 +600,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
     single_route_pool = SingleRoutePoolEntry[]
 
 
-    max_size = Int(round(length(data.N)*length(data.V)))
+    max_size = Int(round(length(data.N)*length(data.V)))*2
 
     
     while elapsed <= Float64(MaxTime)
