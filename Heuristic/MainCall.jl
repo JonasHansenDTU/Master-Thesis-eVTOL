@@ -36,7 +36,7 @@ for i in data.V, j in data.V
     rt[i,j] = data.rt[(i,j)]
 end
 
-maxTurnaround = 100
+maxTurnaround = Int64(data.ET)
 Maxtime = Int32(30)
 top_c = 4
 # Random.seed!(1234)
