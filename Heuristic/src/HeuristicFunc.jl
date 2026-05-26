@@ -697,7 +697,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
 
         iterations += 1
         if iterations % 100 == 0
-            println("iteration: $(iterations)")
+            println("iteration: $(iterations), Time in seconds: $(round(elapsed))")
             println("Obj In this iteration $(temp_obj)")
         end
         elapsed = (time_ns() - start_ns) / 1e9
