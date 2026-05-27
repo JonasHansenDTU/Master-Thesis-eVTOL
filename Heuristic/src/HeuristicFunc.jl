@@ -232,6 +232,36 @@ function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; p
 
         key = single_route_key(plane)
         fitness, assignments = score_single_plane_solution(plane, data, rt)
+
+
+        plane_sol = allPlaneSolution([plane])
+
+        best_obj = fitness
+        best_sol = deepcopy(plane_sol)
+
+        improved = true
+        while improved
+            improved = false
+            cand_obj, cand_sol  = DestructLoop(plane_sol, maxTurnaround, fitness, data, rt)
+            con_obj, con_sol  = ConstructLoop(plane_sol, maxTurnaround, fitness, data, rt)
+
+            if con_obj > cand_obj
+                cand_obj = con_obj
+                cand_sol = con_sol
+            end
+
+            if cand_obj > best_obj
+                best_obj = cand_obj
+                best_sol = deepcopy(cand_sol)
+                improved = true
+            end
+
+        end
+
+        if best_obj > fitness
+            plane = deepcopy(best_sol.planes[1])
+        end
+
         diversity = compute_diversity_metrics(SingleRoutePoolEntry(deepcopy(plane), fitness, Int64(idx), deepcopy(assignments), 0.0), pool, data)
         new_entry = SingleRoutePoolEntry(deepcopy(plane), fitness, Int64(idx), deepcopy(assignments), diversity)
         

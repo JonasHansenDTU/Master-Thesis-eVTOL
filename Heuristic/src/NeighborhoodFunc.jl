@@ -296,7 +296,7 @@ end
 
 function DestructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64, data, rt)
 
-    N = data.N
+    N = range(1, length=length(planes.planes))
     best_obj = init_obj
     best_sol = deepcopy(planes)
 
@@ -343,7 +343,7 @@ end
 
 function ConstructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64, data, rt)
 
-    N = data.N
+    N = range(1, length=length(planes.planes))
     V = data.V
     best_obj = init_obj
     best_sol = deepcopy(planes)
