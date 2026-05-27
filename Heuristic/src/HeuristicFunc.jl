@@ -205,6 +205,8 @@ end
 function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; pool=SingleRoutePoolEntry[], max_size::Int=50, max_duplicates::Int=3, debug::Bool=false)
     # Store up to max_duplicates entries per route shape (key)
     routes_by_key = Dict{Any, Vector{SingleRoutePoolEntry}}()
+
+    maxTurnaround = Int64(data.ET)
     
     # if debug
     #     active_routes = sum((1 for p in sol.planes if Int(p.flightLegs) > 0); init=0)
@@ -639,8 +641,8 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
         T = 100
         Best_sols = generate_best_initial_solutions(data, rt, candiateroutes; n_runs = 10, top_k = nr, top_c, maxLegs=6, maxTurnaround)
 
-        for (idx, best_sol_candidate) in enumerate(Best_sols)
-            check_route_endpoints(best_sol_candidate.evtols, data, "Initial solution $(idx)")
+        for (i, best_sol_candidate) in enumerate(Best_sols)
+            check_route_endpoints(best_sol_candidate.evtols, data, "Initial solution $(i)")
         end
 
         temp_obj = Best_sols[idx].fitness
@@ -680,17 +682,22 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
 
             cand_obj = temp_obj
             cand_sol = deepcopy(temp_sol)
-            n_perm = 2
+            n_perm = 3
 
             for _ in 1:n_perm
-                if rand(Bool)
+                move_choice = rand(1:3)
+                if move_choice == 1
                     cand_obj, cand_sol = DestructSA(cand_sol, maxTurnaround, cand_obj, data, rt)
                     next_method = 0
-                else
+                elseif move_choice == 2
                     cand_obj, cand_sol = ConstructSA(cand_sol, maxTurnaround, cand_obj, data, rt)
                     next_method = 1
+                else
+                    cand_obj, cand_sol = SegmentExchange(cand_sol, maxTurnaround, cand_obj, data, rt)
+                    next_method = 2
                 end
-                check_route_endpoints(cand_sol, data, "Candidate after $(next_method == 0 ? "DestructSA" : "ConstructSA")")
+                method_used = next_method
+                check_route_endpoints(cand_sol, data, "Candidate after $(("DestructSA", "ConstructSA", "SegmentExchange")[next_method + 1])")
             end
 
             # out = 0
@@ -705,8 +712,9 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
 
             # end 
 
-
-            if cand_obj > temp_obj || (rand() < exp((temp_obj - cand_obj) / T) && temp_obj > cand_obj)
+            delta = cand_obj - temp_obj
+        
+            if cand_obj > temp_obj || (rand() < exp(max(min(delta/T, 700.0), -700.0)))
                 temp_obj = cand_obj
                 temp_sol = deepcopy(cand_sol)
                 check_route_endpoints(temp_sol, data, "Accepted candidate")
@@ -717,12 +725,12 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
                     best_obj = temp_obj
                     best_sol = deepcopy(temp_sol)
                     println("New best Obj $(best_obj)")
-                    println("Method used: $(("Destructor", "Constructor")[method_used + 1])")
+                    println("Method used: $(("Destructor", "Constructor", "SegmentExchange")[method_used + 1])")
                 end
             end
 
             elapsed = (time_ns() - start_ns) / 1e9
-            T = max(T *0.9, 0.0001)
+            T = max(T *0.8, 0.0001)
         end
 
         iterations += 1

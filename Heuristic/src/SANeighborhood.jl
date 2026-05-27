@@ -178,3 +178,73 @@ function ConstructSA(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::F
 end
 
 
+
+function SegmentExchange(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64, data, rt)
+
+    # Need at least two planes for a cross-route exchange.
+    if length(planes.planes) <= 1
+        return init_obj, planes
+    end
+
+    # A segment is chosen from internal route nodes only, so each route must have
+    # at least one internal node (flightLegs >= 2).
+    eligible = [i for i in eachindex(planes.planes) if Int(planes.planes[i].flightLegs) >= 2]
+    if length(eligible) < 2
+        return init_obj, planes
+    end
+
+    n1 = rand(eligible)
+    n2_choices = [i for i in eligible if i != n1]
+    n2 = rand(n2_choices)
+
+    m1 = Int(planes.planes[n1].flightLegs)
+    m2 = Int(planes.planes[n2].flightLegs)
+
+    # Random contiguous segment in internal nodes: [2, m].
+    s1 = rand(2:m1)
+    e1 = rand(s1:m1)
+    s2 = rand(2:m2)
+    e2 = rand(s2:m2)
+
+    temp_sol = deepcopy(planes)
+
+    seg1 = copy(temp_sol.planes[n1].route[s1:e1])
+    seg2 = copy(temp_sol.planes[n2].route[s2:e2])
+
+    splice!(temp_sol.planes[n1].route, s1:e1, seg2)
+    splice!(temp_sol.planes[n2].route, s2:e2, seg1)
+
+    # Reject moves that create immediate repeated vertiports.
+    if has_consecutive_duplicates(temp_sol.planes[n1].route) ||
+       has_consecutive_duplicates(temp_sol.planes[n2].route)
+        return init_obj, planes
+    end
+
+    temp_sol.planes[n1].flightLegs = Int32(length(temp_sol.planes[n1].route) - 1)
+    temp_sol.planes[n2].flightLegs = Int32(length(temp_sol.planes[n2].route) - 1)
+
+    # Rebuild turnaround vectors to match potentially changed route lengths.
+    empty!(temp_sol.planes[n1].turnaroundTime)
+    for _ in 1:Int(temp_sol.planes[n1].flightLegs)
+        push!(temp_sol.planes[n1].turnaroundTime, Int32(data.te))
+    end
+
+    empty!(temp_sol.planes[n2].turnaroundTime)
+    for _ in 1:Int(temp_sol.planes[n2].flightLegs)
+        push!(temp_sol.planes[n2].turnaroundTime, Int32(data.te))
+    end
+
+    new_obj = obj(temp_sol, data, rt)
+
+    temp_sol2 = deepcopy(temp_sol)
+    from_idx = Int64(max(1, min(s1, s2) - 1))
+    UpdateTurnAroundTimes(temp_sol2, from_idx, maxTurnaround, data)
+    new_obj2 = obj(temp_sol2, data, rt)
+
+    if new_obj2 > new_obj
+        temp_sol = temp_sol2
+        new_obj = new_obj2
+    end
+
+    return new_obj, temp_sol
+end
