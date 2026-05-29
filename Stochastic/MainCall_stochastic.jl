@@ -65,7 +65,7 @@ price_boost          = 10.0
 
 hard_penalty         = 50_000.0   # well below 1_000_000 but strong enough
 MaxTime_2nd_final    = Int32(30)  # more time to find feasible solutions
-n_restarts           = 5          # more first-stage candidates
+n_restarts           = 3         # more first-stage candidates
 
 ###############################################################################
 # Load data and generate scenarios
