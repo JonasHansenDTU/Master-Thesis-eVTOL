@@ -24,8 +24,8 @@ for file in source_files
     include(joinpath(src_dir, file))
 end
 
-excel_file = joinpath("inputData/LTM_demand.xlsx")
-parameter_file = joinpath("inputData/Parameters.xlsx")
+excel_file     = joinpath(@__DIR__, "..", "inputData", "inputData.xlsx")
+parameter_file = joinpath(@__DIR__, "..", "inputData", "Parameters.xlsx")
 data = load_data(excel_file, parameter_file)
 
 Vmax = maximum(data.V)

@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 # SETTINGS
 # =====================================================
 
-GROUPS_PER_DAY = 20
+GROUPS_PER_DAY = 100
 
 # -----------------------------------------------------
 # SIMULATION TIME
