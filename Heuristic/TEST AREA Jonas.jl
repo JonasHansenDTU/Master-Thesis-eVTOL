@@ -24,7 +24,7 @@ for file in source_files
     include(joinpath(src_dir, file))
 end
 
-excel_file = joinpath("inputData/inputDataGiant.xlsx")
+excel_file = joinpath("inputData/LTM_demand.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 data = load_data(excel_file, parameter_file)
 
@@ -39,53 +39,22 @@ end
 
 ### --------------------------- ###
 
-# Test target solution feasibility
-println("\n========== TESTING TARGET SOLUTION FEASIBILITY ==========\n")
 
-# Create the target solution
-evtol1 = planeSolution(2, [1, 3, 1], [47, 34])
-evtol2 = planeSolution(0, [1], Int64[])
-evtol3 = planeSolution(3, [2, 5, 4, 2], [0, 30, 30])
-evtol4 = planeSolution(2, [2, 3, 2], [0, 38])
 
-target_solution = allPlaneSolution([evtol1, evtol2, evtol3, evtol4])
+plane = Vector{planeSolution}(undef, 1)
 
-println("Target Solution:")
-println("  eVTOL1: $(evtol1.flightLegs) | $(Int.(evtol1.route)) | $(Int.(evtol1.turnaroundTime))")
-println("  eVTOL2: $(evtol2.flightLegs) | $(Int.(evtol2.route)) |")
-println("  eVTOL3: $(evtol3.flightLegs) | $(Int.(evtol3.route)) | $(Int.(evtol3.turnaroundTime))")
-println("  eVTOL4: $(evtol4.flightLegs) | $(Int.(evtol4.route)) | $(Int.(evtol4.turnaroundTime))")
-
-# Test feasibility using FeasibilityCheck (P function)
-println("\nRunning feasibility check...")
-P = FeasibilityCheck(
-    Float32(data.bmax),
-    Float32(data.bmid),
-    Float32(data.bmin),
-    data.dist,
-    Float32(data.ec),
-    Float32(data.battery_per_km),
-    target_solution,
-    Int.(rt),
-    Int(round(data.ET)),
-    Int(maximum(data.T)),
-    Int(maximum(data.V)),
-    data.cap_v,
-    data.b_penalty
+plane[1] = planeSolution(
+    Int32(8),
+    Int32[2, 4, 2, 5, 2, 3, 1, 4, 2],
+    Int32[0, 30, 30, 50, 30, 30, 30, 30]
 )
 
-println("\nPenalty Vector P:")
-println("  P = $P")
-println("  Sum(P) = $(sum(P))")
+single_sol = allPlaneSolution(plane)
 
-if sum(P) < 1_000_000
-    println("✓ Solution is FEASIBLE (penalty < 1,000,000)")
-else
-    println("✗ Solution is INFEASIBLE (penalty ≥ 1,000,000)")
-end
+UpdateTurnAroundTimes(single_sol, 1, 400, data)
 
-println("\n========================================================\n")
 
-Objective = obj(target_solution, data, Int.(rt))
+fitness, _ = score_single_plane_solution(plane[1], data, rt)
+refined_fitness, refined_sol = local_search_single_plane_solution(single_sol, fitness, 400, data, rt)
 
-println("Objective =  $(Objective)")
+fitness, _ = score_single_plane_solution(refined_sol.planes[1], data, rt)

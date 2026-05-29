@@ -293,7 +293,7 @@ end
 
 function DestructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64, data, rt)
 
-    N = data.N
+    N = range(1, length=length(planes.planes))
     best_obj = init_obj
     best_sol = deepcopy(planes)
 
@@ -307,7 +307,7 @@ function DestructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::
             Destructor(temp_sol.planes[n], [idx], data)
 
             if has_consecutive_duplicates(temp_sol.planes[n].route)
-                continue
+                Destructor(temp_sol.planes[n], [idx], data)
             end
 
             new_obj = obj(temp_sol, data, rt)
@@ -340,7 +340,7 @@ end
 
 function ConstructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64, data, rt)
 
-    N = data.N
+    N = range(1, length=length(planes.planes))
     V = data.V
     best_obj = init_obj
     best_sol = deepcopy(planes)

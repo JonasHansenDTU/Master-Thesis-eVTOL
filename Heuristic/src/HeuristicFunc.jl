@@ -2,6 +2,8 @@ mutable struct SingleRoutePoolEntry
     plane::planeSolution
     score::Float64
     source_plane::Int64
+    assignments::Vector{Any}
+    diversity_score::Float64
 end
 
 function single_route_key(plane::planeSolution)
@@ -32,7 +34,30 @@ end
 
 function score_single_plane_solution(plane::planeSolution, data, rt)
     single_sol = allPlaneSolution([deepcopy(plane)])
-    return obj(single_sol, data, rt)
+    
+    # Get passenger assignments for this single plane route
+    assignments, scheduled = assign_passengersV2(single_sol, data, Int.(rt))
+    
+    # Compute the objective value directly
+    fitness = fitnessFunction(
+        single_sol,
+        assignments,
+        Float32(data.bmax),
+        Float32(data.bmid),
+        Float32(data.bmin),
+        data.dist,
+        Float32(data.ec),
+        Float32(data.battery_per_km),
+        Int.(rt),
+        Int(round(data.ET)),
+        maximum(Int.(data.T)),
+        maximum(data.V),
+        data.cap_v,
+        data
+    )
+    
+    # Return both the fitness value and the passenger assignments
+    return fitness, assignments
 end
 
 function is_single_plane_feasible(plane::planeSolution, data, rt)
@@ -99,10 +124,94 @@ function check_route_endpoints(sol::allPlaneSolution, data, sol_name::String="")
     return issues
 end
 
-function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; pool=SingleRoutePoolEntry[], max_size::Int=50, max_duplicates::Int=3)
+function get_passenger_set(assignments::Vector{Any})
+    """Extract set of passenger group IDs from assignments."""
+    passenger_groups = Set{Int}()
+    for ass in assignments
+        push!(passenger_groups, ass.group)
+    end
+    return passenger_groups
+end
+
+function get_served_od_pairs(assignments::Vector{Any}, data)
+    """Extract set of (origin, destination) tuples served by assignments."""
+    od_pairs = Set{Tuple{Int,Int}}()
+    op = data.op
+    dp = data.dp
+    for ass in assignments
+        group_id = ass.group
+        origin = op[group_id]
+        destination = dp[group_id]
+        push!(od_pairs, (origin, destination))
+    end
+    return od_pairs
+end
+
+function compute_diversity_metrics(entry::SingleRoutePoolEntry, pool::Vector{SingleRoutePoolEntry}, data)
+    """Compute hybrid diversity score: coverage_spread + od_region_diversity.
+    
+    Returns a score in [0, 1] where higher is more diverse.
+    Diversity is computed relative to OTHER ROUTES FROM THE SAME BASE vertiport.
+    - coverage_spread: How many unique passengers NOT served by other same-base routes
+    - od_region_diversity: How many unique OD pairs NOT served by other same-base routes
+    
+    Metric: diversity_score = (unique_passengers / total_passengers) * 0.5 + (unique_od_pairs / total_od_pairs) * 0.5
+    
+    This prevents routes from the same base from all targeting the same passengers.
+    """
+    if isempty(entry.assignments)
+        return 0.0  # Empty routes have no diversity benefit
+    end
+    
+    # Get this entry's passengers and OD pairs
+    entry_passengers = get_passenger_set(entry.assignments)
+    entry_od_pairs = get_served_od_pairs(entry.assignments, data)
+    
+    # Get this entry's base vertiport
+    entry_base = Int(entry.plane.route[1])
+    
+    # Get all passengers and OD pairs from OTHER routes with the SAME base vertiport
+    # This ensures diversity is computed relative to competing routes from the same base
+    pool_passengers = Set{Int}()
+    pool_od_pairs = Set{Tuple{Int,Int}}()
+    for other_entry in pool
+        if other_entry === entry  # Skip self
+            continue
+        end
+        # Only compare against routes from the same base vertiport
+        if Int(other_entry.plane.flightLegs) > 0
+            other_base = Int(other_entry.plane.route[1])
+            if other_base == entry_base
+                union!(pool_passengers, get_passenger_set(other_entry.assignments))
+                union!(pool_od_pairs, get_served_od_pairs(other_entry.assignments, data))
+            end
+        end
+    end
+    
+    # Compute coverage spread: unique passengers not in pool
+    unique_passengers = setdiff(entry_passengers, pool_passengers)
+    coverage_spread = isempty(entry_passengers) ? 0.0 : length(unique_passengers) / length(entry_passengers)
+    
+    # Compute OD region diversity: unique OD pairs not in pool
+    unique_od_pairs = setdiff(entry_od_pairs, pool_od_pairs)
+    od_diversity = isempty(entry_od_pairs) ? 0.0 : length(unique_od_pairs) / length(entry_od_pairs)
+    
+    # Hybrid score: weighted average
+    diversity_score = 0.5 * coverage_spread + 0.5 * od_diversity
+    
+    return diversity_score
+end
+
+function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; pool=SingleRoutePoolEntry[], max_size::Int=50, max_duplicates::Int=3, debug::Bool=false)
     # Store up to max_duplicates entries per route shape (key)
     routes_by_key = Dict{Any, Vector{SingleRoutePoolEntry}}()
-    existing_base_ports = Set(Int(entry.plane.route[1]) for entry in pool)
+
+    maxTurnaround = Int64(data.ET)
+    
+    # if debug
+    #     active_routes = sum((1 for p in sol.planes if Int(p.flightLegs) > 0); init=0)
+    #     println("\n--- Processing solution with $active_routes active routes (pool has $(length(pool)) entries) ---")
+    # end
 
     # Add existing pool entries
     for entry in pool
@@ -124,8 +233,47 @@ function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; p
         end
 
         key = single_route_key(plane)
-        score = score_single_plane_solution(plane, data, rt)
-        new_entry = SingleRoutePoolEntry(deepcopy(plane), score, Int64(idx))
+        fitness, assignments = score_single_plane_solution(plane, data, rt)
+
+
+        plane_sol = allPlaneSolution([plane])
+
+        best_obj = fitness
+        best_sol = deepcopy(plane_sol)
+
+        improved = true
+        while improved
+            improved = false
+            cand_obj, cand_sol  = DestructLoop(plane_sol, maxTurnaround, fitness, data, rt)
+            con_obj, con_sol  = ConstructLoop(plane_sol, maxTurnaround, fitness, data, rt)
+
+            if con_obj > cand_obj
+                cand_obj = con_obj
+                cand_sol = con_sol
+            end
+
+            if cand_obj > best_obj
+                best_obj = cand_obj
+                best_sol = deepcopy(cand_sol)
+                improved = true
+            end
+
+        end
+
+        if best_obj > fitness
+            plane = deepcopy(best_sol.planes[1])
+        end
+
+        diversity = compute_diversity_metrics(SingleRoutePoolEntry(deepcopy(plane), fitness, Int64(idx), deepcopy(assignments), 0.0), pool, data)
+        new_entry = SingleRoutePoolEntry(deepcopy(plane), fitness, Int64(idx), deepcopy(assignments), diversity)
+        
+        # Debug output: show what routes are being added to the pool
+        if debug && Int(plane.flightLegs) > 0
+            base_port = Int(plane.route[1])
+            passenger_groups = [ass.group for ass in assignments]
+            groups_str = isempty(passenger_groups) ? "none" : join(passenger_groups, ",")
+            # println("  [ADD] Plane $idx (base $base_port): legs=$(Int(plane.flightLegs)), route=$(Int.(plane.route)), diversity=$(round(diversity*100; digits=1))%, passengers=[$groups_str]")
+        end
 
         if !haskey(routes_by_key, key)
             routes_by_key[key] = SingleRoutePoolEntry[]
@@ -133,26 +281,55 @@ function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; p
         push!(routes_by_key[key], new_entry)
     end
 
-    # For each route shape, keep only top max_duplicates by score
+    # Keep an explicit empty route for each base so inactive planes are always possible.
+    unique_bases = unique(Int(data.bv[n]) for n in data.N)
+    for base in unique_bases
+        empty_plane = planeSolution(Int32(0), Int32[base], Int32[])
+        empty_key = single_route_key(empty_plane)
+
+        if !haskey(routes_by_key, empty_key)
+            routes_by_key[empty_key] = SingleRoutePoolEntry[]
+        end
+
+        if isempty(routes_by_key[empty_key])
+            push!(routes_by_key[empty_key], SingleRoutePoolEntry(empty_plane, 0.0, Int64(0), [], 0.0))
+        else
+            routes_by_key[empty_key][1] = SingleRoutePoolEntry(empty_plane, 0.0, Int64(0), [], 0.0)
+            resize!(routes_by_key[empty_key], 1)
+        end
+    end
+
+    # For each route shape, keep only top max_duplicates by diversity first, then fitness.
+    # Empty routes are kept as exactly one entry per base.
+    # Ranking: (diversity_score DESC, fitness_score DESC)
     for key in keys(routes_by_key)
         entries = routes_by_key[key]
-        sort!(entries, by = e -> e.score, rev = true)
-        if length(entries) > max_duplicates
+        # Sort by (-diversity_score, -fitness_score) to sort both descending
+        sort!(entries, by = e -> (-e.diversity_score, -e.score))
+
+        if key[1] == 0
+            routes_by_key[key] = entries[1:1]
+        elseif length(entries) > max_duplicates
             routes_by_key[key] = entries[1:max_duplicates]
         end
     end
 
-    # Flatten to single vector and sort by score
-    pool = SingleRoutePoolEntry[]
+    # Flatten to single vector and split by active/inactive routes.
+    all_entries = SingleRoutePoolEntry[]
     for entries in values(routes_by_key)
-        append!(pool, entries)
+        append!(all_entries, entries)
     end
 
-    sort!(pool, by = entry -> entry.score, rev = true)
+    empty_entries = [e for e in all_entries if Int(e.plane.flightLegs) == 0]
+    sort!(empty_entries, by = e -> Int(e.plane.route[1]))
 
+    non_empty_entries = [e for e in all_entries if Int(e.plane.flightLegs) > 0]
+    # Maintain diversity-first ranking: sort by (-diversity, -fitness) to preserve priority
+    sort!(non_empty_entries, by = e -> (-e.diversity_score, -e.score))
+
+    # Group active routes by start base to preserve cross-base diversity.
     entries_by_base = Dict{Int, Vector{SingleRoutePoolEntry}}()
-
-    for entry in pool
+    for entry in non_empty_entries
         base_port = Int(entry.plane.route[1])
         if !haskey(entries_by_base, base_port)
             entries_by_base[base_port] = SingleRoutePoolEntry[]
@@ -160,39 +337,60 @@ function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; p
         push!(entries_by_base[base_port], entry)
     end
 
-    base_representatives = Tuple{SingleRoutePoolEntry, Bool}[]
-    remainder = SingleRoutePoolEntry[]
+    for entries in values(entries_by_base)
+        # Maintain diversity-first ranking within each base
+        sort!(entries, by = e -> (-e.diversity_score, -e.score))
+    end
 
-    for base_port in sort(collect(keys(entries_by_base)))
-        if isempty(entries_by_base[base_port])
-            continue
+    # Reserve room for empties, then allocate active routes with a soft per-base quota.
+    keep = SingleRoutePoolEntry[]
+    append!(keep, empty_entries)
+
+    remaining_capacity = max_size - length(keep)
+    if remaining_capacity <= 0
+        if length(keep) > max_size
+            resize!(keep, max_size)
+        end
+        return keep
+    end
+
+    non_empty_bases = sort(collect(keys(entries_by_base)))
+    nbases = length(non_empty_bases)
+
+    selected_non_empty = SingleRoutePoolEntry[]
+    remainder_non_empty = SingleRoutePoolEntry[]
+
+    if nbases > 0
+        per_base_quota = max(1, Int(floor(remaining_capacity / nbases)))
+
+        for base in non_empty_bases
+            entries = entries_by_base[base]
+            take_n = min(per_base_quota, length(entries))
+            if take_n > 0
+                append!(selected_non_empty, entries[1:take_n])
+            end
+            if length(entries) > take_n
+                append!(remainder_non_empty, entries[take_n+1:end])
+            end
         end
 
-        entries = entries_by_base[base_port]
-        sort!(entries, by = entry -> entry.score, rev = true)
-        push!(base_representatives, (entries[1], !(base_port in existing_base_ports)))
+        sort!(selected_non_empty, by = e -> e.score, rev = true)
+        if length(selected_non_empty) > remaining_capacity
+            resize!(selected_non_empty, remaining_capacity)
+            append!(keep, selected_non_empty)
+            return keep
+        end
 
-        if length(entries) > 1
-            append!(remainder, entries[2:end])
+        append!(keep, selected_non_empty)
+
+        extra_capacity = max_size - length(keep)
+        if extra_capacity > 0 && !isempty(remainder_non_empty)
+            sort!(remainder_non_empty, by = e -> e.score, rev = true)
+            append!(keep, remainder_non_empty[1:min(extra_capacity, length(remainder_non_empty))])
         end
     end
 
-    sort!(base_representatives, by = x -> (x[2] ? 0 : 1, -x[1].score))
-    sort!(remainder, by = entry -> entry.score, rev = true)
-
-    pool = [x[1] for x in base_representatives[1:min(max_size, length(base_representatives))]]
-    if length(pool) > max_size
-        sort!(pool, by = entry -> entry.score, rev = true)
-        resize!(pool, max_size)
-        return pool
-    end
-
-    extra_capacity = max_size - length(pool)
-    if extra_capacity > 0 && !isempty(remainder)
-        append!(pool, remainder[1:min(extra_capacity, length(remainder))])
-    end
-
-    return pool
+    return keep
 end
 
 function build_pool_candidate(pool::Vector{SingleRoutePoolEntry}, data, rt; max_routes::Int=4)
@@ -228,7 +426,8 @@ function build_pool_candidate(pool::Vector{SingleRoutePoolEntry}, data, rt; max_
         end
 
         # Preserve the already-sorted pool order; filtering keeps that order.
-        filtered = [e for e in compatible_routes if !(single_route_key(e.plane) in selected_keys)]
+        # Empty routes are reusable, active routes are unique by key.
+        filtered = [e for e in compatible_routes if Int(e.plane.flightLegs) == 0 || !(single_route_key(e.plane) in selected_keys)]
         if isempty(filtered)
             cand_planes[pos] = planeSolution(Int32(0), Int32[base_port], Int32[])
             continue
@@ -240,7 +439,9 @@ function build_pool_candidate(pool::Vector{SingleRoutePoolEntry}, data, rt; max_
 
         # Apply chosen route and mark its key as used
         key = single_route_key(choice.plane)
-        push!(selected_keys, key)
+        if Int(choice.plane.flightLegs) > 0
+            push!(selected_keys, key)
+        end
         cand_planes[pos] = deepcopy(choice.plane)
     end
 
@@ -307,122 +508,15 @@ function build_pool_candidate(pool::Vector{SingleRoutePoolEntry}, data, rt; max_
     return cand
 end
 
-function Heuristic(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
-
-    start_ns = time_ns()
-    elapsed = 0.0
-    iterations = 0
-
-    best_obj = -Inf
-    best_sol = allPlaneSolution(planeSolution[])
-
-    candiateroutes = Candidate_Route(data)
-
-    
-    while elapsed <= Float64(MaxTime)
-        nr = 1
-        idx = rand(1:nr)
-        T = 100
-        Best_sols = generate_best_initial_solutions(data, rt, candiateroutes; n_runs = 20, top_k = nr, top_c, maxLegs=6, maxTurnaround)
-
-        temp_obj = Best_sols[idx].fitness
-        temp_sol = deepcopy(Best_sols[idx].evtols)
-        if !check_turnaround_times(temp_sol, "Initial solution")
-            println("HEY!")
-        end
-
-        if temp_obj > best_obj
-            best_obj = temp_obj
-            best_sol = deepcopy(temp_sol)
-            println("New best Obj $(best_obj)")
-            println("Method used: Initial Heuristic")
-        end
-
-        improvement = true
-        while improvement && elapsed <= Float64(MaxTime)
-            improvement = false
-            method_used = 0
-
-            des_obj, des_sol = DestructLoop(temp_sol, maxTurnaround, temp_obj, data, rt)
-            con_obj, con_sol = ConstructLoop(temp_sol, maxTurnaround, temp_obj, data, rt)
-            swap_obj, swap_sol = Swap(temp_sol, maxTurnaround, temp_obj, data, rt)
-            two_opt_obj, two_opt_sol = two_opt_Loop(temp_sol, maxTurnaround, temp_obj, data, rt)
-
-
-            ### ------ Repair functionTest ------------
-
-            if des_obj <= -100000
-                Repair(des_sol, data, rt, des_obj)
-            end        
-            if con_obj <= -100000
-                Repair(con_sol, data, rt, con_obj)
-            end     
-            if swap_obj <= -100000
-                Repair(swap_sol, data, rt, swap_obj)
-            end     
-            if two_opt_obj <= -100000
-                Repair(two_opt_sol, data, rt, two_opt_obj)
-            end     
-
-            ### ---------------------------------------
-
-            cand_obj = des_obj
-            cand_sol = des_sol
-
-            if con_obj > cand_obj || rand() < exp(-1/(T))
-                cand_obj = con_obj
-                cand_sol = con_sol
-                method_used = 1
-            end
-
-            if swap_obj > cand_obj || rand() < exp(-1/(T))
-                cand_obj = swap_obj
-                cand_sol = swap_sol
-                method_used = 2
-            end
-
-            if two_opt_obj > cand_obj || rand() < exp(-1/(T))
-                cand_obj = two_opt_obj
-                cand_sol = two_opt_sol
-                method_used = 3
-            end
-
-            if cand_obj > temp_obj || rand() < exp(-1/(T))
-                temp_obj = cand_obj
-                temp_sol = deepcopy(cand_sol)
-                if !check_turnaround_times(temp_sol, "After neighborhood")
-                    println("HEY!")
-                end
-                improvement = true
-
-                if temp_obj > best_obj
-                    best_obj = temp_obj
-                    best_sol = deepcopy(temp_sol)
-                    println("New best Obj $(best_obj)")
-                    println("Method used: $(("Destructor", "Constructor", "Swap", "2-opt")[method_used + 1])")
-                end
-            end
-            T = T * 0.95
-
-            elapsed = (time_ns() - start_ns) / 1e9
-        end
-
-        iterations += 1
-        if iterations % 100 == 0
-            println("iteration: $(iterations)")
-            println("Obj In this iteration $(temp_obj)")
-        end
-        elapsed = (time_ns() - start_ns) / 1e9
-    end
-
-    return best_obj, best_sol, iterations
-end
 
 function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
 
     start_ns = time_ns()
     elapsed = 0.0
     iterations = 0
+    iterations_since_clear = 0
+    clear_interval = 2000
+    destruct_trials = 4
 
     best_obj = -Inf
     best_sol = allPlaneSolution(planeSolution[])
@@ -431,24 +525,24 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
     single_route_pool = SingleRoutePoolEntry[]
 
 
-    max_size = Int(round(length(data.N)*length(data.V)))*4
+    max_size = Int(round(length(data.N)*length(data.V)))*2
 
     
     while elapsed <= Float64(MaxTime)
         nr = 5
         idx = rand(1:nr)
-        T = 100
+        T = 1000
         Best_sols = generate_best_initial_solutions(data, rt, candiateroutes; n_runs = 10, top_k = nr, top_c, maxLegs=6, maxTurnaround)
 
-        for (idx, best_sol_candidate) in enumerate(Best_sols)
-            check_route_endpoints(best_sol_candidate.evtols, data, "Initial solution $(idx)")
+        for (i, best_sol_candidate) in enumerate(Best_sols)
+            check_route_endpoints(best_sol_candidate.evtols, data, "Initial solution $(i)")
         end
 
         temp_obj = Best_sols[idx].fitness
         temp_sol = deepcopy(Best_sols[idx].evtols)
 
         for best_sol_candidate in Best_sols
-            single_route_pool = collect_feasible_single_plane_routes(best_sol_candidate.evtols, data, rt; pool=single_route_pool, max_size=max_size)
+            single_route_pool = collect_feasible_single_plane_routes(best_sol_candidate.evtols, data, rt; pool=single_route_pool, max_size=max_size, debug=true)
         end
 
         if temp_obj > best_obj
@@ -481,17 +575,22 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
 
             cand_obj = temp_obj
             cand_sol = deepcopy(temp_sol)
-            n_perm = 2
+            n_perm = 3
 
             for _ in 1:n_perm
-                if rand(Bool)
-                    cand_obj, cand_sol = DestructSA(cand_sol, maxTurnaround, cand_obj, data, rt)
+                move_choice = rand(1:3)
+                if move_choice == 1
+                    cand_obj, cand_sol = DestructSA(cand_sol, maxTurnaround, cand_obj, data, rt, destruct_trials)
                     next_method = 0
-                else
+                elseif move_choice == 2
                     cand_obj, cand_sol = ConstructSA(cand_sol, maxTurnaround, cand_obj, data, rt)
                     next_method = 1
+                else
+                    cand_obj, cand_sol = SegmentExchange(cand_sol, maxTurnaround, cand_obj, data, rt)
+                    next_method = 2
                 end
-                check_route_endpoints(cand_sol, data, "Candidate after $(next_method == 0 ? "DestructSA" : "ConstructSA")")
+                method_used = next_method
+                check_route_endpoints(cand_sol, data, "Candidate after $(("DestructSA", "ConstructSA", "SegmentExchange")[next_method + 1])")
             end
 
             # out = 0
@@ -506,8 +605,9 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
 
             # end 
 
-
-            if cand_obj > temp_obj || (rand() < exp((temp_obj - cand_obj) / T) && temp_obj > cand_obj)
+            delta = cand_obj - temp_obj
+        
+            if cand_obj > temp_obj || (rand() < exp(max(min(delta/T, 700.0), -700.0)))
                 temp_obj = cand_obj
                 temp_sol = deepcopy(cand_sol)
                 check_route_endpoints(temp_sol, data, "Accepted candidate")
@@ -518,7 +618,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
                     best_obj = temp_obj
                     best_sol = deepcopy(temp_sol)
                     println("New best Obj $(best_obj)")
-                    println("Method used: $(("Destructor", "Constructor")[method_used + 1])")
+                    println("Method used: $(("Destructor", "Constructor", "SegmentExchange")[method_used + 1])")
                 end
             end
 
@@ -527,8 +627,16 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
         end
 
         iterations += 1
+        iterations_since_clear += 1
+        if iterations_since_clear >= clear_interval
+            sort!(single_route_pool, by = e -> (-e.diversity_score, -e.score))
+            keep_n = max(1, cld(length(single_route_pool), 2))
+            resize!(single_route_pool, keep_n)
+            iterations_since_clear = 0
+            println("INFO: Pruned single_route_pool to top $(keep_n) entries at iteration $(iterations)")
+        end
         if iterations % 100 == 0
-            println("iteration: $(iterations)")
+            println("iteration: $(iterations), Time in seconds: $(round(elapsed))")
             println("Obj In this iteration $(temp_obj)")
         end
         elapsed = (time_ns() - start_ns) / 1e9
@@ -536,10 +644,42 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
 
     println("\n========== FINAL POOL SOLUTIONS ==========")
     println("Total pool entries: $(length(single_route_pool))")
+    println("Legend: [idx] flightLegs=N, route=(...), diversity_score=D, fitness_score=F, passengers=[...]")
+    println()
+    
+    # Group by base vertiport for better readability
+    entries_by_base = Dict{Int, Vector{Tuple{Int, SingleRoutePoolEntry}}}()
     for (idx, entry) in enumerate(single_route_pool)
-        key = single_route_key(entry.plane)
-        println("  [$idx] flightLegs=$(key[1]), route=$(key[2]), score=$(entry.score)")
+        if Int(entry.plane.flightLegs) > 0
+            base = Int(entry.plane.route[1])
+            if !haskey(entries_by_base, base)
+                entries_by_base[base] = []
+            end
+            push!(entries_by_base[base], (idx, entry))
+        else
+            if !haskey(entries_by_base, -1)
+                entries_by_base[-1] = []
+            end
+            push!(entries_by_base[-1], (idx, entry))
+        end
     end
+    
+    for (base, entries) in sort(collect(entries_by_base), by=x->x[1])
+        if base == -1
+            println("--- Empty Routes (Inactive Planes) ---")
+        else
+            println("--- Base Vertiport $base ---")
+        end
+        for (idx, entry) in entries
+            key = single_route_key(entry.plane)
+            passenger_groups = [ass.group for ass in entry.assignments]
+            groups_str = isempty(passenger_groups) ? "none" : join(passenger_groups, ",")
+            diversity_pct = round(entry.diversity_score * 100; digits=1)
+            println("  [$idx] flightLegs=$(key[1]), route=$(key[2]), div=$(diversity_pct)%, fitness=$(round(entry.score; digits=1)), passengers=[$(groups_str)]")
+        end
+        println()
+    end
+    
     println("=========================================\n")
 
     return best_obj, best_sol, iterations

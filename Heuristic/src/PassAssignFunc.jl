@@ -131,7 +131,7 @@ function find_direct_leg!V2(scheduled::Vector{ScheduledLeg}, a::Int, op, dp, dt,
     if so[a] == 1
         best.remaining_capacity -= q[a]
     else 
-        best.remaining_capacity -= 0 #Makes sure that the direct only passengers ride alone
+        best.remaining_capacity = 0 #Makes sure that the direct only passengers ride alone
     end
 
     return PassengerAssignment(a, best.plane, [best.leg_index])
@@ -305,7 +305,10 @@ function assign_passengersV2(evtols::allPlaneSolution, data, rt::Matrix{Int})
     assigned_groups = Set{Int}()
 
     price_by_group = Dict(a => fd[(op[a], dp[a])] * (so[a] == 1 ? 0.75 : 1.0) for a in A)
-    Price_sort = sort(A, by = a -> price_by_group[a], rev = true)  #descending
+    # Normalize prices to use as weights for random sampling
+    max_price = maximum(values(price_by_group))
+    weights = [price_by_group[a] / max_price for a in A]
+    Price_sort = A[sortperm(weights .* randn(length(A)), rev = true)]
 
     for a in Price_sort
         if so[a] == 0
