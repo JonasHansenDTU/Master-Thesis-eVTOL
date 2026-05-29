@@ -84,7 +84,7 @@ function load_data(excel_file::String, parameter_file::String)
     infra = read_sheet(excel_file, "Infrastructure")
     pax = DataFrame(
         XLSX.readtable(
-            joinpath("inputData", "LTM_demand.xlsx"),
+            joinpath("inputData", "LTM_demand2.xlsx"),
             "Sheet1"
         )
     )
@@ -207,7 +207,7 @@ function load_data(excel_file::String, parameter_file::String)
     M2c                   = bmax + ec * ET
     M3                    = ET
 
-    M = 0:6
+    M = 0:10
     M_no0 = 1:maximum(M)
     M_mid = 1:(maximum(M)-1)
     M_no_last = 0:(maximum(M)-1)
