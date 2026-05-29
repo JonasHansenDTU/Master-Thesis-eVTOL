@@ -516,6 +516,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
     iterations = 0
     iterations_since_clear = 0
     clear_interval = 2000
+    destruct_trials = 4
 
     best_obj = -Inf
     best_sol = allPlaneSolution(planeSolution[])
@@ -530,7 +531,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
     while elapsed <= Float64(MaxTime)
         nr = 5
         idx = rand(1:nr)
-        T = 100
+        T = 1000
         Best_sols = generate_best_initial_solutions(data, rt, candiateroutes; n_runs = 10, top_k = nr, top_c, maxLegs=6, maxTurnaround)
 
         for (i, best_sol_candidate) in enumerate(Best_sols)
@@ -579,7 +580,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
             for _ in 1:n_perm
                 move_choice = rand(1:3)
                 if move_choice == 1
-                    cand_obj, cand_sol = DestructSA(cand_sol, maxTurnaround, cand_obj, data, rt)
+                    cand_obj, cand_sol = DestructSA(cand_sol, maxTurnaround, cand_obj, data, rt, destruct_trials)
                     next_method = 0
                 elseif move_choice == 2
                     cand_obj, cand_sol = ConstructSA(cand_sol, maxTurnaround, cand_obj, data, rt)

@@ -1,58 +1,72 @@
-function DestructSA(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64, data, rt)
+function DestructSA(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64, data, rt, n_trials::Int=1)
 
     N = data.N
+    trials = max(1, n_trials)
 
-    n = rand(N)
-    m = Int(planes.planes[n].flightLegs)
+    best_obj = init_obj
+    best_sol = planes
+    found_candidate = false
 
-    if m == 0
-        return init_obj, planes
-    end
+    for _ in 1:trials
+        n = rand(N)
+        m = Int(planes.planes[n].flightLegs)
 
-    if m == 1
+        if m == 0
+            continue
+        end
+
+        if m == 1
+            temp_sol = deepcopy(planes)
+            base = temp_sol.planes[n].route[1]
+            resize!(temp_sol.planes[n].route, 1)
+            temp_sol.planes[n].route[1] = base
+            empty!(temp_sol.planes[n].turnaroundTime)
+            temp_sol.planes[n].flightLegs = Int32(0)
+
+            new_obj = obj(temp_sol, data, rt)
+
+            if !found_candidate || new_obj > best_obj
+                best_obj = new_obj
+                best_sol = temp_sol
+                found_candidate = true
+            end
+            continue
+        end
+
+        # Do not delete first node (route[1]); last route node is not in this range anyway
+        idx = rand(2:m)
         temp_sol = deepcopy(planes)
-        base = temp_sol.planes[n].route[1]
-        resize!(temp_sol.planes[n].route, 1)
-        temp_sol.planes[n].route[1] = base
-        empty!(temp_sol.planes[n].turnaroundTime)
-        temp_sol.planes[n].flightLegs = Int32(0)
+
+        Destructor(temp_sol.planes[n], [idx], data)
+
+        if has_consecutive_duplicates(temp_sol.planes[n].route)
+            continue
+        end
 
         new_obj = obj(temp_sol, data, rt)
-        return new_obj, temp_sol
+
+        temp_sol2 = deepcopy(temp_sol)
+        from_idx = Int64(idx - 1)
+        UpdateTurnAroundTimes(temp_sol2, from_idx, maxTurnaround, data)
+        new_obj2 = obj(temp_sol2, data, rt)
+
+        if new_obj2 > new_obj
+            temp_sol = temp_sol2
+            new_obj = new_obj2
+        end
+
+        if !found_candidate || new_obj > best_obj
+            best_obj = new_obj
+            best_sol = temp_sol
+            found_candidate = true
+        end
     end
 
-    # Do not delete first node (route[1]); last route node is not in this range anyway
-    
-    idx = rand(2:m)
-    temp_sol = deepcopy(planes)
-
-    Destructor(temp_sol.planes[n], [idx], data)
-
-    if has_consecutive_duplicates(temp_sol.planes[n].route)
-        return init_obj, planes
+    if found_candidate
+        return best_obj, best_sol
     end
 
-    new_obj = obj(temp_sol, data, rt)
-
-    temp_sol2 = deepcopy(temp_sol)
-    from_idx = Int64(idx - 1)
-    UpdateTurnAroundTimes(temp_sol2, from_idx, maxTurnaround, data)
-    new_obj2 = obj(temp_sol2, data, rt)
-
-    if new_obj2 > new_obj
-        temp_sol = temp_sol2
-        new_obj = new_obj2
-    end
-    
-    
-
-    # for n in N
-    #     if best_sol.planes[n].route[1] != best_sol.planes[n].route[end]
-    #         println("HEY!!!")
-    #     end
-    # end
-
-    return new_obj, temp_sol
+    return init_obj, planes
 end
 
 function ConstructSA(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64, data, rt)

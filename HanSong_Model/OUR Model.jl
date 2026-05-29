@@ -962,7 +962,7 @@ end
 # Usage
 ###############################################################################
 
-excel_file = joinpath("inputData/LTM_demand.xlsx")
+excel_file = joinpath("inputData/inputDataGiant.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()
