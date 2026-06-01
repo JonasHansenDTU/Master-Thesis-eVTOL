@@ -514,7 +514,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
     elapsed = 0.0
     iterations = 0
     iterations_since_clear = 0
-    clear_interval = 2000
+    clear_interval = 200000
     destruct_trials = 4
 
     best_obj = -Inf

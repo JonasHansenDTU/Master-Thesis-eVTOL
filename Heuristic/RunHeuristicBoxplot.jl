@@ -1,0 +1,121 @@
+using XLSX
+using DataFrames
+using Random
+using JuMP
+using Gurobi
+using CSV
+using MathOptInterface
+using Printf
+using Statistics
+using PyCall
+
+const MOI = MathOptInterface
+
+src_dir = joinpath(@__DIR__, "src")
+source_files = [
+    "DataLoadFunc.jl",
+    "FeasibilityFunc.jl",
+    "InitialSolFunc.jl",
+    "PassAssignFunc.jl",
+    "FitnessFunc.jl",
+    "NeighborhoodFunc.jl",
+    "SANeighborhood.jl",
+    "HeuristicFunc.jl",
+]
+
+for file in source_files
+    include(joinpath(src_dir, file))
+end
+
+function load_heuristic_data()
+    excel_file = joinpath(@__DIR__, "..", "inputData", "inputDataGiant.xlsx")
+    parameter_file = joinpath(@__DIR__, "..", "inputData", "Parameters.xlsx")
+    data = load_data(excel_file, parameter_file)
+
+    vmax = maximum(data.V)
+    rt = zeros(vmax, vmax)
+    for i in data.V, j in data.V
+        rt[i, j] = data.rt[(i, j)]
+    end
+
+    return data, rt
+end
+
+function run_heuristic_batch(n_runs::Int; max_turnaround::Int64, maxtime::Int32, data, rt, top_c::Int, seed::Union{Nothing, Int}=nothing)
+    best_objs = Float64[]
+    iterations = Int[]
+
+    for run in 1:n_runs
+        if seed !== nothing
+            Random.seed!(seed + run - 1)
+        end
+
+        best_obj, _, iter_count = HeuristicSA(max_turnaround, maxtime, data, rt, top_c)
+        push!(best_objs, best_obj)
+        push!(iterations, iter_count)
+
+        println("Run $run / $n_runs -> best_obj = $(round(best_obj; digits=2)), iterations = $iter_count")
+    end
+
+    return best_objs, iterations
+end
+
+function save_batch_results(best_objs::Vector{Float64}; out_csv::AbstractString)
+    df = DataFrame(run = 1:length(best_objs), best_obj = best_objs)
+    CSV.write(out_csv, df)
+    return df
+end
+
+function save_boxplot(best_objs::Vector{Float64}; out_png::AbstractString, title_text::AbstractString)
+    plt = pyimport("matplotlib.pyplot")
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.boxplot(best_objs, vert=true, patch_artist=true, labels=["best_obj"])
+    ax.set_title(title_text)
+    ax.set_ylabel("Objective value")
+    ax.grid(true, axis="y", linestyle="--", alpha=0.35)
+    fig.tight_layout()
+    fig.savefig(out_png, dpi=200)
+    plt.close(fig)
+end
+
+function main()
+    data, rt = load_heuristic_data()
+
+    max_turnaround = Int64(data.ET)
+    maxtime = Int32(30)
+    top_c = 4
+    n_runs = 20
+
+    out_dir = joinpath(@__DIR__, "batch_results")
+    mkpath(out_dir)
+
+    best_objs, iterations = run_heuristic_batch(
+        n_runs;
+        max_turnaround=max_turnaround,
+        maxtime=maxtime,
+        data=data,
+        rt=rt,
+        top_c=top_c,
+        seed=nothing,
+    )
+
+    results_csv = joinpath(out_dir, "best_obj_runs.csv")
+    save_batch_results(best_objs; out_csv=results_csv)
+
+    boxplot_png = joinpath(out_dir, "best_obj_boxplot.png")
+    save_boxplot(
+        best_objs;
+        out_png=boxplot_png,
+        title_text="Heuristic best_obj over $(n_runs) runs",
+    )
+
+    println()
+    println("Saved run results to: $results_csv")
+    println("Saved boxplot to: $boxplot_png")
+    println("Summary: min=$(minimum(best_objs)), median=$(median(best_objs)), mean=$(mean(best_objs)), max=$(maximum(best_objs))")
+    println("Iterations per run: $(iterations)")
+end
+
+
+main()
