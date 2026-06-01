@@ -305,10 +305,9 @@ function assign_passengersV2(evtols::allPlaneSolution, data, rt::Matrix{Int})
     assigned_groups = Set{Int}()
 
     price_by_group = Dict(a => fd[(op[a], dp[a])] * (so[a] == 1 ? 0.75 : 1.0) for a in A)
-    # Normalize prices to use as weights for random sampling
-    max_price = maximum(values(price_by_group))
-    weights = [price_by_group[a] / max_price for a in A]
-    Price_sort = A[sortperm(weights .* randn(length(A)), rev = true)]
+    # Sort groups directly by price (descending)
+    prices = [price_by_group[a] for a in A]
+    Price_sort = A[sortperm(prices, rev = true)]
 
     for a in Price_sort
         if so[a] == 0

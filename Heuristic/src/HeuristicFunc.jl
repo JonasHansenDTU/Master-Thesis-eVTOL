@@ -508,7 +508,6 @@ function build_pool_candidate(pool::Vector{SingleRoutePoolEntry}, data, rt; max_
     return cand
 end
 
-
 function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
 
     start_ns = time_ns()
@@ -684,7 +683,3 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
 
     return best_obj, best_sol, iterations
 end
-
-
-
-
