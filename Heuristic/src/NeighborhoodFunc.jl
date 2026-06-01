@@ -154,7 +154,7 @@ function UpdateTurnAroundTimes(planes::allPlaneSolution, from::Int64, maxTurnaro
 
             if !isempty(candidate_pass) && rand() <= 0.5
                 # deterministic: latest feasible passenger time in the window
-                chosen_time = max(maximum(candidate_pass) - current_time, (first_trip ? 0 : te))
+                chosen_time = max(rand(candidate_pass) - current_time, (first_trip ? 0 : te))
                 plane.turnaroundTime[k] = Int32(round(Int, chosen_time))
             else
                 # Choose rate (tune as needed)

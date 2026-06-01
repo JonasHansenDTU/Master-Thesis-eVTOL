@@ -1,6 +1,7 @@
 function fitnessFunction(evtols::allPlaneSolution, assignments::Vector{PassengerAssignment}, bmax::Float32, bmid::Float32, bmin::Float32,
     dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32, rt::Matrix{Int}, ET::Int, T::Int, V::Int, cap_v::Dict{}, data)
-    
+
+
     b_penalty = data.b_penalty 
     A  = data.A
     op = data.op
@@ -28,7 +29,7 @@ function fitnessFunction(evtols::allPlaneSolution, assignments::Vector{Passenger
         a = ass.group
         i = op[a]
         j = dp[a]
-        fitnessvalue += fd[(i, j)] * (1 - so[a]) + fs[(i, j)] * so[a] * q[a]
+        fitnessvalue += (fd[(i, j)] * (1 - so[a]) + fs[(i, j)] * so[a]) * q[a]
     end
 
     # 2. Operating cost of all flown legs
