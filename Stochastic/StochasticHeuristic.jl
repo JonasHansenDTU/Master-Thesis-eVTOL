@@ -297,12 +297,29 @@ function make_second_stage_data(sc_data, fsd::FirstStageDecision;
         new_fs[(i,j)] = new_fs[(i,j)] * price_boost
     end
 
-    # Full passenger set: heuristic can serve anyone, but accepted passengers
-    # carry hard_penalty if unserved so they are always prioritised.
-    new_p = copy(sc_data.p)
-    for a in fsd.accepted_passengers
-        new_p[a] = hard_penalty
+    # Set p[a] = hard_penalty for accepted passengers so the heuristic
+    # is strongly penalised for missing them.
+    # Set p[a] = 0 for non-accepted passengers — they carry no penalty
+    # if unserved. The heuristic will still serve them opportunistically
+    # because their fares contribute positively to fitness, but it will
+    # not trade off serving accepted passengers to serve non-accepted ones.
+    # This is the key fix: previously p[a]=300 for 100 non-accepted
+    # passengers created ~30,000 total pressure competing with the
+    # accepted passengers' hard_penalty pressure.
+    new_p = Dict{Int,Float64}()
+    for a in sc_data.A
+        if a in fsd.accepted_passengers
+            new_p[a] = hard_penalty
+        else
+            new_p[a] = 0.0
+        end
     end
+
+    # IMPORTANT: Construction_Heuristic2 uses eVTOL IDs directly as array indices
+    # (planes[n] = ...) so N must always be the full fleet [1,2,3,4].
+    # We cannot pass a subset like [3,4] because planes[3] would be out of bounds.
+    # Non-committed eVTOLs are naturally discouraged because only committed eVTOLs
+    # have their OD pairs fare-boosted, making them the most profitable to serve.
 
     return (
         infra          = sc_data.infra,
@@ -310,7 +327,7 @@ function make_second_stage_data(sc_data, fsd::FirstStageDecision;
         plane          = sc_data.plane,
         V              = sc_data.V,
         A              = sc_data.A,
-        N              = sc_data.N,
+        N              = sc_data.N,  # must be full fleet — see comment above
         M              = sc_data.M,
         M_no0          = sc_data.M_no0,
         M_mid          = sc_data.M_mid,
@@ -829,13 +846,17 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
         best_candidate_obj = current_obj
         best_candidate_fsd = nothing
 
+        # Cap how many candidates are tried per move type to control runtime.
+        # With 13 scenarios × MaxTime_2nd_search per evaluation, each candidate
+        # costs up to 13 × MaxTime_2nd_search seconds. At 5 candidates per move
+        # type and 5 move types, one iteration costs at most:
+        # 5 × 5 × 13 × MaxTime_2nd_search seconds.
+        max_cand = 5
+
         for move in moves
-            # For each move type, try ALL candidates (not just one random one)
-            # and keep the best improving one. This is the key fix — a single
-            # random pick is too noisy and misses good moves.
 
             if move == :add
-                for a in shuffle!(collect(addable))
+                for a in shuffle!(collect(addable))[1:min(max_cand, length(addable))]
                     c_accepted = push!(copy(current_accepted), a)
                     c_fsd = make_fsd(c_accepted, copy(current_active),
                                      data, best_tent_sol)
@@ -855,7 +876,7 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
                 end
 
             elseif move == :remove
-                for a in shuffle!(collect(current_accepted))
+                for a in shuffle!(collect(current_accepted))[1:min(max_cand, length(current_accepted))]
                     c_accepted = delete!(copy(current_accepted), a)
                     c_fsd = make_fsd(c_accepted, copy(current_active),
                                      data, best_tent_sol)
@@ -875,9 +896,8 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
                 end
 
             elseif move == :swap
-                # Try a sample of swaps to keep runtime manageable
-                for a_out in shuffle!(collect(current_accepted))
-                    for a_in in shuffle!(collect(addable))[1:min(3,length(addable))]
+                for a_out in shuffle!(collect(current_accepted))[1:min(max_cand, length(current_accepted))]
+                    for a_in in shuffle!(collect(addable))[1:min(2, length(addable))]
                         c_accepted = push!(delete!(copy(current_accepted), a_out), a_in)
                         c_fsd = make_fsd(c_accepted, copy(current_active),
                                          data, best_tent_sol)

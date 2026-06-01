@@ -106,7 +106,11 @@ function load_data(excel_file::String, parameter_file::String)
     infra = read_sheet(excel_file, "Infrastructure")
     pax = DataFrame(
         XLSX.readtable(
+<<<<<<< HEAD
             joinpath("inputData", "inputDataGiant.xlsx"),
+=======
+            joinpath("inputData", "inputDataMini.xlsx"),
+>>>>>>> 4c40074 (stochastic changes)
             "PassengerGroups"
         )
     )
