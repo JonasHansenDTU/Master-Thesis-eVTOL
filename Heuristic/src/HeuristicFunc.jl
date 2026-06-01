@@ -231,6 +231,7 @@ function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; p
         if !is_single_plane_feasible(plane, data, rt)
             continue
         end
+        
 
         key = single_route_key(plane)
         fitness, assignments = score_single_plane_solution(plane, data, rt)
@@ -240,6 +241,9 @@ function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; p
 
         best_obj = fitness
         best_sol = deepcopy(plane_sol)
+
+
+        
 
         improved = true
         while improved
