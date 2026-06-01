@@ -67,6 +67,12 @@ function save_batch_results(best_objs::Vector{Float64}; out_csv::AbstractString)
 end
 
 function save_boxplot(best_objs::Vector{Float64}; out_png::AbstractString, title_text::AbstractString)
+    try
+        pyimport("matplotlib.pyplot")
+    catch
+        pyimport_conda("matplotlib.pyplot", "matplotlib")
+    end
+
     plt = pyimport("matplotlib.pyplot")
 
     fig, ax = plt.subplots(figsize=(6, 4))
@@ -83,9 +89,9 @@ function main()
     data, rt = load_heuristic_data()
 
     max_turnaround = Int64(data.ET)
-    maxtime = Int32(30)
+    maxtime = Int32(20)
     top_c = 4
-    n_runs = 20
+    n_runs = 10
 
     out_dir = joinpath(@__DIR__, "batch_results")
     mkpath(out_dir)
