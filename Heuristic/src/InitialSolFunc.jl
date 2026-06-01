@@ -544,7 +544,7 @@ end
 # end
 
 
-function Construction_Heuristic2(data, Candidate_Routes; maxLegs::Int=3)
+function Construction_Heuristic2(data, Candidate_Routes, maxTurnaround; maxLegs::Int=3)
 
     V = data.V
     N = data.N
@@ -1506,7 +1506,7 @@ function generate_best_initial_solutions(data, rt, candiateroutes; n_runs::Int=1
 
     for run in 1:n_runs
         # evtols_init = initial_chromosome_solution(data; maxLegs=maxLegs, maxTurnaround=maxTurnaround)
-        evtols_init = Construction_Heuristic2(data, candiateroutes)
+        evtols_init = Construction_Heuristic2(data, candiateroutes, maxTurnaround)
 
         assignments, scheduled = assign_passengersV2(evtols_init, data, Int.(rt))
 
