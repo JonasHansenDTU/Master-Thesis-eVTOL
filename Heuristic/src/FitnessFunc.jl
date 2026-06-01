@@ -10,6 +10,7 @@ function fitnessFunction(evtols::allPlaneSolution, assignments::Vector{Passenger
     c  = data.c
     so = data.so
     p  = data.p
+    q = data.q
     opening_cost = data.opening_cost
 
     P = FeasibilityCheck(bmax, bmid, bmin, dist, ec, battery_per_km, evtols, rt, ET, T, V, cap_v, b_penalty)
@@ -27,7 +28,7 @@ function fitnessFunction(evtols::allPlaneSolution, assignments::Vector{Passenger
         a = ass.group
         i = op[a]
         j = dp[a]
-        fitnessvalue += fd[(i, j)] * (1 - so[a]) + fs[(i, j)] * so[a]
+        fitnessvalue += fd[(i, j)] * (1 - so[a]) + fs[(i, j)] * so[a] * q[a]
     end
 
     # 2. Operating cost of all flown legs

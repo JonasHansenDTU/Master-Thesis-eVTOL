@@ -106,8 +106,8 @@ function load_data(excel_file::String, parameter_file::String)
     infra = read_sheet(excel_file, "Infrastructure")
     pax = DataFrame(
         XLSX.readtable(
-            joinpath("inputData", "LTM_demand5min - Copy.xlsx"),
-            "Sheet1"
+            joinpath("inputData", "inputDataMini.xlsx"),
+            "PassengerGroups"
         )
     )
     plane = read_sheet_any(excel_file, ["PlaneData"])
@@ -495,7 +495,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     ###########################################################################
     @objective(
         model, Max,
-        sum(d[(a,i,j)] * ss[a,n] * (fd[i,j]*(1 - so[a])+ fs[i,j]* so[a]) for a in A, i in V, j in V, n in N) -
+        sum(d[(a,i,j)] * ss[a,n] * q[a] * (fd[i,j]*(1 - so[a])+ fs[i,j]* so[a]) for a in A, i in V, j in V, n in N) -
         sum(c[(i,j)] * x[i,j,m,n] for i in V, j in V, m in M, n in N) -
         sum(p[a] * (1 - sum(ss[a,n] for n in N)) for a in A) -
         sum(opening_cost*y[n] for n in N) -
