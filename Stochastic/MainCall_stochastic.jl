@@ -34,26 +34,16 @@ include(joinpath(@__DIR__, "StochasticHeuristic.jl"))
 
 maxTurnaround = 100
 
-# ── Phase 1: deterministic initialisation ───────────────────────────────────
-MaxTime_1st = Int32(60)   # seconds per restart
-n_restarts  = 3            # independent deterministic restarts
-
-# ── Phase 2: outer stochastic search ────────────────────────────────────────
-# Each iteration tries ALL candidates within each move type.
-# With 13 scenarios × 10s each, one E[profit] evaluation ≈ 130s.
-# Each iteration may evaluate O(|addable| + |accepted|) candidates.
-# Keep n_outer_iters small (5-10) until runtime is acceptable.
-n_outer_iters      = 10
-MaxTime_2nd_search = Int32(20)  # seconds per scenario during search
-
-# ── Phase 3: final reporting pass ───────────────────────────────────────────
-MaxTime_2nd_final = Int32(60)   # longer budget for final routes
+MaxTime_1st          = Int32(5)    # just enough to get a tentative plan
+n_restarts           = 1           # single restart
+n_outer_iters        = 2           # just two iterations to verify search works
+MaxTime_2nd_search   = Int32(10)    # very short
+MaxTime_2nd_final    = Int32(5)    # short final pass
 
 # ── Heuristic steering parameters ───────────────────────────────────────────
 top_c        = 4
-price_boost  = 50.0      # higher boost → heuristic more strongly prioritises
-                          # accepted passenger OD pairs during route construction
-hard_penalty = 10_000.0  # penalty per unserved accepted passenger
+price_boost  = 100.0   # was 50 — needs to be dominant in route construction
+hard_penalty = 100_000.0  # was 10,000 — needs to massively outweigh any other consideration
 
 ###############################################################################
 # Load data and generate scenarios
