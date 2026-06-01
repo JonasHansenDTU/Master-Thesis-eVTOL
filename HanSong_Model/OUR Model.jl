@@ -106,7 +106,7 @@ function load_data(excel_file::String, parameter_file::String)
     infra = read_sheet(excel_file, "Infrastructure")
     pax = DataFrame(
         XLSX.readtable(
-            joinpath("inputData", "LTM_demand5min.xlsx"),
+            joinpath("inputData", "LTM_demand5min - Copy.xlsx"),
             "Sheet1"
         )
     )
@@ -958,8 +958,8 @@ end
 # Usage
 ###############################################################################
 
-excel_file = joinpath("inputData/inputData.xlsx")
-parameter_file = joinpath("inputData/Parameters - Copy 5 min.xlsx")
+excel_file = joinpath("inputData/inputDataMini.xlsx")
+parameter_file = joinpath("inputData/Parameters.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()
 model, data, timings = solve_instance(excel_file, parameter_file)
