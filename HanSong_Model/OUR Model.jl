@@ -104,7 +104,12 @@ function load_data(excel_file::String, parameter_file::String)
     # Read sheets
     ###########################################################################
     infra = read_sheet(excel_file, "Infrastructure")
-    pax   = read_sheet(excel_file, "PassengerGroups")
+    pax = DataFrame(
+        XLSX.readtable(
+            joinpath("inputData", "LTM_demand5min.xlsx"),
+            "Sheet1"
+        )
+    )
     plane = read_sheet_any(excel_file, ["PlaneData"])
 
     ###########################################################################
@@ -224,7 +229,7 @@ function load_data(excel_file::String, parameter_file::String)
     M2c                   = bmax + ec * ET
     M3                    = ET
 
-    M = 0:6
+    M = 0:10
     M_no0 = 1:maximum(M)
     M_mid = 1:(maximum(M)-1)
     M_no_last = 0:(maximum(M)-1)
@@ -285,22 +290,22 @@ function load_data(excel_file::String, parameter_file::String)
         drive_time_lookup[(j,i)] = drive_time_lookup[(i,j)]
     end
 
-endVP = Dict{Int, Vector{Int}}()
+    end_vp = Dict{Int, Vector{Int}}()
 
     for i in V
-        endVP[i] = Int[]
+        end_vp[i] = Int[]
         for j in V
             if j == i
-                push!(endVP[i], j)
+                push!(end_vp[i], j)
             elseif haskey(drive_time_lookup, (i,j)) && drive_time_lookup[(i,j)] <= 60.0
-                push!(endVP[i], j)
+                push!(end_vp[i], j)
             end
         end
     end
     
-    println("endVP:")
-    for i in sort(collect(keys(endVP)))
-        println("Vertiport ", i, " -> ", sort(endVP[i]))
+    println("end_vp:")
+    for i in sort(collect(keys(end_vp)))
+        println("Vertiport ", i, " -> ", sort(end_vp[i]))
     end
 
     ###########################################################################
@@ -313,7 +318,7 @@ endVP = Dict{Int, Vector{Int}}()
     e    = Dict{Tuple{Int,Int},Float64}()
     rt   = Dict{Tuple{Int,Int},Int}()
   
-    
+
     for i in V, j in V
         dij = haversine_km(lat[i], lon[i], lat[j], lon[j])
         dist[(i,j)] = dij
@@ -361,12 +366,13 @@ endVP = Dict{Int, Vector{Int}}()
         T = collect(T), T_no0 = collect(T_no0),
         bv = bv,
         lat = lat, lon = lon,
-        dist = dist, fd = fd_lookup, fs = fs, c = c, e = e, rt = rt, endVP = endVP,
+        dist = dist, fd = fd_lookup, fs = fs, c = c, e = e, rt = rt, end_vp = end_vp,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
-        cap_v = cap_v, cap_u = cap_u, opening_cost = opening_cost,
+        cap_v = cap_v, cap_u = cap_u, opening_cost = opening_cost, battery_per_km,
         bmax = bmax, bmid = bmid, b_penalty = b_penalty, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3
     )
 end
+
 
 ###############################################################################
 # Model builder
@@ -399,7 +405,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     q  = data.q
     so = data.so
     p  = data.p
-    endVP = data.endVP
+    endVP = data.end_vp
 
     cap_v        = data.cap_v
     cap_u        = data.cap_u
@@ -952,8 +958,8 @@ end
 # Usage
 ###############################################################################
 
-excel_file = joinpath("inputData/inputDataGiant.xlsx")
-parameter_file = joinpath("inputData/Parameters.xlsx")
+excel_file = joinpath("inputData/inputData.xlsx")
+parameter_file = joinpath("inputData/Parameters - Copy 5 min.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()
 model, data, timings = solve_instance(excel_file, parameter_file)
@@ -1012,7 +1018,7 @@ function print_results_pretty(model::Model, data)
     p = data.p
     d = data.d
     dist = data.dist
-    endVP = data.endVP
+    endVP = data.end_vp
 
     section("SETS")
     println("Vertices (V): ", V)
