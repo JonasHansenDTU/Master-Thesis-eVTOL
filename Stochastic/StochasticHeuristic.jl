@@ -297,6 +297,7 @@ function make_second_stage_data(sc_data, fsd::FirstStageDecision;
         new_fs[(i,j)] = new_fs[(i,j)] * price_boost
     end
 
+<<<<<<< HEAD
     # Set p[a] = hard_penalty for accepted passengers so the heuristic
     # is strongly penalised for missing them.
     # Set p[a] = 0 for non-accepted passengers — they carry no penalty
@@ -313,6 +314,13 @@ function make_second_stage_data(sc_data, fsd::FirstStageDecision;
         else
             new_p[a] = 0.0
         end
+=======
+    # Full passenger set: heuristic can serve anyone, but accepted passengers
+    # carry hard_penalty if unserved so they are always prioritised.
+    new_p = copy(sc_data.p)
+    for a in fsd.accepted_passengers
+        new_p[a] = hard_penalty
+>>>>>>> 5dc14e8 (stochastic)
     end
 
     # IMPORTANT: Construction_Heuristic2 uses eVTOL IDs directly as array indices
@@ -327,7 +335,11 @@ function make_second_stage_data(sc_data, fsd::FirstStageDecision;
         plane          = sc_data.plane,
         V              = sc_data.V,
         A              = sc_data.A,
+<<<<<<< HEAD
         N              = sc_data.N,  # must be full fleet — see comment above
+=======
+        N              = sc_data.N,
+>>>>>>> 5dc14e8 (stochastic)
         M              = sc_data.M,
         M_no0          = sc_data.M_no0,
         M_mid          = sc_data.M_mid,
@@ -846,6 +858,7 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
         best_candidate_obj = current_obj
         best_candidate_fsd = nothing
 
+<<<<<<< HEAD
         # Cap how many candidates are tried per move type to control runtime.
         # With 13 scenarios × MaxTime_2nd_search per evaluation, each candidate
         # costs up to 13 × MaxTime_2nd_search seconds. At 5 candidates per move
@@ -857,6 +870,15 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
 
             if move == :add
                 for a in shuffle!(collect(addable))[1:min(max_cand, length(addable))]
+=======
+        for move in moves
+            # For each move type, try ALL candidates (not just one random one)
+            # and keep the best improving one. This is the key fix — a single
+            # random pick is too noisy and misses good moves.
+
+            if move == :add
+                for a in shuffle!(collect(addable))
+>>>>>>> 5dc14e8 (stochastic)
                     c_accepted = push!(copy(current_accepted), a)
                     c_fsd = make_fsd(c_accepted, copy(current_active),
                                      data, best_tent_sol)
@@ -876,7 +898,11 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
                 end
 
             elseif move == :remove
+<<<<<<< HEAD
                 for a in shuffle!(collect(current_accepted))[1:min(max_cand, length(current_accepted))]
+=======
+                for a in shuffle!(collect(current_accepted))
+>>>>>>> 5dc14e8 (stochastic)
                     c_accepted = delete!(copy(current_accepted), a)
                     c_fsd = make_fsd(c_accepted, copy(current_active),
                                      data, best_tent_sol)
@@ -896,8 +922,14 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
                 end
 
             elseif move == :swap
+<<<<<<< HEAD
                 for a_out in shuffle!(collect(current_accepted))[1:min(max_cand, length(current_accepted))]
                     for a_in in shuffle!(collect(addable))[1:min(2, length(addable))]
+=======
+                # Try a sample of swaps to keep runtime manageable
+                for a_out in shuffle!(collect(current_accepted))
+                    for a_in in shuffle!(collect(addable))[1:min(3,length(addable))]
+>>>>>>> 5dc14e8 (stochastic)
                         c_accepted = push!(delete!(copy(current_accepted), a_out), a_in)
                         c_fsd = make_fsd(c_accepted, copy(current_active),
                                          data, best_tent_sol)
