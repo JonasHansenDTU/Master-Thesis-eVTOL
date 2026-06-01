@@ -32,46 +32,37 @@ include(joinpath(@__DIR__, "StochasticHeuristic.jl"))
 # Configuration
 ###############################################################################
 
-excel_file     = joinpath(@__DIR__, "..", "inputData", "inputData.xlsx")
-parameter_file = joinpath(@__DIR__, "..", "inputData", "Parameters.xlsx")
+maxTurnaround = 100
 
-maxTurnaround        = 100
+# ── Phase 1: deterministic initialisation ───────────────────────────────────
+MaxTime_1st = Int32(60)   # seconds per restart
+n_restarts  = 3            # independent deterministic restarts
 
-# First-stage: how long to run HeuristicSA per restart to build tentative plan
-MaxTime_1st          = Int32(30)
+# ── Phase 2: outer stochastic search ────────────────────────────────────────
+# Each iteration tries ALL candidates within each move type.
+# With 13 scenarios × 10s each, one E[profit] evaluation ≈ 130s.
+# Each iteration may evaluate O(|addable| + |accepted|) candidates.
+# Keep n_outer_iters small (5-10) until runtime is acceptable.
+n_outer_iters      = 10
+MaxTime_2nd_search = Int32(20)  # seconds per scenario during search
 
-# Second-stage search: short budget per scenario during the search loop
-# (trades solution quality for speed — keep 3-8s)
-MaxTime_2nd_search   = Int32(5)
+# ── Phase 3: final reporting pass ───────────────────────────────────────────
+MaxTime_2nd_final = Int32(60)   # longer budget for final routes
 
-# Second-stage final: longer budget for the final reporting pass
-MaxTime_2nd_final    = Int32(20)
-
-top_c                = 4
-
-# How much to boost accepted passenger fares in the second-stage heuristic
-# so the route builder naturally visits their origins/destinations first.
-# 50× means accepted passengers score 50× higher in k_BestRoutes.
-price_boost          = 10.0
-
-# Penalty per unserved accepted passenger in the second stage.
-# Should be large enough to discourage leaving them unserved,
-# but not so large it makes the objective uninformative.
-# Rule of thumb: ~5-10× the typical fare for a single passenger.
-
-# Number of independent first-stage restarts.
-# Each restart builds a different tentative plan and extracts a different
-# candidate (accepted_passengers, active_evtols) set.
-
-hard_penalty         = 50_000.0   # well below 1_000_000 but strong enough
-MaxTime_2nd_final    = Int32(30)  # more time to find feasible solutions
-n_restarts           = 3         # more first-stage candidates
+# ── Heuristic steering parameters ───────────────────────────────────────────
+top_c        = 4
+price_boost  = 50.0      # higher boost → heuristic more strongly prioritises
+                          # accepted passenger OD pairs during route construction
+hard_penalty = 10_000.0  # penalty per unserved accepted passenger
 
 ###############################################################################
 # Load data and generate scenarios
 ###############################################################################
 
 println("Loading data …")
+excel_file     = joinpath(@__DIR__, "..", "inputData", "inputData.xlsx")
+parameter_file = joinpath(@__DIR__, "..", "inputData", "Parameters.xlsx")
+
 data = load_data(excel_file, parameter_file)
 println("  Vertiports     : $(data.V)")
 println("  eVTOLs         : $(length(data.N))")
@@ -88,6 +79,9 @@ rt_s, e_s, S, pi_s = generate_scenarios(
     data.V, data.lat, data.lon, data.rt, data.e, time_per_km
 )
 
+println("\nScenarios: $(length(S))")
+println("Probabilities: $(round.(values(pi_s) |> collect, digits=4))")
+
 ###############################################################################
 # Run two-stage stochastic heuristic
 ###############################################################################
@@ -102,6 +96,7 @@ result = stochastic_heuristic(
     price_boost          = price_boost,
     hard_penalty         = hard_penalty,
     n_restarts           = n_restarts,
+    n_outer_iters        = n_outer_iters,
 )
 
 print_stochastic_result(result, data)
