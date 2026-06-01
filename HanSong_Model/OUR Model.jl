@@ -476,7 +476,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     @variable(model, arr[m in M, n in N] >= 0)
 
     # over_bmid[m,n] = amount battery level exceeds bmid after operation m
-    @variable(model, over_bmid[m in M, n in N] >= 0)
+    @variable(model, over_bmid[m in M, n in N] >= 0, Int)
 
     #charge[m,n] = battery charged for plane n in operation m
     @variable(model, charge[m in M, n in N] >= 0)
@@ -503,7 +503,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
         sum(c[(i,j)] * x[i,j,m,n] for i in V, j in V, m in M, n in N) -
         sum(p[a] * (1 - sum(ss[a,n] for n in N)) for a in A) -
         sum(opening_cost*y[n] for n in N) -
-        sum(over_bmid[m,n] for m in M, n in N) * b_penalty
+        sum(over_bmid[m,n]* b_penalty for m in M, n in N) 
     )
 
     ###########################################################################
@@ -640,12 +640,12 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
 
     # (6.23) Penalize battery above bmid
     @constraint(model, [m in M_no0, n in N], 
-        over_bmid[m,n] >= u[m,n] - bmid
+        over_bmid[m,n] >= u[m,n] + sum(e[(i,j)] * x[i,j,m,n] for i in V, j in V) - bmid
     )
 
     # (6.24a) First operation from a vertiport only reflects energy consumption
     @constraint(model, [i in V, j in V, n in N],
-        u[1,n] <= u[0,n] - e[(i,j)] * x[i,j,1,n] + (1 - x[i,j,1,n]) * M2a
+        u[1,n] <= u[0,n] - e[(i,j)] * x[i,j,1,n] 
     )
 
     # (6.24b) First operation from a vertiport only reflects energy consumption
@@ -654,22 +654,22 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     )
 
     # (6.25a) Battery update between operations
-    @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
+    @constraint(model, [i in V, j in V, m in 1:maximum(M), n in N],
         u[m,n] <= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                   charge[m,n] +
-                  (1 - x[i,j,m,n]) * M2c
+                  (1 - x[i,j,m,n]) * M2c*2
     )
 
     # (6.25b) Battery update between operations
-    @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
+    @constraint(model, [i in V, j in V, m in 1:maximum(M), n in N],
         u[m,n] >= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                  charge[m,n] -
                   (1 - x[i,j,m,n]) * M2c*2
     )
 
     # (6.26) Charging level at each operation 
-    @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
-        charge[m,n] <= ec * (arr[m,n] - arr[m-1,n] - rt[(i,j)]) +
+    @constraint(model, [i in V, j in V, m in 1:maximum(M), n in N],
+        charge[m,n] <= ec * (dep[m,n] - arr[m-1,n]) +
                   (1 - x[i,j,m,n]) * M2c
     )
 
@@ -715,8 +715,9 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     # (6.33) eVTOL is either parked or flying at each time t
     @constraint(model, [n in N, t in T],
         sum(is_p[j,n,t] for j in V) +
-        sum(is_o[i,j,m,n,t] for i in V, j in V, m in M) == 1
+        sum(is_o[i,j,m,n,t] for i in V, j in V, m in M) <= 1
     )
+
 
     # (6.34) Travel time occupancy relation
     @constraint(model, [i in V, j in V, m in M, n in N],
@@ -735,7 +736,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
 
     # (6.37) Initial parking at base vertiport
     @constraint(model, [n in N],
-        is_p[bv[n], n, 0] == 1
+        is_p[bv[n], n, 0] == y[n]
     )
 
     # (6.38) Parking state propagation
@@ -747,6 +748,13 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     # (6.39) Parking capacity at vertiports
     @constraint(model, [j in V, t in T],
         sum(is_p[j,n,t] for n in N) <= cap_v[j]
+    )
+
+    @constraint(model, [j in V, n in N, t in T],
+        is_p[j,n,t] <= sum(
+            is_o[i,k,m,n,t2]
+            for i in V, k in V, m in M, t2 in t:maximum(T)
+        )
     )
 
     return model, data
