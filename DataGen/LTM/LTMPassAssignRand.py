@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 # SETTINGS
 # =====================================================
 
-GROUPS_PER_DAY = 100
+GROUPS_PER_DAY = 10
 
 # -----------------------------------------------------
 # SIMULATION TIME
@@ -267,7 +267,7 @@ df_out["group"] = range(
 # SAVE OUTPUT
 # =====================================================
 
-output_path = "inputData/LTM_demand2.xlsx"
+output_path = "inputData/LTM_demand5min.xlsx"
 
 df_out.to_excel(
     output_path,
