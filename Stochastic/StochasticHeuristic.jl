@@ -91,10 +91,19 @@ function extract_first_stage_decision(sol::allPlaneSolution, data,
     assignments, _ = assign_passengersV2(sol, data, rt_mat)
     accepted_raw   = Set{Int}(ass.group for ass in assignments)
 
+    # active: set of eVTOL IDs (from data.N) that flew at least one leg.
+    # enumerate(sol.planes) gives (position, plane) — position maps to data.N[position].
     active = Set{Int}(
-        n for (n, plane) in enumerate(sol.planes)
-        if plane.flightLegs > 0
+        data.N[pos] for (pos, plane) in enumerate(sol.planes)
+        if pos <= length(data.N) && plane.flightLegs > 0
     )
+
+    # Robustness is evaluated against the FULL fleet, not just the currently
+    # active eVTOLs. A passenger is robust if SOME eVTOL in the fleet could
+    # serve it; the fleet-activation decision is handled separately in Phase 2.
+    # Evaluating against only the active subset creates a chicken-and-egg trap
+    # where few eVTOLs are active → few passengers pass → few eVTOLs needed.
+    fleet_for_filter = Set{Int}(data.N)
 
     if !isempty(rt_mats_all)
         accepted = Set{Int}()
@@ -110,29 +119,30 @@ function extract_first_stage_decision(sol::allPlaneSolution, data,
             for sc in keys(rt_mats_all)
                 rt_mat_sc = rt_mats_all[sc]
                 trip_rt   = rt_mat_sc[i, j]
+                te_i      = Int(round(data.te))
 
                 # Check 1: trip completes before ET
                 if data.dt[a] + trip_rt > data.ET
                     robust = false; break
                 end
 
-                # Check 2: some active eVTOL can return to one of its
-                # end vertiports after serving passenger a
-                can_return = any(
-                    data.dt[a] + trip_rt +
-                    minimum(rt_mat_sc[j, ev]
-                            for ev in data.end_vp[n];
-                            init = typemax(Int)) <= data.ET
-                    for n in active
+                # Combined check: SOME SINGLE eVTOL n must do the whole chain in
+                # this scenario — reach origin i from its base before dt[a], AND
+                # after serving (arrive at j) plus turnaround te, return to one of
+                # ITS OWN end vertiports before ET. Evaluating reach and return as
+                # one chain (rather than two independent existence checks) prevents
+                # admitting a passenger that one eVTOL can reach but only a
+                # different eVTOL could return from — which is not actually serveable.
+                # end_vp is keyed by vertiport ID, so use data.bv[n].
+                can_serve = any(
+                    (rt_mat_sc[data.bv[n], i] <= data.dt[a]) &&
+                    (data.dt[a] + trip_rt + te_i +
+                        minimum(rt_mat_sc[j, ev]
+                                for ev in data.end_vp[data.bv[n]];
+                                init = typemax(Int)) <= data.ET)
+                    for n in fleet_for_filter
                 )
-                if !can_return
-                    robust = false; break
-                end
-
-                # Check 3: some active eVTOL can reach op[a] before dt[a],
-                # with at least te minutes margin for turnaround.
-                if !any(rt_mat_sc[data.bv[n], i] + Int(round(data.te)) <= data.dt[a]
-                        for n in active)
+                if !can_serve
                     robust = false; break
                 end
             end
@@ -299,20 +309,12 @@ function make_second_stage_data(sc_data, fsd::FirstStageDecision;
 
     # Set p[a] = hard_penalty for accepted passengers so the heuristic
     # is strongly penalised for missing them.
-    # Set p[a] = 0 for non-accepted passengers — they carry no penalty
-    # if unserved. The heuristic will still serve them opportunistically
-    # because their fares contribute positively to fitness, but it will
-    # not trade off serving accepted passengers to serve non-accepted ones.
-    # This is the key fix: previously p[a]=300 for 100 non-accepted
-    # passengers created ~30,000 total pressure competing with the
-    # accepted passengers' hard_penalty pressure.
-    new_p = Dict{Int,Float64}()
-    for a in sc_data.A
-        if a in fsd.accepted_passengers
-            new_p[a] = hard_penalty
-        else
-            new_p[a] = 0.0
-        end
+    # Set p[a] = original soft penalty for non-accepted passengers so the
+    # heuristic still has incentive to serve them opportunistically.
+    # This restores the original behaviour that was working before.
+    new_p = copy(sc_data.p)
+    for a in fsd.accepted_passengers
+        new_p[a] = hard_penalty
     end
 
     # IMPORTANT: Construction_Heuristic2 uses eVTOL IDs directly as array indices
@@ -355,7 +357,7 @@ function make_second_stage_data(sc_data, fsd::FirstStageDecision;
         cap_u          = sc_data.cap_u,
         opening_cost   = sc_data.opening_cost,
         bmax           = sc_data.bmax,
-        bmid           = sc_data.bmid,
+        bmid           = sc_data.bmid,  # start at bmid (standing reserve charge)
         b_penalty      = sc_data.b_penalty,
         bmin           = sc_data.bmin,
         ec             = sc_data.ec,
@@ -392,12 +394,15 @@ function second_stage_profit(sol::allPlaneSolution, sc_data,
 
     value = 0.0
 
-    # Revenue from served passengers (true prices)
+    # Revenue from served passengers (true prices).
+    # Must multiply by q[a] (group size) to match the MIP objective:
+    #   q[a] * (fd[i,j]*(1-so[a]) + fs[i,j]*so[a])
     for ass in assignments
         a = ass.group
         i = sc_data.op[a]; j = sc_data.dp[a]
-        value += sc_data.fd[(i,j)] * (1 - sc_data.so[a]) +
-                 sc_data.fs[(i,j)] * sc_data.so[a]
+        value += sc_data.q[a] * (
+                 sc_data.fd[(i,j)] * (1 - sc_data.so[a]) +
+                 sc_data.fs[(i,j)] * sc_data.so[a])
     end
 
     # Operating cost for flown legs
@@ -408,6 +413,8 @@ function second_stage_profit(sol::allPlaneSolution, sc_data,
     end
 
     # Physical feasibility penalties (battery, completion time, vertiport cap)
+    # Start at bmid (standing reserve), cap at bmax. This matches the MIP's
+    # initial battery assumption.
     P = FeasibilityCheck(
         Float32(sc_data.bmax), Float32(sc_data.bmid), Float32(sc_data.bmin),
         sc_data.dist, Float32(sc_data.ec), Float32(sc_data.battery_per_km),
@@ -415,6 +422,25 @@ function second_stage_profit(sol::allPlaneSolution, sc_data,
         Int(round(sc_data.ET)), maximum(Int.(sc_data.T)),
         maximum(sc_data.V), sc_data.cap_v, sc_data.b_penalty
     )
+    if sum(P) > 0
+        println("    [feasibility] P = $P  " *
+                "(battery=$(P[1]), completion_time=$(P[2]), vertiport_cap=$(P[3]))")
+        if P[2] > 0
+            # Show which eVTOL exceeds ET and by how much
+            for (idx, plane) in enumerate(sol.planes)
+                tt = 0
+                for i in 1:plane.flightLegs
+                    from = Int(plane.route[i]); to = Int(plane.route[i+1])
+                    tt += Int(plane.turnaroundTime[i]) + sc_rt_mat[from, to]
+                end
+                if tt > Int(round(sc_data.ET))
+                    println("      eVTOL pos $idx: route=$(Tuple(Int.(plane.route))) " *
+                            "turnarounds=$(Int.(plane.turnaroundTime)) " *
+                            "total_time=$tt > ET=$(Int(round(sc_data.ET)))")
+                end
+            end
+        end
+    end
     value -= sum(P)
 
     # Penalty only for unserved ACCEPTED passengers
@@ -603,7 +629,7 @@ function true_det_objective(sol::allPlaneSolution, data, rt_mat::Matrix{Int})
     for ass in assignments
         a = ass.group
         i = data.op[a]; j = data.dp[a]
-        value += data.fd[(i,j)] * (1 - data.so[a]) + data.fs[(i,j)] * data.so[a]
+        value += data.q[a] * (data.fd[(i,j)] * (1 - data.so[a]) + data.fs[(i,j)] * data.so[a])
     end
     for plane in sol.planes
         for k in 1:plane.flightLegs
@@ -642,6 +668,11 @@ scenario. These are the candidates available to add to the accepted set.
 """
 function build_robust_candidates(data, active::Set{Int},
                                   rt_mats_all::Dict{Int,Matrix{Int}})
+    # Robustness is judged against the FULL fleet: a passenger is a candidate
+    # if SOME eVTOL in the fleet could serve it in every scenario. The active
+    # subset is not used here — fleet activation is a separate Phase 2 decision.
+    # (The `active` argument is retained for call-site compatibility.)
+    fleet = Set{Int}(data.N)
     candidates = Set{Int}()
     for a in data.A
         i = data.op[a]; j = data.dp[a]
@@ -652,20 +683,20 @@ function build_robust_candidates(data, active::Set{Int},
         for sc in keys(rt_mats_all)
             rt_sc   = rt_mats_all[sc]
             trip_rt = rt_sc[i, j]
+            te_i    = Int(round(data.te))
             if data.dt[a] + trip_rt > data.ET
                 robust = false; break
             end
-            can_return = any(
-                data.dt[a] + trip_rt +
-                minimum(rt_sc[j, ev] for ev in data.end_vp[n];
-                        init = typemax(Int)) <= data.ET
-                for n in active
+            # Combined single-eVTOL chain: same eVTOL must reach the origin
+            # before dt AND return to one of its own end vertiports before ET.
+            can_serve = any(
+                (rt_sc[data.bv[n], i] <= data.dt[a]) &&
+                (data.dt[a] + trip_rt + te_i +
+                    minimum(rt_sc[j, ev] for ev in data.end_vp[data.bv[n]];
+                            init = typemax(Int)) <= data.ET)
+                for n in fleet
             )
-            if !can_return
-                robust = false; break
-            end
-            if !any(rt_sc[data.bv[n], i] + Int(round(data.te)) <= data.dt[a]
-                    for n in active)
+            if !can_serve
                 robust = false; break
             end
         end

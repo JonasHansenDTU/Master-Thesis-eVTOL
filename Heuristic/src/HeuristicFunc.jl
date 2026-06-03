@@ -38,7 +38,11 @@ function score_single_plane_solution(plane::planeSolution, data, rt)
     # Get passenger assignments for this single plane route
     assignments, scheduled = assign_passengersV2(single_sol, data, Int.(rt))
     
-    # Compute the objective value directly
+    # Compute the objective value directly.
+    # include_unserved_penalty = false: this scores ONE route in isolation for
+    # pool ranking. The global unserved-passenger penalty is not attributable to
+    # a single route (it depends on the whole assembled plan), so it is excluded
+    # here and applied only when scoring the assembled fleet plan.
     fitness = fitnessFunction(
         single_sol,
         assignments,
@@ -53,7 +57,8 @@ function score_single_plane_solution(plane::planeSolution, data, rt)
         maximum(Int.(data.T)),
         maximum(data.V),
         data.cap_v,
-        data
+        data;
+        include_unserved_penalty = false
     )
     
     # Return both the fitness value and the passenger assignments
