@@ -34,11 +34,11 @@ include(joinpath(@__DIR__, "StochasticHeuristic.jl"))
 
 maxTurnaround = 100
 
-MaxTime_1st          = Int32(5)    # just enough to get a tentative plan
-n_restarts           = 1           # single restart
-n_outer_iters        = 2           # just two iterations to verify search works
-MaxTime_2nd_search   = Int32(10)    # very short
-MaxTime_2nd_final    = Int32(5)    # short final pass
+MaxTime_1st          = Int32(5)
+n_restarts           = 1
+n_outer_iters        = 2
+MaxTime_2nd_search   = Int32(3)
+MaxTime_2nd_final    = Int32(10)
 
 # ── Heuristic steering parameters ───────────────────────────────────────────
 top_c        = 4
@@ -50,7 +50,7 @@ hard_penalty = 100_000.0  # was 10,000 — needs to massively outweigh any other
 ###############################################################################
 
 println("Loading data …")
-excel_file     = joinpath(@__DIR__, "..", "inputData", "inputData.xlsx")
+excel_file     = joinpath(@__DIR__, "..", "inputData", "inputDataGiant.xlsx")
 parameter_file = joinpath(@__DIR__, "..", "inputData", "Parameters.xlsx")
 
 data = load_data(excel_file, parameter_file)
