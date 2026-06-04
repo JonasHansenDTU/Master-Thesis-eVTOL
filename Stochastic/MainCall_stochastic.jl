@@ -103,16 +103,16 @@ scenario_cache, rt_mats = build_scenario_cache(data, rt_s, e_s, S)
 # WS solves each scenario with perfect foresight and weights by probability.
 # Uses a generous deterministic budget so WS/EEV are well approximated.
 ###############################################################################
-include(joinpath(@__DIR__, "compute_vss_evpi.jl"))
+# include(joinpath(@__DIR__, "compute_vss_evpi.jl"))
 
-RP = result.expected_obj
+# RP = result.expected_obj
 
-run_vss_evpi(
-    data, rt_s, e_s, S, pi_s, scenario_cache, rt_mats, RP;
-    maxTurnaround = maxTurnaround,
-    MaxTime_det   = Int32(90),     # generous per-scenario deterministic budget
-    MaxTime_2nd   = MaxTime_2nd_final,
-    top_c         = top_c,
-    price_boost   = price_boost,
-    hard_penalty  = hard_penalty,
-)
+# run_vss_evpi(
+#     data, rt_s, e_s, S, pi_s, scenario_cache, rt_mats, RP;
+#     maxTurnaround = maxTurnaround,
+#     MaxTime_det   = Int32(90),     # generous per-scenario deterministic budget
+#     MaxTime_2nd   = MaxTime_2nd_final,
+#     top_c         = top_c,
+#     price_boost   = price_boost,
+#     hard_penalty  = hard_penalty,
+# )
