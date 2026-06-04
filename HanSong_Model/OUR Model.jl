@@ -641,12 +641,12 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
 
     # (6.24a) First operation from a vertiport only reflects energy consumption
     @constraint(model, [i in V, j in V, n in N],
-        u[1,n] <= u[0,n] - e[(i,j)] * x[i,j,1,n] 
+        u[1,n] <= u[0,n] - e[(i,j)] * x[i,j,1,n] + charge[1,n]
     )
 
     # (6.24b) First operation from a vertiport only reflects energy consumption
     @constraint(model, [i in V, j in V, n in N],
-        u[1,n] >= u[0,n] - e[(i,j)] * x[i,j,1,n] - (1 - x[i,j,1,n]) * M2b
+        u[1,n] >= u[0,n] - e[(i,j)] * x[i,j,1,n] + charge[1,n] - (1-x[i,j,1,n]) * M2c
     )
 
     # (6.25a) Battery update between operations
