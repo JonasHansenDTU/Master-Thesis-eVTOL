@@ -499,7 +499,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
         sum(c[(i,j)] * x[i,j,m,n] for i in V, j in V, m in M, n in N) -
         sum(p[a] * (1 - sum(ss[a,n] for n in N)) for a in A) -
         sum(opening_cost*y[n] for n in N) -
-        sum(over_bmid[m,n]* b_penalty for m in M, n in N) 
+        sum(over_bmid[m,n]* b_penalty for m in M, n in N)
     )
 
     ###########################################################################
@@ -639,68 +639,68 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
         over_bmid[m,n] >= u[m,n] + sum(e[(i,j)] * x[i,j,m,n] for i in V, j in V) - bmid
     )
 
-    # (6.24a) First operation from a vertiport only reflects energy consumption
-    @constraint(model, [i in V, j in V, n in N],
-        u[1,n] <= u[0,n] - e[(i,j)] * x[i,j,1,n] + charge[1,n]
-    )
+    # # (6.24a) First operation from a vertiport only reflects energy consumption
+    # @constraint(model, [i in V, j in V, n in N],
+    #     u[1,n] <= u[0,n] - e[(i,j)] * x[i,j,1,n] + charge[1,n]
+    # )
 
-    # (6.24b) First operation from a vertiport only reflects energy consumption
-    @constraint(model, [i in V, j in V, n in N],
-        u[1,n] >= u[0,n] - e[(i,j)] * x[i,j,1,n] + charge[1,n] - (1-x[i,j,1,n]) * M2c
-    )
+    # # (6.24b) First operation from a vertiport only reflects energy consumption
+    # @constraint(model, [i in V, j in V, n in N],
+    #     u[1,n] >= u[0,n] - e[(i,j)] * x[i,j,1,n] + charge[1,n] - (1-x[i,j,1,n]) * M2c
+    # )
 
-    # (6.25a) Battery update between operations
+    # (6.24a) Battery update between operations
     @constraint(model, [i in V, j in V, m in 1:maximum(M), n in N],
         u[m,n] <= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                   charge[m,n] +
                   (1 - x[i,j,m,n]) * M2c*2
     )
 
-    # (6.25b) Battery update between operations
+    # (6.24b) Battery update between operations
     @constraint(model, [i in V, j in V, m in 1:maximum(M), n in N],
         u[m,n] >= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                  charge[m,n] -
                   (1 - x[i,j,m,n]) * M2c*2
     )
 
-    # (6.26) Charging level at each operation 
+    # (6.25) Charging level at each operation 
     @constraint(model, [i in V, j in V, m in 1:maximum(M), n in N],
         charge[m,n] <= ec * (dep[m,n] - arr[m-1,n]) +
                   (1 - x[i,j,m,n]) * M2c
     )
 
-    # (6.27) Operation 0 starts at time 0
+    # (6.26) Operation 0 starts at time 0
     @constraint(model, [n in N], 
         arr[0,n] == 0
     )
 
-    # (6.28a) Arrival time lower bound
+    # (6.27a) Arrival time lower bound
     @constraint(model, [m in 2:maximum(M), n in N],
         arr[m,n] >= arr[m-1,n] + sum((te + rt[(i,j)]) * x[i,j,m,n] for i in V, j in V)
     )
 
-    # (6.28b) Arrival time lower bound
+    # (6.27b) Arrival time lower bound
     @constraint(model, [n in N],
         arr[1,n] >= sum((rt[(i,j)]) * x[i,j,1,n] for i in V, j in V)
     )
 
-    # (6.29) Departure time = arrival time - travel time
+    # (6.28) Departure time = arrival time - travel time
     @constraint(model, [m in M, n in N],
         arr[m,n] == dep[m,n] + sum(rt[(i,j)] * x[i,j,m,n] for i in V, j in V)
     )
 
-    # (6.30) Minimum layover time
+    # (6.29) Minimum layover time
     @constraint(model, [a in A, n in N, m in M_no_last],
         dep[m+1,n] <= arr[m,n] + te + (2 - s[a,m,n] - s[a,m+1,n]) * M3
     )
 
-    # (6.31) Earliest arrival time at destination
+    # (6.30) Earliest arrival time at destination
     @constraint(model, [a in A, i in V, j in V, m in M_no0, n in N],
         d[(a,i,j)] * dt[a] - (1 - (s[a,m,n] - s[a,m-1,n])) * M3 <=
         arr[m,n] - sum(rt[(i,k_node)] * x[i,k_node,m,n] for k_node in V)
     )
 
-    # (6.32) Maximum waiting time
+    # (6.31) Maximum waiting time
     @constraint(model, [a in A, m in M_no0, n in N],
         arr[m,n]
         - sum(rt[(i,j)] * x[i,j,m,n] for i in V, j in V)
@@ -708,44 +708,45 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
         - (1 - (s[a,m,n] - s[a,m-1,n])) * M3 <= w
     )
 
-    # (6.33) eVTOL is either parked or flying at each time t
+    # (6.32) eVTOL is either parked or flying at each time t
     @constraint(model, [n in N, t in T],
         sum(is_p[j,n,t] for j in V) +
         sum(is_o[i,j,m,n,t] for i in V, j in V, m in M) <= 1
     )
 
 
-    # (6.34) Travel time occupancy relation
+    # (6.33) Travel time occupancy relation
     @constraint(model, [i in V, j in V, m in M, n in N],
         rt[(i,j)] * x[i,j,m,n] == sum(is_o[i,j,m,n,t] for t in T)
     )
 
-    # (6.35) Departure time bound from occupancy
+    # (6.34) Departure time bound from occupancy
     @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
         dep[m,n] <= t + M3 * (1 - is_o[i,j,m,n,t]) - 1
     )
 
-    # (6.36) Arrival time bound from occupancy
+    # (6.35) Arrival time bound from occupancy
     @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
         arr[m,n] >= t - M3 * (1 - is_o[i,j,m,n,t])
     )
 
-    # (6.37) Initial parking at base vertiport
+    # (6.36) Initial parking at base vertiport
     @constraint(model, [n in N],
         is_p[bv[n], n, 0] == y[n]
     )
 
-    # (6.38) Parking state propagation
+    # (6.37) Parking state propagation
     @constraint(model, [j in V, n in N, t in T_no0],
         is_p[j,n,t] <= is_p[j,n,t-1] +
                        sum(is_o[i,j,m,n,t-1] for i in V, m in M)
     )
 
-    # (6.39) Parking capacity at vertiports
+    # (6.38) Parking capacity at vertiports
     @constraint(model, [j in V, t in T],
         sum(is_p[j,n,t] for n in N) <= cap_v[j]
     )
 
+    
     @constraint(model, [j in V, n in N, t in T],
         is_p[j,n,t] <= sum(
             is_o[i,k,m,n,t2]
@@ -1384,4 +1385,4 @@ t_pretty = @elapsed Base.invokelatest(print_results_maincall_style, model, data)
 timings["MainCall-style printing"] = t_pretty
 timings["Total script"] = time() - total_start
 
-print_timing_summary(timings)
+print_tim

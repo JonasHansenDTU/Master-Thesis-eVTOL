@@ -63,7 +63,11 @@ scenario cache entries. Returns (mean_sc_data, mean_rt_mat).
 function make_mean_scenario(data, rt_s, e_s, S, pi_s)
     rt_aug = Dict{Tuple{Int,Int,Int},Float64}()
     e_aug  = Dict{Tuple{Int,Int,Int},Float64}()
+    # rt_s / e_s only contain off-diagonal (i != j) keys — make_scenario_data
+    # handles the i == j diagonal itself. Mirror that here: only average the
+    # off-diagonal pairs, otherwise rt_s[(sc,i,i)] is a missing key.
     for i in data.V, j in data.V
+        i == j && continue
         rt_avg = 0.0; e_avg = 0.0
         for sc in S
             rt_avg += pi_s[sc] * rt_s[(sc,i,j)]
