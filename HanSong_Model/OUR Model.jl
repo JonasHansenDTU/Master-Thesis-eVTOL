@@ -1385,4 +1385,4 @@ t_pretty = @elapsed Base.invokelatest(print_results_maincall_style, model, data)
 timings["MainCall-style printing"] = t_pretty
 timings["Total script"] = time() - total_start
 
-print_tim
+print_timing_summary(timings)
