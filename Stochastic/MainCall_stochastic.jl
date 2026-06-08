@@ -34,33 +34,21 @@ include(joinpath(@__DIR__, "StochasticHeuristic.jl"))
 
 maxTurnaround = 100
 
-# ── Phase 1: deterministic initialisation ───────────────────────────────────
-MaxTime_1st = Int32(60)   # seconds per restart
-n_restarts  = 3            # independent deterministic restarts
-
-# ── Phase 2: outer stochastic search ────────────────────────────────────────
-# Each iteration tries ALL candidates within each move type.
-# With 13 scenarios × 10s each, one E[profit] evaluation ≈ 130s.
-# Each iteration may evaluate O(|addable| + |accepted|) candidates.
-# Keep n_outer_iters small (5-10) until runtime is acceptable.
-n_outer_iters      = 10
-MaxTime_2nd_search = Int32(20)  # seconds per scenario during search
-
-# ── Phase 3: final reporting pass ───────────────────────────────────────────
-MaxTime_2nd_final = Int32(60)   # longer budget for final routes
-
-# ── Heuristic steering parameters ───────────────────────────────────────────
-top_c        = 4
-price_boost  = 50.0      # higher boost → heuristic more strongly prioritises
-                          # accepted passenger OD pairs during route construction
-hard_penalty = 10_000.0  # penalty per unserved accepted passenger
+MaxTime_1st        = Int32(90)   # MUST be enough to find the rich deterministic seed
+n_restarts         = 2            # take the better of two seeds
+n_outer_iters      = 4            # Phase 2 prunes/refines the seed
+MaxTime_2nd_search = Int32(8)     # recourse quality during search
+MaxTime_2nd_final  = Int32(30)    # final high-quality recourse pass
+price_boost        = 10.0
+hard_penalty       = 50_000.0
+top_c              = 4            # top routes per base vertiport considered by constructor
 
 ###############################################################################
 # Load data and generate scenarios
 ###############################################################################
 
 println("Loading data …")
-excel_file     = joinpath(@__DIR__, "..", "inputData", "inputData.xlsx")
+excel_file     = joinpath(@__DIR__, "..", "inputData", "inputDataGiant.xlsx")
 parameter_file = joinpath(@__DIR__, "..", "inputData", "Parameters.xlsx")
 
 data = load_data(excel_file, parameter_file)
@@ -100,3 +88,31 @@ result = stochastic_heuristic(
 )
 
 print_stochastic_result(result, data)
+
+###############################################################################
+# Build the scenario cache (needed by the VSS/EVPI analysis). This mirrors what
+# stochastic_heuristic builds internally.
+###############################################################################
+scenario_cache, rt_mats = build_scenario_cache(data, rt_s, e_s, S)
+
+###############################################################################
+# Stochastic-programming measures: VSS and EVPI
+#
+# RP is the stochastic solution's E[profit] (result.expected_obj).
+# EEV solves the mean scenario, fixes that decision, evaluates across scenarios.
+# WS solves each scenario with perfect foresight and weights by probability.
+# Uses a generous deterministic budget so WS/EEV are well approximated.
+###############################################################################
+# include(joinpath(@__DIR__, "compute_vss_evpi.jl"))
+
+# RP = result.expected_obj
+
+# run_vss_evpi(
+#     data, rt_s, e_s, S, pi_s, scenario_cache, rt_mats, RP;
+#     maxTurnaround = maxTurnaround,
+#     MaxTime_det   = Int32(90),     # generous per-scenario deterministic budget
+#     MaxTime_2nd   = MaxTime_2nd_final,
+#     top_c         = top_c,
+#     price_boost   = price_boost,
+#     hard_penalty  = hard_penalty,
+# )

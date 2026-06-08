@@ -91,10 +91,19 @@ function extract_first_stage_decision(sol::allPlaneSolution, data,
     assignments, _ = assign_passengersV2(sol, data, rt_mat)
     accepted_raw   = Set{Int}(ass.group for ass in assignments)
 
+    # active: set of eVTOL IDs (from data.N) that flew at least one leg.
+    # enumerate(sol.planes) gives (position, plane) — position maps to data.N[position].
     active = Set{Int}(
-        n for (n, plane) in enumerate(sol.planes)
-        if plane.flightLegs > 0
+        data.N[pos] for (pos, plane) in enumerate(sol.planes)
+        if pos <= length(data.N) && plane.flightLegs > 0
     )
+
+    # Robustness is evaluated against the FULL fleet, not just the currently
+    # active eVTOLs. A passenger is robust if SOME eVTOL in the fleet could
+    # serve it; the fleet-activation decision is handled separately in Phase 2.
+    # Evaluating against only the active subset creates a chicken-and-egg trap
+    # where few eVTOLs are active → few passengers pass → few eVTOLs needed.
+    fleet_for_filter = Set{Int}(data.N)
 
     if !isempty(rt_mats_all)
         accepted = Set{Int}()
@@ -110,29 +119,33 @@ function extract_first_stage_decision(sol::allPlaneSolution, data,
             for sc in keys(rt_mats_all)
                 rt_mat_sc = rt_mats_all[sc]
                 trip_rt   = rt_mat_sc[i, j]
+                te_i      = Int(round(data.te))
+                # Per-scenario operating window: severe weather relaxes ET, so
+                # the filter is correspondingly less strict for those scenarios.
+                _, ET_sc  = scenario_slack(data, sc)
 
-                # Check 1: trip completes before ET
-                if data.dt[a] + trip_rt > data.ET
+                # Check 1: trip completes before this scenario's ET
+                if data.dt[a] + trip_rt > ET_sc
                     robust = false; break
                 end
 
-                # Check 2: some active eVTOL can return to one of its
-                # end vertiports after serving passenger a
-                can_return = any(
-                    data.dt[a] + trip_rt +
-                    minimum(rt_mat_sc[j, ev]
-                            for ev in data.end_vp[n];
-                            init = typemax(Int)) <= data.ET
-                    for n in active
+                # Combined check: SOME SINGLE eVTOL n must do the whole chain in
+                # this scenario — reach origin i from its base before dt[a], AND
+                # after serving (arrive at j) plus turnaround te, return to one of
+                # ITS OWN end vertiports before this scenario's ET. Evaluating
+                # reach and return as one chain (rather than two independent
+                # existence checks) prevents admitting a passenger that one eVTOL
+                # can reach but only a different eVTOL could return from.
+                # end_vp is keyed by vertiport ID, so use data.bv[n].
+                can_serve = any(
+                    (rt_mat_sc[data.bv[n], i] <= data.dt[a]) &&
+                    (data.dt[a] + trip_rt + te_i +
+                        minimum(rt_mat_sc[j, ev]
+                                for ev in data.end_vp[data.bv[n]];
+                                init = typemax(Int)) <= ET_sc)
+                    for n in fleet_for_filter
                 )
-                if !can_return
-                    robust = false; break
-                end
-
-                # Check 3: some active eVTOL can reach op[a] before dt[a],
-                # with at least te minutes margin for turnaround.
-                if !any(rt_mat_sc[data.bv[n], i] + Int(round(data.te)) <= data.dt[a]
-                        for n in active)
+                if !can_serve
                     robust = false; break
                 end
             end
@@ -153,6 +166,27 @@ end
 # Scenario-specific data object
 ###############################################################################
 
+# Weather-dependent schedule slack. A scenario is "severe" if it has strong wind
+# OR is very cold; severe scenarios get a single flat allowance (no stacking):
+#   +10 min passenger waiting tolerance (w), +30 min operating window (ET).
+# Returns (w_sc, ET_sc). The synthetic mean scenario (sc=0) and any out-of-range
+# index keep baseline values.
+function scenario_slack(data, sc::Int)
+    w_sc  = Float64(data.w)
+    ET_sc = Float64(data.ET)
+    if sc >= 1 && sc <= length(SCENARIOS)
+        scen        = SCENARIOS[sc]
+        wind_speed  = sqrt(scen.wx^2 + scen.wy^2)
+        strong_wind = wind_speed >= 45.0
+        very_cold   = scen.phi >= 1.35
+        if strong_wind || very_cold
+            w_sc  += 10.0
+            ET_sc += 30.0
+        end
+    end
+    return w_sc, ET_sc
+end
+
 function make_scenario_data(data, sc::Int, rt_s, e_s)
     sc_rt   = Dict{Tuple{Int,Int}, Int}()
     sc_e    = Dict{Tuple{Int,Int}, Float64}()
@@ -169,6 +203,11 @@ function make_scenario_data(data, sc::Int, rt_s, e_s)
             sc_dist[(i,j)] = e_s[(sc,i,j)] / data.battery_per_km
         end
     end
+
+    # ─── Weather-dependent slack on waiting time (w) and operating window (ET) ──
+    # See scenario_slack: severe scenarios (strong wind OR very cold) get a flat
+    # +10 min on w and +30 min on ET; everything else keeps baseline.
+    w_sc, ET_sc = scenario_slack(data, sc)
 
     return (
         infra          = data.infra,
@@ -209,8 +248,8 @@ function make_scenario_data(data, sc::Int, rt_s, e_s)
         bmin           = data.bmin,
         ec             = data.ec,
         te             = data.te,
-        w              = data.w,
-        ET             = data.ET,
+        w              = w_sc,
+        ET             = ET_sc,
         M1             = data.M1,
         M2a            = data.M2a,
         M2b            = data.M2b,
@@ -297,12 +336,21 @@ function make_second_stage_data(sc_data, fsd::FirstStageDecision;
         new_fs[(i,j)] = new_fs[(i,j)] * price_boost
     end
 
-    # Full passenger set: heuristic can serve anyone, but accepted passengers
-    # carry hard_penalty if unserved so they are always prioritised.
+    # Set p[a] = hard_penalty for accepted passengers so the heuristic
+    # is strongly penalised for missing them.
+    # Set p[a] = original soft penalty for non-accepted passengers so the
+    # heuristic still has incentive to serve them opportunistically.
+    # This restores the original behaviour that was working before.
     new_p = copy(sc_data.p)
     for a in fsd.accepted_passengers
         new_p[a] = hard_penalty
     end
+
+    # IMPORTANT: Construction_Heuristic2 uses eVTOL IDs directly as array indices
+    # (planes[n] = ...) so N must always be the full fleet [1,2,3,4].
+    # We cannot pass a subset like [3,4] because planes[3] would be out of bounds.
+    # Non-committed eVTOLs are naturally discouraged because only committed eVTOLs
+    # have their OD pairs fare-boosted, making them the most profitable to serve.
 
     return (
         infra          = sc_data.infra,
@@ -310,7 +358,7 @@ function make_second_stage_data(sc_data, fsd::FirstStageDecision;
         plane          = sc_data.plane,
         V              = sc_data.V,
         A              = sc_data.A,
-        N              = sc_data.N,
+        N              = sc_data.N,  # must be full fleet — see comment above
         M              = sc_data.M,
         M_no0          = sc_data.M_no0,
         M_mid          = sc_data.M_mid,
@@ -338,7 +386,7 @@ function make_second_stage_data(sc_data, fsd::FirstStageDecision;
         cap_u          = sc_data.cap_u,
         opening_cost   = sc_data.opening_cost,
         bmax           = sc_data.bmax,
-        bmid           = sc_data.bmid,
+        bmid           = sc_data.bmid,  # start at bmid (standing reserve charge)
         b_penalty      = sc_data.b_penalty,
         bmin           = sc_data.bmin,
         ec             = sc_data.ec,
@@ -375,12 +423,15 @@ function second_stage_profit(sol::allPlaneSolution, sc_data,
 
     value = 0.0
 
-    # Revenue from served passengers (true prices)
+    # Revenue from served passengers (true prices).
+    # Must multiply by q[a] (group size) to match the MIP objective:
+    #   q[a] * (fd[i,j]*(1-so[a]) + fs[i,j]*so[a])
     for ass in assignments
         a = ass.group
         i = sc_data.op[a]; j = sc_data.dp[a]
-        value += sc_data.fd[(i,j)] * (1 - sc_data.so[a]) +
-                 sc_data.fs[(i,j)] * sc_data.so[a]
+        value += sc_data.q[a] * (
+                 sc_data.fd[(i,j)] * (1 - sc_data.so[a]) +
+                 sc_data.fs[(i,j)] * sc_data.so[a])
     end
 
     # Operating cost for flown legs
@@ -391,6 +442,8 @@ function second_stage_profit(sol::allPlaneSolution, sc_data,
     end
 
     # Physical feasibility penalties (battery, completion time, vertiport cap)
+    # Start at bmid (standing reserve), cap at bmax. This matches the MIP's
+    # initial battery assumption.
     P = FeasibilityCheck(
         Float32(sc_data.bmax), Float32(sc_data.bmid), Float32(sc_data.bmin),
         sc_data.dist, Float32(sc_data.ec), Float32(sc_data.battery_per_km),
@@ -398,6 +451,25 @@ function second_stage_profit(sol::allPlaneSolution, sc_data,
         Int(round(sc_data.ET)), maximum(Int.(sc_data.T)),
         maximum(sc_data.V), sc_data.cap_v, sc_data.b_penalty
     )
+    if sum(P) > 0
+        println("    [feasibility] P = $P  " *
+                "(battery=$(P[1]), completion_time=$(P[2]), vertiport_cap=$(P[3]))")
+        if P[2] > 0
+            # Show which eVTOL exceeds ET and by how much
+            for (idx, plane) in enumerate(sol.planes)
+                tt = 0
+                for i in 1:plane.flightLegs
+                    from = Int(plane.route[i]); to = Int(plane.route[i+1])
+                    tt += Int(plane.turnaroundTime[i]) + sc_rt_mat[from, to]
+                end
+                if tt > Int(round(sc_data.ET))
+                    println("      eVTOL pos $idx: route=$(Tuple(Int.(plane.route))) " *
+                            "turnarounds=$(Int.(plane.turnaroundTime)) " *
+                            "total_time=$tt > ET=$(Int(round(sc_data.ET)))")
+                end
+            end
+        end
+    end
     value -= sum(P)
 
     # Penalty only for unserved ACCEPTED passengers
@@ -586,7 +658,7 @@ function true_det_objective(sol::allPlaneSolution, data, rt_mat::Matrix{Int})
     for ass in assignments
         a = ass.group
         i = data.op[a]; j = data.dp[a]
-        value += data.fd[(i,j)] * (1 - data.so[a]) + data.fs[(i,j)] * data.so[a]
+        value += data.q[a] * (data.fd[(i,j)] * (1 - data.so[a]) + data.fs[(i,j)] * data.so[a])
     end
     for plane in sol.planes
         for k in 1:plane.flightLegs
@@ -625,6 +697,11 @@ scenario. These are the candidates available to add to the accepted set.
 """
 function build_robust_candidates(data, active::Set{Int},
                                   rt_mats_all::Dict{Int,Matrix{Int}})
+    # Robustness is judged against the FULL fleet: a passenger is a candidate
+    # if SOME eVTOL in the fleet could serve it in every scenario. The active
+    # subset is not used here — fleet activation is a separate Phase 2 decision.
+    # (The `active` argument is retained for call-site compatibility.)
+    fleet = Set{Int}(data.N)
     candidates = Set{Int}()
     for a in data.A
         i = data.op[a]; j = data.dp[a]
@@ -635,20 +712,21 @@ function build_robust_candidates(data, active::Set{Int},
         for sc in keys(rt_mats_all)
             rt_sc   = rt_mats_all[sc]
             trip_rt = rt_sc[i, j]
-            if data.dt[a] + trip_rt > data.ET
+            te_i    = Int(round(data.te))
+            _, ET_sc = scenario_slack(data, sc)   # severe weather relaxes ET
+            if data.dt[a] + trip_rt > ET_sc
                 robust = false; break
             end
-            can_return = any(
-                data.dt[a] + trip_rt +
-                minimum(rt_sc[j, ev] for ev in data.end_vp[n];
-                        init = typemax(Int)) <= data.ET
-                for n in active
+            # Combined single-eVTOL chain: same eVTOL must reach the origin
+            # before dt AND return to one of its own end vertiports before ET.
+            can_serve = any(
+                (rt_sc[data.bv[n], i] <= data.dt[a]) &&
+                (data.dt[a] + trip_rt + te_i +
+                    minimum(rt_sc[j, ev] for ev in data.end_vp[data.bv[n]];
+                            init = typemax(Int)) <= ET_sc)
+                for n in fleet
             )
-            if !can_return
-                robust = false; break
-            end
-            if !any(rt_sc[data.bv[n], i] + Int(round(data.te)) <= data.dt[a]
-                    for n in active)
+            if !can_serve
                 robust = false; break
             end
         end
@@ -829,13 +907,17 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
         best_candidate_obj = current_obj
         best_candidate_fsd = nothing
 
+        # Cap how many candidates are tried per move type to control runtime.
+        # With 13 scenarios × MaxTime_2nd_search per evaluation, each candidate
+        # costs up to 13 × MaxTime_2nd_search seconds. At 5 candidates per move
+        # type and 5 move types, one iteration costs at most:
+        # 5 × 5 × 13 × MaxTime_2nd_search seconds.
+        max_cand = 5
+
         for move in moves
-            # For each move type, try ALL candidates (not just one random one)
-            # and keep the best improving one. This is the key fix — a single
-            # random pick is too noisy and misses good moves.
 
             if move == :add
-                for a in shuffle!(collect(addable))
+                for a in shuffle!(collect(addable))[1:min(max_cand, length(addable))]
                     c_accepted = push!(copy(current_accepted), a)
                     c_fsd = make_fsd(c_accepted, copy(current_active),
                                      data, best_tent_sol)
@@ -855,7 +937,7 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
                 end
 
             elseif move == :remove
-                for a in shuffle!(collect(current_accepted))
+                for a in shuffle!(collect(current_accepted))[1:min(max_cand, length(current_accepted))]
                     c_accepted = delete!(copy(current_accepted), a)
                     c_fsd = make_fsd(c_accepted, copy(current_active),
                                      data, best_tent_sol)
@@ -875,9 +957,8 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
                 end
 
             elseif move == :swap
-                # Try a sample of swaps to keep runtime manageable
-                for a_out in shuffle!(collect(current_accepted))
-                    for a_in in shuffle!(collect(addable))[1:min(3,length(addable))]
+                for a_out in shuffle!(collect(current_accepted))[1:min(max_cand, length(current_accepted))]
+                    for a_in in shuffle!(collect(addable))[1:min(2, length(addable))]
                         c_accepted = push!(delete!(copy(current_accepted), a_out), a_in)
                         c_fsd = make_fsd(c_accepted, copy(current_active),
                                          data, best_tent_sol)
@@ -1083,11 +1164,99 @@ function print_stochastic_result(result, data)
         println("  WARNING: $total_unserved unserved accepted passengers across scenarios.")
     end
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Weather slack actually in effect per scenario: shows baseline vs relaxed
+    # waiting time (w) and operating window (ET). Severe scenarios (strong wind
+    # OR very cold) receive +10 w and +30 ET.
+    # ─────────────────────────────────────────────────────────────────────────
+    println("\n" * "="^72)
+    println("WEATHER SLACK IN EFFECT (waiting time w, operating window ET)")
+    println("="^72)
+    println(@sprintf("  %-4s  %-18s  %6s  %6s  %s",
+            "sc", "label", "w", "ET", "relaxed?"))
+    println("  " * "-"^60)
+    base_w  = Float64(data.w)
+    base_ET = Float64(data.ET)
+    for sc in sort(collect(keys(result.scenario_results)))
+        scen        = SCENARIOS[sc]
+        w_sc, ET_sc = scenario_slack(data, sc)
+        relaxed     = (w_sc > base_w) || (ET_sc > base_ET)
+        flag        = relaxed ? "yes (severe)" : "—"
+        println(@sprintf("  %-4d  %-18s  %6.0f  %6.0f  %s",
+                sc, scen.label, w_sc, ET_sc, flag))
+    end
+    println("  " * "-"^60)
+    println(@sprintf("  Baseline: w = %.0f, ET = %.0f   |   Severe: w = %.0f, ET = %.0f",
+            base_w, base_ET, base_w + 10, base_ET + 30))
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Per-scenario passenger service breakdown:
+    #   committed = first-stage accepted groups that were served this scenario
+    #   extra     = additional groups served opportunistically as recourse
+    # ─────────────────────────────────────────────────────────────────────────
+    println("\n" * "="^72)
+    println("SECOND-STAGE PASSENGER SERVICE (committed vs opportunistic)")
+    println("="^72)
+    println(@sprintf("  %-4s  %-18s  %8s  %9s  %s",
+            "sc", "label", "committed", "extra", "extra groups served"))
+    println("  " * "-"^76)
+    accepted = result.accepted_passengers
+    total_extra = 0
+    for sc in sort(collect(keys(result.scenario_results)))
+        scen = SCENARIOS[sc]
+        r    = result.scenario_results[sc]
+        served = Set(ass.group for ass in r.assignments)
+        committed_served = sort([a for a in accepted if a in served])
+        extra_served     = sort([a for a in served if !(a in accepted)])
+        total_extra += length(extra_served)
+        extra_str = isempty(extra_served) ? "—" : join(extra_served, ", ")
+        println(@sprintf("  %-4d  %-18s  %9d  %9d  [%s]",
+                sc, scen.label, length(committed_served),
+                length(extra_served), extra_str))
+    end
+    avg_extra = total_extra / length(result.scenario_results)
+    println("  " * "-"^76)
+    println(@sprintf("  Mean opportunistic (extra) groups served per scenario: %.2f", avg_extra))
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Key performance indicators
+    # ─────────────────────────────────────────────────────────────────────────
+    profits = [result.scenario_results[sc].profit
+               for sc in sort(collect(keys(result.scenario_results)))]
+    probs   = [result.pi_s[sc]
+               for sc in sort(collect(keys(result.scenario_results)))]
+    exp_ss  = sum(p*v for (p,v) in zip(probs, profits))
+    # probability-weighted variance / std of second-stage profit
+    var_ss  = sum(p*(v - exp_ss)^2 for (p,v) in zip(probs, profits))
+    std_ss  = sqrt(max(0.0, var_ss))
+    min_profit = minimum(profits)
+    max_profit = maximum(profits)
+    n_negative = count(<(0), profits)
+
+    # mean served per scenario (committed + extra)
+    mean_served = sum(probs[k] * length(Set(ass.group for ass in
+                      result.scenario_results[sc].assignments))
+                      for (k, sc) in enumerate(sort(collect(keys(result.scenario_results)))))
+
+    println("\n" * "="^72)
+    println("KEY PERFORMANCE INDICATORS")
+    println("="^72)
+    @printf("  E[total profit]            (RP)        : %+12.2f\n", result.expected_obj)
+    @printf("  E[second-stage profit]                 : %+12.2f\n", exp_ss)
+    @printf("  First-stage (opening) cost             : %12.2f\n", result.first_stage_cost)
+    @printf("  Std-dev of 2nd-stage profit            : %12.2f\n", std_ss)
+    @printf("  Min / Max scenario profit              : %+10.2f / %+.2f\n", min_profit, max_profit)
+    @printf("  Scenarios with negative profit         : %12d / %d\n", n_negative, length(profits))
+    @printf("  Committed (first-stage) passengers     : %12d\n", length(result.accepted_passengers))
+    @printf("  Active eVTOLs                          : %12d\n", length(result.active_evtols))
+    @printf("  Mean passenger groups served / scenario: %12.2f\n", mean_served)
+    @printf("  Mean opportunistic groups / scenario   : %12.2f\n", avg_extra)
+    println("="^72)
+
     println("\n" * "="^72)
     println("FINAL SUMMARY")
     println("="^72)
     @printf("  First-stage cost (opening)     = %+.2f\n", -result.first_stage_cost)
-    exp_ss = result.expected_obj + result.first_stage_cost
     @printf("  E[second-stage profit]         = %+.2f\n", exp_ss)
     @printf("  E[total profit]  (E[profit])   = %+.2f\n", result.expected_obj)
     println("="^72)

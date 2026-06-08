@@ -42,12 +42,13 @@ function FeasibleBattery(evtols::allPlaneSolution, bmax::Float32, bmid::Float32,
             TravelLength = Float32(dist[(from, to)])
 
             BatteryLevel[i + 1] =
-                min(BatteryLevel[i] +
-                min(min(BatteryCharged(Float16(evtol.turnaroundTime[i]), ec), bmax - BatteryLevel[i]), BatteryNeeded(TravelLength, battery_per_km)) -
-                BatteryNeeded(TravelLength, battery_per_km), bmax)
+                min(BatteryLevel[i] + 
+                min(min(BatteryCharged(Float16(evtol.turnaroundTime[i]), ec), bmax - BatteryLevel[i]), BatteryNeeded(TravelLength, battery_per_km)) 
+                - BatteryNeeded(TravelLength, battery_per_km), 
+                bmax)
 
-            if BatteryLevel[i+1] > 80
-                for i in bmid+1:BatteryLevel[i+1]
+            if BatteryLevel[i+1] + BatteryNeeded(TravelLength, battery_per_km) > bmid
+                for j in bmid+1:(BatteryLevel[i+1]+ BatteryNeeded(TravelLength, battery_per_km))
                     battery_overrule += b_penalty
                 end
             end
@@ -83,7 +84,11 @@ function FeasibleCompletionTime(evtols::allPlaneSolution, rt::Matrix{Int}, ET::I
 end
 
 function FeasibleVertiportCapacity(evtols::allPlaneSolution, rt::Matrix{Int}, T::Int, V::Int, cap_v::Dict{Int64, Int64}, ET::Int)
-    parkingTimes = zeros(Int, V, T)
+    # The parking-occupancy loop indexes time up to ET. When ET is relaxed in
+    # severe-weather scenarios it can exceed T, so size the matrix to the larger
+    # of the two to avoid a bounds error.
+    ncols = max(T, ET)
+    parkingTimes = zeros(Int, V, ncols)
 
     for evtol in evtols.planes
         travelTime = 0

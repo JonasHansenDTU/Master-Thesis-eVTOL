@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 # SETTINGS
 # =====================================================
 
-GROUPS_PER_DAY = 10
+GROUPS_PER_DAY = 40
 
 # -----------------------------------------------------
 # SIMULATION TIME
@@ -282,26 +282,26 @@ print(f"Saved to: {output_path}")
 
 # Convert simulation time back to clock time
 # because 0 = 07:00
-hours = (df_out["time"] + 420) / 60
+# hours = (df_out["time"] + 420) / 60
 
-plt.figure(figsize=(10, 5))
+# plt.figure(figsize=(10, 5))
 
-plt.hist(hours, bins=20)
+# plt.hist(hours, bins=20)
 
-plt.xlabel("Time of Day")
-plt.ylabel("Number of Passenger Groups")
+# plt.xlabel("Time of Day")
+# plt.ylabel("Number of Passenger Groups")
 
-plt.title(
-    "Synthetic eVTOL Demand Throughout the Day"
-)
+# plt.title(
+#     "Synthetic eVTOL Demand Throughout the Day"
+# )
 
-# Show proper clock hours
-plt.xticks(
-    [7,8,9,10,11,12,13,14,15,16,17,18,19,20]
-)
+# # Show proper clock hours
+# plt.xticks(
+#     [7,8,9,10,11,12,13,14,15,16,17,18,19,20]
+# )
 
-# Visual reference for lunch hours
-plt.axvline(12, linestyle="--")
-plt.axvline(14, linestyle="--")
+# # Visual reference for lunch hours
+# plt.axvline(12, linestyle="--")
+# plt.axvline(14, linestyle="--")
 
-plt.show()
+# plt.show()
