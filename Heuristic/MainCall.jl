@@ -14,6 +14,7 @@ source_files = [
     "FeasibilityFunc.jl",
     "InitialSolFunc.jl",
     "PassAssignFunc.jl",
+    "KPIFunc.jl",
     "FitnessFunc.jl",
     "NeighborhoodFunc.jl",
     "SANeighborhood.jl",

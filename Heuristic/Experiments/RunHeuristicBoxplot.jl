@@ -11,12 +11,13 @@ using PyCall
 
 const MOI = MathOptInterface
 
-src_dir = joinpath(@__DIR__, "src")
+src_dir = joinpath(@__DIR__, "..", "src")
 source_files = [
     "DataLoadFunc.jl",
     "FeasibilityFunc.jl",
     "InitialSolFunc.jl",
     "PassAssignFunc.jl",
+    "KPIFunc.jl",
     "FitnessFunc.jl",
     "NeighborhoodFunc.jl",
     "SANeighborhood.jl",
@@ -28,8 +29,9 @@ for file in source_files
 end
 
 function load_heuristic_data()
-    excel_file = joinpath(@__DIR__, "..", "inputData", "inputDataGiant.xlsx")
-    parameter_file = joinpath(@__DIR__, "..", "inputData", "Parameters.xlsx")
+    run(`python c:/Users/Kapta/Documents/DTU/Speciale/GitHubFiles/DataGen/LTM/LTMPassAssignRand.py`)
+    excel_file = joinpath(@__DIR__, "..", "..", "inputData", "inputDataGiant.xlsx")
+    parameter_file = joinpath(@__DIR__, "..", "..",  "inputData", "Parameters.xlsx")
     data = load_data(excel_file, parameter_file)
 
     vmax = maximum(data.V)
@@ -41,8 +43,31 @@ function load_heuristic_data()
     return data, rt
 end
 
-function run_heuristic_batch(n_runs::Int; max_turnaround::Int64, maxtime::Int32, data, rt, top_c::Int, seed::Union{Nothing, Int}=nothing)
+function load_turnaround_period()
+    parameter_file = joinpath(@__DIR__, "..", "..", "inputData", "Parameters.xlsx")
+    et = nothing
+
+    XLSX.openxlsx(parameter_file) do xf
+        sheet = xf["Parameters"]
+        for row in XLSX.eachrow(sheet)
+            key = row[1]
+            val = row[2]
+            if key !== missing && val !== missing && String(key) == "ET"
+                et = Int64(round(parse(Float64, replace(string(val), "," => "."))))
+                break
+            end
+        end
+    end
+
+    et === nothing && error("Could not find ET in Parameters.xlsx")
+    return et
+end
+
+function run_heuristic_batch(n_runs::Int; max_turnaround::Int64, maxtime::Int32, top_c::Int, seed::Union{Nothing, Int}=nothing)
     best_objs = Float64[]
+    best_sols = allPlaneSolution[]
+    run_data_list = Any[]
+    run_rt_list = Any[]
     iterations = Int[]
 
     for run in 1:n_runs
@@ -50,14 +75,24 @@ function run_heuristic_batch(n_runs::Int; max_turnaround::Int64, maxtime::Int32,
             Random.seed!(seed + run - 1)
         end
 
-        best_obj, _, iter_count = HeuristicSA(max_turnaround, maxtime, data, rt, top_c)
+        data, rt = load_heuristic_data()
+        best_obj, best_sol, iter_count = HeuristicSA(max_turnaround, maxtime, data, rt, top_c)
         push!(best_objs, best_obj)
+        push!(best_sols, best_sol)
+        push!(run_data_list, data)
+        push!(run_rt_list, rt)
         push!(iterations, iter_count)
 
         println("Run $run / $n_runs -> best_obj = $(round(best_obj; digits=2)), iterations = $iter_count")
     end
 
-    return best_objs, iterations
+    return best_objs, best_sols, run_data_list, run_rt_list, iterations
+end
+
+function save_kpi_results(kpi_rows; out_csv::AbstractString)
+    df = DataFrame(kpi_rows)
+    CSV.write(out_csv, df)
+    return df
 end
 
 function save_batch_results(best_objs::Vector{Float64}; out_csv::AbstractString)
@@ -80,22 +115,18 @@ function save_boxplot(best_objs::Vector{Float64}; out_png::AbstractString, title
 end
 
 function main()
-    data, rt = load_heuristic_data()
-
-    max_turnaround = Int64(data.ET)
-    maxtime = Int32(30)
+    max_turnaround = load_turnaround_period()
+    maxtime = Int32(20)
     top_c = 4
-    n_runs = 20
+    n_runs = 2
 
-    out_dir = joinpath(@__DIR__, "batch_results")
+    out_dir = joinpath(@__DIR__, "Results")
     mkpath(out_dir)
 
-    best_objs, iterations = run_heuristic_batch(
+    best_objs, best_sols, run_data_list, run_rt_list, iterations = run_heuristic_batch(
         n_runs;
         max_turnaround=max_turnaround,
         maxtime=maxtime,
-        data=data,
-        rt=rt,
         top_c=top_c,
         seed=nothing,
     )
@@ -110,9 +141,14 @@ function main()
         title_text="Heuristic best_obj over $(n_runs) runs",
     )
 
+    kpi_rows = [merge((run = i, best_obj = best_objs[i]), solution_kpis(best_sols[i], run_data_list[i], run_rt_list[i])) for i in eachindex(best_sols)]
+    kpi_csv = joinpath(out_dir, "best_solution_kpis.csv")
+    save_kpi_results(kpi_rows; out_csv=kpi_csv)
+
     println()
     println("Saved run results to: $results_csv")
     println("Saved boxplot to: $boxplot_png")
+    println("Saved KPI results to: $kpi_csv")
     println("Summary: min=$(minimum(best_objs)), median=$(median(best_objs)), mean=$(mean(best_objs)), max=$(maximum(best_objs))")
     println("Iterations per run: $(iterations)")
 end
