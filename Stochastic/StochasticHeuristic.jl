@@ -516,8 +516,7 @@ function repair_unserved!(sol::allPlaneSolution, sc_data,
         te       = Int(round(sc_data.te))
         fixed    = false
 
-        # If we have a committed eVTOL assignment, only search that eVTOL.
-        # Otherwise search all planes (fallback for backward compatibility).
+        # ── Attempt 1: nudge an EXISTING op→dp leg's turnaround into the window ──
         plane_indices = collect(enumerate(sol.planes))
 
         for (pidx, plane) in plane_indices
@@ -545,6 +544,60 @@ function repair_unserved!(sol::allPlaneSolution, sc_data,
                              sc_rt_mat[from, to]
             end
             fixed && break
+        end
+
+        # ── Attempt 2: serve via an IDLE active eVTOL based at the origin ───────
+        # If no existing leg could be nudged, look for an activated but idle
+        # eVTOL (flightLegs == 0) whose base is the passenger's origin vertiport.
+        # Such an eVTOL can fly the single serving leg op→dp starting from the
+        # ground, with a turnaround chosen so departure lands inside the time
+        # window. This is safe because an idle eVTOL has no other legs to shift
+        # and no other passengers to disrupt, so a single whole-solution
+        # feasibility check is sufficient. (We deliberately do not insert into an
+        # occupied route, which would shift later legs and could push other
+        # passengers out of their windows or break ET / battery.)
+        if !fixed
+            for (pidx, plane) in plane_indices
+                plane.flightLegs == 0 || continue            # must be idle
+                Int(plane.route[1]) == sc_data.op[a] || continue  # based at origin
+
+                # Departure can be any time from 0; pick the earliest feasible
+                # turnaround that lands inside [earliest, latest].
+                new_ta  = clamp(earliest, 0, latest)
+                new_dep = new_ta
+                (earliest <= new_dep <= latest) || continue
+
+                # Tentatively give the idle eVTOL the single serving leg.
+                saved_route = copy(plane.route)
+                saved_ta    = copy(plane.turnaroundTime)
+                saved_legs  = plane.flightLegs
+
+                plane.route          = Int32[Int32(sc_data.op[a]), Int32(sc_data.dp[a])]
+                plane.turnaroundTime = Int32[Int32(new_ta)]
+                plane.flightLegs     = Int32(1)
+
+                P = FeasibilityCheck(
+                    Float32(sc_data.bmax), Float32(sc_data.bmid), Float32(sc_data.bmin),
+                    sc_data.dist, Float32(sc_data.ec), Float32(sc_data.battery_per_km),
+                    sol, sc_rt_mat, Int(round(sc_data.ET)),
+                    maximum(Int.(sc_data.T)), maximum(sc_data.V),
+                    sc_data.cap_v, Float64(sc_data.b_penalty))
+
+                feasible = all(p < 1_000_000 for p in P)
+
+                if feasible
+                    new_assign, _ = assign_passengersV2(sol, sc_data, sc_rt_mat)
+                    if a in Set(ass.group for ass in new_assign)
+                        fixed = true
+                        break
+                    end
+                end
+
+                # Revert if it didn't help or broke feasibility.
+                plane.route          = saved_route
+                plane.turnaroundTime = saved_ta
+                plane.flightLegs     = saved_legs
+            end
         end
 
         fixed || push!(still_unserved, a)
@@ -1170,24 +1223,56 @@ function print_stochastic_result(result, data)
     # OR very cold) receive +10 w and +30 ET.
     # ─────────────────────────────────────────────────────────────────────────
     println("\n" * "="^72)
-    println("WEATHER SLACK IN EFFECT (waiting time w, operating window ET)")
+    println("WEATHER SLACK: allowed vs actually used")
     println("="^72)
-    println(@sprintf("  %-4s  %-18s  %6s  %6s  %s",
-            "sc", "label", "w", "ET", "relaxed?"))
-    println("  " * "-"^60)
+    println(@sprintf("  %-4s  %-18s  %4s %4s  %9s  %4s %4s  %s",
+            "sc", "label", "w", "ET", "relaxed?", "useW", "useET", "binding?"))
+    println("  " * "-"^74)
     base_w  = Float64(data.w)
     base_ET = Float64(data.ET)
     for sc in sort(collect(keys(result.scenario_results)))
         scen        = SCENARIOS[sc]
         w_sc, ET_sc = scenario_slack(data, sc)
         relaxed     = (w_sc > base_w) || (ET_sc > base_ET)
-        flag        = relaxed ? "yes (severe)" : "—"
-        println(@sprintf("  %-4d  %-18s  %6.0f  %6.0f  %s",
-                sc, scen.label, w_sc, ET_sc, flag))
+        r           = result.scenario_results[sc]
+
+        # Rebuild the realized schedule for this scenario to measure what was
+        # actually used: the latest arrival time (realized completion) and the
+        # largest passenger wait (boarding dep minus earliest-ready dt).
+        Vmax = maximum(r.sc_data.V)
+        rt_mat_sc = zeros(Int, Vmax, Vmax)
+        for (ij, v) in r.sc_data.rt
+            rt_mat_sc[ij[1], ij[2]] = v
+        end
+        sched = build_scheduled_legs(r.sol, rt_mat_sc, Int(round(r.sc_data.cap_u)))
+        used_ET = isempty(sched) ? 0 : maximum(l.arr for l in sched)
+
+        used_w = 0
+        for ass in r.assignments
+            isempty(ass.legs) && continue
+            board_leg_idx = first(ass.legs)
+            board = findfirst(l -> l.plane == ass.plane && l.leg_index == board_leg_idx, sched)
+            board === nothing && continue
+            wait = sched[board].dep - Int(round(r.sc_data.dt[ass.group]))
+            used_w = max(used_w, wait)
+        end
+
+        # "binding" if the realized usage actually exceeded the baseline limits,
+        # i.e. the relaxation was not just available but actually needed.
+        binds_ET = used_ET > base_ET
+        binds_w  = used_w  > base_w
+        bind_str = (binds_ET || binds_w) ?
+                   (binds_ET && binds_w ? "ET & w" : (binds_ET ? "ET" : "w")) : "—"
+
+        println(@sprintf("  %-4d  %-18s  %4.0f %4.0f  %9s  %4d %4d  %s",
+                sc, scen.label, w_sc, ET_sc,
+                relaxed ? "yes" : "—", used_w, used_ET, bind_str))
     end
-    println("  " * "-"^60)
-    println(@sprintf("  Baseline: w = %.0f, ET = %.0f   |   Severe: w = %.0f, ET = %.0f",
-            base_w, base_ET, base_w + 10, base_ET + 30))
+    println("  " * "-"^74)
+    println(@sprintf("  Baseline w = %.0f, ET = %.0f   |   Severe adds +10 w, +30 ET",
+            base_w, base_ET))
+    println("  useW / useET = largest wait and latest arrival actually realized.")
+    println("  binding = realized usage exceeded the baseline limit (slack was needed).")
 
     # ─────────────────────────────────────────────────────────────────────────
     # Per-scenario passenger service breakdown:
