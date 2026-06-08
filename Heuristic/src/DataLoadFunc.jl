@@ -84,10 +84,24 @@ function load_data(excel_file::String, parameter_file::String)
     infra = read_sheet(excel_file, "Infrastructure")
     pax = DataFrame(
         XLSX.readtable(
-            joinpath("inputData", "LTM_demand5min.xlsx"),
-            "Sheet1"
+            joinpath("inputData", "inputDataGiant.xlsx"),
+            "PassengerGroups"
         )
     )
+    # Pool B: on-demand passenger groups, served only in the second stage.
+    # Same column structure as PassengerGroups. Optional — if the sheet is
+    # absent, Pool B is simply empty and the model behaves as before.
+    paxB = try
+        DataFrame(
+            XLSX.readtable(
+                joinpath("inputData", "inputDataGiant.xlsx"),
+                "PassengerGroupsB"
+            )
+        )
+    catch
+        @warn "Sheet 'PassengerGroupsB' not found — on-demand pool B is empty."
+        DataFrame()
+    end
     plane = read_sheet_any(excel_file, ["PlaneData"])
 
     ###########################################################################
@@ -328,10 +342,44 @@ function load_data(excel_file::String, parameter_file::String)
     end
 
     ###########################################################################
-    # d[a,i,j] = 1 if passenger group a travels from i to j, else 0
+    # Pool B (on-demand) passengers — second stage only.
+    # IDs are offset by POOL_B_OFFSET so they never collide with Pool A group
+    # IDs and are instantly recognisable in output (anything >= offset is
+    # on-demand). They share the same per-passenger dicts (op/dp/dt/q/so/p) so
+    # all existing lookups work for them unchanged. Pool B passengers carry NO
+    # unserved penalty (p = 0): they are opportunistic, never committed, so
+    # failing to serve them is not penalised.
     ###########################################################################
+    POOL_B_OFFSET = 1000
+    B = Int[]
+    if nrow(paxB) > 0
+        groupB_col = find_col(paxB, [:group, :group_id, :id])
+        origB_col  = find_col(paxB, [:origin])
+        destB_col  = find_col(paxB, [:destination])
+        timeB_col  = find_col(paxB, [:time, :arrival_time])
+        qB_col     = find_col(paxB, [:number_of_passengers, :passengers, :numberofpassengers])
+        stopB_col  = find_col(paxB, [:stopover_allowed, :stopoverallowed, :stopover])
+
+        for r in eachrow(paxB)
+            b = POOL_B_OFFSET + Int(r[groupB_col])   # offset to avoid ID clash
+            push!(B, b)
+            op[b] = Int(r[origB_col])
+            dp[b] = Int(r[destB_col])
+            dt[b] = Float64(r[timeB_col])
+            q[b]  = Int(r[qB_col])
+            so[b] = Int(r[stopB_col])
+            p[b]  = 0.0                              # no penalty: opportunistic only
+        end
+        B = sort(B)
+    end
+
+    ###########################################################################
+    # d[a,i,j] = 1 if passenger group a travels from i to j, else 0
+    # Built over BOTH pools (Pool A and Pool B share the op/dp dicts).
+    ###########################################################################
+    all_groups = vcat(A, B)
     d = Dict{Tuple{Int,Int,Int},Int}()
-    for a in A, i in V, j in V
+    for a in all_groups, i in V, j in V
         d[(a,i,j)] = (i == op[a] && j == dp[a]) ? 1 : 0
     end
 
@@ -339,7 +387,7 @@ function load_data(excel_file::String, parameter_file::String)
         infra = infra,
         pax = pax,
         plane = plane,
-        V = V, A = A, N = collect(N),
+        V = V, A = A, B = B, N = collect(N),
         M = collect(M), M_no0 = collect(M_no0), M_mid = collect(M_mid), M_no_last = collect(M_no_last),
         T = collect(T), T_no0 = collect(T_no0),
         bv = bv,

@@ -264,11 +264,49 @@ end
 # Scenario data cache
 ###############################################################################
 
-function build_scenario_cache(data, rt_s, e_s, S)
+###############################################################################
+# On-demand (Pool B) demand realizations
+#
+# Demand uncertainty: each potential on-demand group (data.B) independently
+# "appears" in a given scenario with probability rho. The appearance is fixed
+# per scenario with a deterministic seed so every run uses the SAME demand
+# draws (reproducibility and comparability across runs/seasons).
+#
+# Each weather scenario carries ONE demand realization (the cheap, no-extra-
+# scenarios design): scenario sc always has the same realized Pool B subset.
+# This models weather and demand jointly through the existing scenario set.
+#
+# rho may be made weather-dependent by passing a function; by default it is a
+# flat probability for every scenario.
+###############################################################################
+
+function make_demand_realizations(data, S; rho = 0.5, seed::Int = 20260101)
+    realized = Dict{Int, Vector{Int}}()
+    for sc in S
+        # Per-scenario deterministic RNG so the realization is fixed and
+        # reproducible, and independent across scenarios.
+        rng = MersenneTwister(seed + sc)
+        rho_sc = rho isa Function ? rho(sc) : rho
+        appear = Int[]
+        for b in data.B
+            if rand(rng) < rho_sc
+                push!(appear, b)
+            end
+        end
+        realized[sc] = sort(appear)
+    end
+    return realized
+end
+
+function build_scenario_cache(data, rt_s, e_s, S; demand_realized = nothing)
     cache   = Dict{Int, NamedTuple}()
     rt_mats = Dict{Int, Matrix{Int}}()
     for sc in S
-        sc_data     = make_scenario_data(data, sc, rt_s, e_s)
+        sc_data = make_scenario_data(data, sc, rt_s, e_s)
+        # Attach this scenario's realized on-demand (Pool B) groups so the
+        # second stage knows which on-demand customers actually showed up.
+        B_real = demand_realized === nothing ? Int[] : get(demand_realized, sc, Int[])
+        sc_data = merge(sc_data, (B_realized = B_real,))
         cache[sc]   = sc_data
         Vmax        = maximum(sc_data.V)
         mat         = zeros(Int, Vmax, Vmax)
@@ -386,7 +424,7 @@ function make_second_stage_data(sc_data, fsd::FirstStageDecision;
         cap_u          = sc_data.cap_u,
         opening_cost   = sc_data.opening_cost,
         bmax           = sc_data.bmax,
-        bmid           = sc_data.bmid,  # start at bmid
+        bmid           = sc_data.bmid,  # start at bmid (standing reserve charge)
         b_penalty      = sc_data.b_penalty,
         bmin           = sc_data.bmin,
         ec             = sc_data.ec,
@@ -625,6 +663,15 @@ function solve_second_stage(fsd::FirstStageDecision,
                              price_boost::Float64  = 50.0,
                              hard_penalty::Float64 = 5_000.0)
 
+    # Second-stage candidate passengers =
+    #   committed Pool A (must be served — carry the hard penalty)
+    #   + this scenario's realized on-demand Pool B (opportunistic, no penalty).
+    # Rejected Pool A passengers are intentionally EXCLUDED: they received a
+    # "no" in the first stage and are not served in the second stage.
+    B_real = hasproperty(sc_data, :B_realized) ? sc_data.B_realized : Int[]
+    candidate_A = sort(collect(union(fsd.accepted_passengers, Set(B_real))))
+    sc_data = merge(sc_data, (A = candidate_A,))
+
     ss_data = make_second_stage_data(sc_data, fsd;
                                       price_boost  = price_boost,
                                       hard_penalty = hard_penalty)
@@ -831,7 +878,9 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
                                price_boost::Float64      = 10.0,
                                hard_penalty::Float64     = 10_000.0,
                                n_restarts::Int           = 3,
-                               n_outer_iters::Int        = 20)
+                               n_outer_iters::Int        = 20,
+                               demand_rho                = 0.5,
+                               demand_seed::Int          = 20260101)
 
     println("\n" * "="^72)
     println("TWO-STAGE STOCHASTIC HEURISTIC")
@@ -857,7 +906,16 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
     end
 
     println("\n[Setup] Building scenario cache …")
-    scenario_cache, rt_mats = build_scenario_cache(data, rt_s, e_s, S)
+    demand_realized = make_demand_realizations(data, S;
+                                               rho = demand_rho, seed = demand_seed)
+    if !isempty(data.B)
+        total_appear = sum(length(demand_realized[sc]) for sc in S)
+        println("[Setup] On-demand pool B: $(length(data.B)) potential groups, " *
+                "mean $(round(total_appear/length(S), digits=1)) appear per scenario " *
+                "(rho = $(demand_rho)).")
+    end
+    scenario_cache, rt_mats = build_scenario_cache(data, rt_s, e_s, S;
+                                                   demand_realized = demand_realized)
     println("[Setup] Done.")
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -1218,6 +1276,34 @@ function print_stochastic_result(result, data)
     end
 
     # ─────────────────────────────────────────────────────────────────────────
+    # On-demand (Pool B) demand realization per scenario: which on-demand groups
+    # ACTUALLY APPEARED in each scenario (the demand-uncertainty realization),
+    # shown alongside the scenario probability. "appeared" is independent of
+    # whether they were ultimately served — it is the realized demand the second
+    # stage had the option to serve. Pool B IDs shown with the +1000 offset removed.
+    # ─────────────────────────────────────────────────────────────────────────
+    if !isempty(data.B)
+        println("\n" * "="^72)
+        println("ON-DEMAND DEMAND REALIZATION (Pool B groups present per scenario)")
+        println("="^72)
+        println(@sprintf("  %-4s  %-18s  %8s  %7s  %s",
+                "sc", "label", "prob", "#appear", "on-demand groups that appeared"))
+        println("  " * "-"^78)
+        for sc in sort(collect(keys(result.scenario_results)))
+            scen   = SCENARIOS[sc]
+            r      = result.scenario_results[sc]
+            b_real = hasproperty(r.sc_data, :B_realized) ? r.sc_data.B_realized : Int[]
+            b_str  = isempty(b_real) ? "—" :
+                     join([g > 1000 ? g - 1000 : g for g in sort(b_real)], ", ")
+            println(@sprintf("  %-4d  %-18s  %8.4f  %7d  [%s]",
+                    sc, scen.label, result.pi_s[sc], length(b_real), b_str))
+        end
+        println("  " * "-"^78)
+        println("  (Pool B IDs shown with the +1000 offset removed; appearance is the")
+        println("   realized demand — see the service table for which were actually served.)")
+    end
+
+    # ─────────────────────────────────────────────────────────────────────────
     # Weather slack actually in effect per scenario: shows baseline vs relaxed
     # waiting time (w) and operating window (ET). Severe scenarios (strong wind
     # OR very cold) receive +10 w and +30 ET.
@@ -1275,33 +1361,48 @@ function print_stochastic_result(result, data)
     println("  binding = realized usage exceeded the baseline limit (slack was needed).")
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Per-scenario passenger service breakdown:
-    #   committed = first-stage accepted groups that were served this scenario
-    #   extra     = additional groups served opportunistically as recourse
+    # Per-scenario passenger service breakdown, split by pool:
+    #   commitA  = first-stage committed (Pool A) groups served this scenario
+    #   missA    = committed (Pool A) groups NOT served (incur the penalty)
+    #   onDemB   = on-demand (Pool B) groups served opportunistically
+    # Pool B groups are identified by membership in data.B.
     # ─────────────────────────────────────────────────────────────────────────
+    poolB = Set{Int}(data.B)
     println("\n" * "="^72)
-    println("SECOND-STAGE PASSENGER SERVICE (committed vs opportunistic)")
+    println("SECOND-STAGE PASSENGER SERVICE (committed Pool A  vs  on-demand Pool B)")
     println("="^72)
-    println(@sprintf("  %-4s  %-18s  %8s  %9s  %s",
-            "sc", "label", "committed", "extra", "extra groups served"))
-    println("  " * "-"^76)
+    println(@sprintf("  %-4s  %-18s  %7s  %6s  %7s  %s",
+            "sc", "label", "commitA", "missA", "onDemB", "on-demand groups served"))
+    println("  " * "-"^80)
     accepted = result.accepted_passengers
-    total_extra = 0
+    total_B = 0
+    total_missA = 0
     for sc in sort(collect(keys(result.scenario_results)))
         scen = SCENARIOS[sc]
         r    = result.scenario_results[sc]
         served = Set(ass.group for ass in r.assignments)
-        committed_served = sort([a for a in accepted if a in served])
-        extra_served     = sort([a for a in served if !(a in accepted)])
-        total_extra += length(extra_served)
-        extra_str = isempty(extra_served) ? "—" : join(extra_served, ", ")
-        println(@sprintf("  %-4d  %-18s  %9d  %9d  [%s]",
-                sc, scen.label, length(committed_served),
-                length(extra_served), extra_str))
+
+        commitA_served = sort([a for a in accepted if a in served])
+        commitA_missed = sort([a for a in accepted if !(a in served)])
+        onDemB_served  = sort([g for g in served if g in poolB])
+
+        total_B     += length(onDemB_served)
+        total_missA += length(commitA_missed)
+
+        # Show Pool B IDs with the 1000-offset stripped for readability.
+        b_str = isempty(onDemB_served) ? "—" :
+                join([g > 1000 ? g - 1000 : g for g in onDemB_served], ", ")
+
+        println(@sprintf("  %-4d  %-18s  %7d  %6d  %7d  [%s]",
+                sc, scen.label,
+                length(commitA_served), length(commitA_missed),
+                length(onDemB_served), b_str))
     end
-    avg_extra = total_extra / length(result.scenario_results)
-    println("  " * "-"^76)
-    println(@sprintf("  Mean opportunistic (extra) groups served per scenario: %.2f", avg_extra))
+    nsc = length(result.scenario_results)
+    println("  " * "-"^80)
+    println(@sprintf("  Mean on-demand (Pool B) groups served per scenario : %.2f", total_B / nsc))
+    println(@sprintf("  Total committed (Pool A) misses across scenarios   : %d", total_missA))
+    println("  (Pool B IDs shown with the +1000 offset removed.)")
 
     # ─────────────────────────────────────────────────────────────────────────
     # Key performance indicators
@@ -1318,9 +1419,14 @@ function print_stochastic_result(result, data)
     max_profit = maximum(profits)
     n_negative = count(<(0), profits)
 
-    # mean served per scenario (committed + extra)
+    # mean total groups served per scenario (Pool A committed-served + Pool B)
     mean_served = sum(probs[k] * length(Set(ass.group for ass in
                       result.scenario_results[sc].assignments))
+                      for (k, sc) in enumerate(sort(collect(keys(result.scenario_results)))))
+
+    # mean on-demand (Pool B) groups served per scenario, probability-weighted
+    mean_onDemB = sum(probs[k] * count(g -> g in poolB,
+                      Set(ass.group for ass in result.scenario_results[sc].assignments))
                       for (k, sc) in enumerate(sort(collect(keys(result.scenario_results)))))
 
     println("\n" * "="^72)
@@ -1332,10 +1438,11 @@ function print_stochastic_result(result, data)
     @printf("  Std-dev of 2nd-stage profit            : %12.2f\n", std_ss)
     @printf("  Min / Max scenario profit              : %+10.2f / %+.2f\n", min_profit, max_profit)
     @printf("  Scenarios with negative profit         : %12d / %d\n", n_negative, length(profits))
-    @printf("  Committed (first-stage) passengers     : %12d\n", length(result.accepted_passengers))
+    @printf("  Committed (Pool A) passengers          : %12d\n", length(result.accepted_passengers))
+    @printf("  On-demand pool (Pool B) size           : %12d\n", length(poolB))
     @printf("  Active eVTOLs                          : %12d\n", length(result.active_evtols))
-    @printf("  Mean passenger groups served / scenario: %12.2f\n", mean_served)
-    @printf("  Mean opportunistic groups / scenario   : %12.2f\n", avg_extra)
+    @printf("  Mean groups served / scenario (total)  : %12.2f\n", mean_served)
+    @printf("  Mean on-demand (Pool B) served / scen. : %12.2f\n", mean_onDemB)
     println("="^72)
 
     println("\n" * "="^72)

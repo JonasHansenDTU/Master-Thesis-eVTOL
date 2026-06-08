@@ -43,6 +43,15 @@ price_boost        = 8.0
 hard_penalty       = 50_000.0
 top_c              = 4            # top routes per base vertiport considered by constructor
 
+MaxTime_1st        = Int32(10)   # MUST be enough to find the rich deterministic seed
+n_restarts         = 1            # take the better of two seeds
+n_outer_iters      = 1            # Phase 2 prunes/refines the seed
+MaxTime_2nd_search = Int32(8)     # recourse quality during search
+MaxTime_2nd_final  = Int32(10)    # final high-quality recourse pass
+price_boost        = 8.0
+hard_penalty       = 50_000.0
+top_c              = 4            # top routes per base vertiport considered by constructor
+
 ###############################################################################
 # Load data and generate scenarios
 ###############################################################################
