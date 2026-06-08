@@ -25,7 +25,7 @@ for file in source_files
     include(joinpath(src_dir, file))
 end
 
-include(joinpath(@__DIR__, "scenario_generation_season.jl"))
+include(joinpath(@__DIR__, "scenario_generation.jl"))
 include(joinpath(@__DIR__, "StochasticHeuristic.jl"))
 
 ###############################################################################

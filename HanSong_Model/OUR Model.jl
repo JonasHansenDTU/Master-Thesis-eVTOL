@@ -636,18 +636,8 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
 
     # (6.23) Penalize battery above bmid
     @constraint(model, [m in M_no0, n in N], 
-        bp[m,n] >= u[m,n] + sum(e[(i,j)] * x[i,j,m,n] for i in V, j in V) - bmid
+        bp[m,n] >= u[m,n] - bmid + sum(e[(i,j)] * x[i,j,m,n] for i in V, j in V)
     )
-
-    # # (6.24a) First operation from a vertiport only reflects energy consumption
-    # @constraint(model, [i in V, j in V, n in N],
-    #     u[1,n] <= u[0,n] - e[(i,j)] * x[i,j,1,n] + charge[1,n]
-    # )
-
-    # # (6.24b) First operation from a vertiport only reflects energy consumption
-    # @constraint(model, [i in V, j in V, n in N],
-    #     u[1,n] >= u[0,n] - e[(i,j)] * x[i,j,1,n] + charge[1,n] - (1-x[i,j,1,n]) * M2c
-    # )
 
     # (6.24a) Battery update between operations
     @constraint(model, [i in V, j in V, m in 1:maximum(M), n in N],
@@ -714,7 +704,6 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
         sum(is_o[i,j,m,n,t] for i in V, j in V, m in M) <= 1
     )
 
-
     # (6.33) Travel time occupancy relation
     @constraint(model, [i in V, j in V, m in M, n in N],
         rt[(i,j)] * x[i,j,m,n] == sum(is_o[i,j,m,n,t] for t in T)
@@ -748,10 +737,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
 
     
     @constraint(model, [j in V, n in N, t in T],
-        is_p[j,n,t] <= sum(
-            is_o[i,k,m,n,t2]
-            for i in V, k in V, m in M, t2 in t:maximum(T)
-        )
+        is_p[j,n,t] <= sum(is_o[i,k,m,n,t2] for i in V, k in V, m in M, t2 in t:maximum(T))
     )
 
     return model, data
