@@ -386,7 +386,7 @@ function make_second_stage_data(sc_data, fsd::FirstStageDecision;
         cap_u          = sc_data.cap_u,
         opening_cost   = sc_data.opening_cost,
         bmax           = sc_data.bmax,
-        bmid           = sc_data.bmid,  # start at bmid (standing reserve charge)
+        bmid           = sc_data.bmid,  # start at bmid
         b_penalty      = sc_data.b_penalty,
         bmin           = sc_data.bmin,
         ec             = sc_data.ec,
