@@ -471,8 +471,8 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     # arr[m,n] = arrival time of operation m of eVTOL n
     @variable(model, arr[m in M, n in N] >= 0)
 
-    # over_bmid[m,n] = amount battery level exceeds bmid after operation m
-    @variable(model, over_bmid[m in M, n in N] >= 0, Int)
+    # bp[m,n] = amount battery level exceeds bmid after operation m
+    @variable(model, bp[m in M, n in N] >= 0, Int)
 
     #charge[m,n] = battery charged for plane n in operation m
     @variable(model, charge[m in M, n in N] >= 0)
@@ -499,7 +499,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
         sum(c[(i,j)] * x[i,j,m,n] for i in V, j in V, m in M, n in N) -
         sum(p[a] * (1 - sum(ss[a,n] for n in N)) for a in A) -
         sum(opening_cost*y[n] for n in N) -
-        sum(over_bmid[m,n]* b_penalty for m in M, n in N)
+        sum(bp[m,n]* b_penalty for m in M, n in N)
     )
 
     ###########################################################################
@@ -535,7 +535,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
 
     # (6.6) Flow consistency between operation m and m+1
     @constraint(model, [j in V, m in M_mid, n in N],
-        sum(x[i,j,m,n] for i in V)  >= sum(x[j,i2,m+1,n] for i2 in V)
+        sum(x[i,j,m,n] for i in V)  >= sum(x[j,k_node,m+1,n] for k_node in V)
     )
 
     # (6.7) Number of flight leg assigned to passenger group a = service indicator + stop indicator 
@@ -636,7 +636,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
 
     # (6.23) Penalize battery above bmid
     @constraint(model, [m in M_no0, n in N], 
-        over_bmid[m,n] >= u[m,n] + sum(e[(i,j)] * x[i,j,m,n] for i in V, j in V) - bmid
+        bp[m,n] >= u[m,n] + sum(e[(i,j)] * x[i,j,m,n] for i in V, j in V) - bmid
     )
 
     # # (6.24a) First operation from a vertiport only reflects energy consumption

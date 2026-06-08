@@ -7,7 +7,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIGURATION — set this before running:
 #
-const SEASON = :winter   # :summer  or  :winter
+const SEASON = :summer   # :summer  or  :winter
 #
 # :summer  April–September  — more easterly/southerly wind, rarely cold
 # :winter  October–March    — SW/W dominant, cold and very cold are realistic
