@@ -454,15 +454,24 @@ function export_solution_snapshots(evtols::allPlaneSolution, scheduled::Vector{S
         y = (ismissing(y_from) || ismissing(y_to)) ? missing : (y_from + y_to) / 2
 
         # Compute battery level for time t using physics-based calculation
-        # Start with full battery and simulate charging/discharging
-        battery_level = Float32(data.bmax)
+        # Start at bmid (standing reserve) and simulate charging/discharging
+        battery_level = Float32(data.bmid)
         current_time = 0
         
         for leg in sort([l for l in scheduled if l.plane == n], by=l->l.dep)
-            # Charge during parked time before this leg
+            # Charge during parked time before this leg — shortfall-based:
+            # charge only if current battery is insufficient to fly the leg and
+            # still land at or above bmin. Charge exactly the shortfall relative
+            # to usable battery above bmin, capped by available time and headroom.
             parked_time = leg.dep - current_time
-            battery_level = min(battery_level + Float32(parked_time) * Float32(data.ec), Float32(data.bmax))
-            
+            flight_dist_next = Float32(data.dist[(leg.from, leg.to)])
+            need_next = Float32(data.battery_per_km) * flight_dist_next
+            shortfall = need_next - (battery_level - Float32(data.bmin))
+            charge_possible = Float32(parked_time) * Float32(data.ec)
+            headroom = Float32(data.bmax) - battery_level
+            charge_added = min(max(0.0f0, shortfall), charge_possible, headroom)
+            battery_level = battery_level + charge_added
+
             # During flight of this leg
             if leg.dep <= t < leg.arr
                 # Interpolate position during flight based on discharge rate
