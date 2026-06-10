@@ -523,8 +523,8 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
     elapsed = 0.0
     iterations = 0
     iterations_since_clear = 0
-    clear_interval = 200000
-    destruct_trials = 4
+    clear_interval = 1500
+    destruct_trials = 2
 
     best_obj = -Inf
     best_sol = allPlaneSolution(planeSolution[])
@@ -533,7 +533,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
     single_route_pool = SingleRoutePoolEntry[]
 
 
-    max_size = Int(round(length(data.N)*length(data.V)))*2
+    max_size = Int(round(length(data.N)*length(data.V)*1.5))
 
     
     while elapsed <= Float64(MaxTime)
@@ -583,7 +583,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
 
             cand_obj = temp_obj
             cand_sol = deepcopy(temp_sol)
-            n_perm = 3
+            n_perm = 2
 
             for _ in 1:n_perm
                 move_choice = rand(1:3)

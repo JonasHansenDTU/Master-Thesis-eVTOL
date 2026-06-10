@@ -19,29 +19,42 @@ function solution_kpi_context(evtols::allPlaneSolution, data, rt::AbstractMatrix
 end
 
 function aircraft_utilization(evtols::allPlaneSolution, data, rt::AbstractMatrix)
-    total_occupied = 0.0
-    total_available = max(length(evtols.planes), 1) * Float64(data.ET)
+    # Total available capacity over the time horizon (Total Planes * Capacity * Total Time)
+    # If data.ET is just time, we scale it by the individual plane capacity
+    total_planes = max(length(evtols.planes), 1)
+    total_capacity_available = total_planes * Float64(data.cap_u) * Float64(data.ET)
+    
+    total_capacity_occupied = 0.0
     minimum_turnaround = Float64(data.te)
     assignments, scheduled, passenger_map, scheduled_lookup = solution_kpi_context(evtols, data, rt)
 
-    for plane in evtols.planes
-        flight_time = 0.0
-        occupied_turnaround = 0.0
+    for (plane_idx, plane) in enumerate(evtols.planes)
+        flight_seat_hours = 0.0
+        turnaround_seat_hours = 0.0
 
         for leg_idx in 1:plane.flightLegs
             from = Int(plane.route[leg_idx])
             to = Int(plane.route[leg_idx + 1])            
-            leg = scheduled_lookup[(plane, leg_idx)]'
+            leg = scheduled_lookup[(plane_idx, leg_idx)]
 
+            # 1. Calculate actual duration of the flight leg
+            leg_duration = Float64(rt[from, to])
+            
+            # 2. Calculate passengers on board (Total capacity minus what is left)
+            passengers_on_board = Float64(data.cap_u - leg.remaining_capacity)
 
-            flight_time += Float64(rt[from, to])/(data.cap_u - leg.remaining_capacity)
-            occupied_turnaround += minimum_turnaround
+            # 3. Scale the flight duration by actual passenger load factor
+            # e.g., 0.5 hours with 3 passengers = 1.5 passenger-hours
+            flight_seat_hours += leg_duration * passengers_on_board
+            
+            # 4. Turnaround utilizes the full asset capacity for operational overhead
+            turnaround_seat_hours += minimum_turnaround * Float64(data.cap_u)
         end
 
-        total_occupied += flight_time + occupied_turnaround
+        total_capacity_occupied += flight_seat_hours + turnaround_seat_hours
     end
 
-    return total_available == 0 ? 0.0 : total_occupied / total_available
+    return total_capacity_available == 0 ? 0.0 : total_capacity_occupied / total_capacity_available
 end
 
 function deadhead_time(evtols::allPlaneSolution, data, rt::AbstractMatrix)
@@ -49,8 +62,7 @@ function deadhead_time(evtols::allPlaneSolution, data, rt::AbstractMatrix)
 
     deadhead = 0.0
     for leg in scheduled
-        key = (leg.plane, leg.leg_index)
-        if !haskey(passenger_map, key) || isempty(passenger_map[key])
+        if leg.remaining_capacity == data.cap_u
             deadhead += Float64(leg.arr - leg.dep)
         end
     end

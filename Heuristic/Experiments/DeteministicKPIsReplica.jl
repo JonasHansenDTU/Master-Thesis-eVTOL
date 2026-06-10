@@ -122,9 +122,9 @@ end
 
 function main()
     max_turnaround = load_turnaround_period()
-    maxtime = Int32(20)
+    maxtime = Int32(70)
     top_c = 4
-    n_runs = 2
+    n_runs = 20
 
     out_dir = joinpath(@__DIR__, "Results")
     mkpath(out_dir)
@@ -134,7 +134,7 @@ function main()
         max_turnaround=max_turnaround,
         maxtime=maxtime,
         top_c=top_c,
-        seed=nothing,
+        seed=1,
     )
 
     results_csv = joinpath(out_dir, "best_obj_runs.csv")
