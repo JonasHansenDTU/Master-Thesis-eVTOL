@@ -1,191 +1,214 @@
 ###############################################################################
 # scenario_generation.jl
 #
-# Computes scenario-dependent travel time and battery consumption parameters
-# for the two-stage stochastic eVTOL model.
+# Fixed set of 13 weather scenarios (wind direction × temperature) for the
+# two-stage stochastic eVTOL model. Probabilities are derived as
 #
-# Given:
-#   - V         : set of vertiport IDs
-#   - lat, lon  : coordinate dicts keyed by vertiport ID
-#   - rt        : deterministic travel time dict keyed by (i,j)
-#   - e         : deterministic battery consumption dict keyed by (i,j)
-#   - time_per_km : minutes per km (from params), used to derive v_air
+#     pi(scenario) = wind_direction_share × temperature_probability
 #
-# Produces:
-#   - rt_s      : Dict{Tuple{Int,Int,Int}, Float64}  keyed by (scenario, i, j)
-#   - e_s       : Dict{Tuple{Int,Int,Int}, Float64}  keyed by (scenario, i, j)
-#   - S         : 1:length(SCENARIOS)
-#   - pi_s      : Dict{Int, Float64}  empirically weighted probabilities
+# for the active SEASON, then renormalised over the 13 kept scenarios so they
+# sum to 1.
+#
+# DATA SOURCES
+#   • Temperature fractions (AboveZero / Cold / VeryCold) per season are derived
+#     from DMI monthly frost-day data 2020–2026 (DMI-DATA.xlsx, Sheet2):
+#         frost_pct = Σ frost days / Σ days in season
+#         vcold_pct = 25% of frost days in months with absolute min < −8 °C
+#         cold_pct  = frost_pct − vcold_pct
+#         above_pct = 1 − frost_pct
+#   • Wind-direction shares are approximate frequencies read from the DMI
+#     wind roses in Technical Report 12-19 (stations EKAH/EKEB/EKOD/EKSB),
+#     held constant across seasons. Only the temperature mix changes by season.
+#
+# SCENARIO REDUCTION
+#   The full cross-product is 9 directions × 3 temperatures = 27 combinations.
+#   We keep 13 representative ones: all three temperatures for the directions
+#   where cold genuinely matters (SW, W, N) and AboveZero only for the
+#   mild-dominated directions (Calm, E, S). The probability mass of the omitted
+#   combinations is redistributed proportionally via renormalisation. The
+#   omitted combinations are individually low-probability and do not materially
+#   change the first-stage decision, so 13 trades a small SAA-accuracy loss for
+#   a large reduction in second-stage solve cost.
+#
+# CONFIGURATION:
+const SEASON = :Sommer    # :Foraar, :Sommer, :Efteraar, :Vinter
+#
 ###############################################################################
 
 ###############################################################################
 # Geometry helpers
 ###############################################################################
 
-"""
-Compute the forward bearing in degrees from (lat1,lon1) to (lat2,lon2).
-Returns a value in [0, 360) where 0 = north, 90 = east.
-"""
 function bearing_deg(lat1, lon1, lat2, lon2)
-    φ1 = deg2rad(lat1)
-    φ2 = deg2rad(lat2)
-    Δλ = deg2rad(lon2 - lon1)
-    x  = sin(Δλ) * cos(φ2)
-    y  = cos(φ1) * sin(φ2) - sin(φ1) * cos(φ2) * cos(Δλ)
-    θ  = atan(x, y)
-    return mod(rad2deg(θ), 360.0)
+    φ1 = deg2rad(lat1); φ2 = deg2rad(lat2); Δλ = deg2rad(lon2 - lon1)
+    x = sin(Δλ) * cos(φ2)
+    y = cos(φ1) * sin(φ2) - sin(φ1) * cos(φ2) * cos(Δλ)
+    return mod(rad2deg(atan(x, y)), 360.0)
 end
 
-"""
-Convert a bearing in degrees to a unit direction vector (dx, dy) where
-dx is the eastward component and dy is the northward component.
-"""
 function bearing_to_unit_vector(b_deg)
-    θ  = deg2rad(b_deg)
-    dx = sin(θ)   # eastward
-    dy = cos(θ)   # northward
-    return (dx, dy)
+    θ = deg2rad(b_deg)
+    return (sin(θ), cos(θ))   # (eastward, northward)
 end
 
-"""
-Compute the headwind component h^s_ij for the route (i -> j) under wind
-vector (wx, wy) in km/h.
-
-Positive h  => headwind (opposing flight, increases time and battery use).
-Negative h  => tailwind (assisting flight, decreases time and battery use).
-
-Because d_hat_ij = -d_hat_ji, we correctly get h_ji = -h_ij.
-"""
 function headwind_component(lat_i, lon_i, lat_j, lon_j, wx, wy)
-    b       = bearing_deg(lat_i, lon_i, lat_j, lon_j)
-    dx, dy  = bearing_to_unit_vector(b)
+    b = bearing_deg(lat_i, lon_i, lat_j, lon_j)
+    dx, dy = bearing_to_unit_vector(b)
     return -(wx * dx + wy * dy)
 end
 
 ###############################################################################
-# Scenario table
-#
-# 13 scenarios derived from DMI wind statistics (2003-2012) for Danish airports.
-# Wind vector convention: wx > 0 = eastward, wy > 0 = northward.
-# Wind speeds in km/h: 30 ≈ mean from dominant directions, 55 ≈ typical max.
-#
-# Temperature multiplier phi (battery efficiency degradation):
-#   1.00  =>  mild      (> 0 °C)     reference, no penalty
-#   1.20  =>  cold      (<= 0 °C)    ~20% extra consumption
-#   1.35  =>  very cold (< -8 °C)    ~35% extra consumption
-#
-# Probabilities (pi) are empirically weighted from DMI wind roses:
-#   SW (240°) is the dominant direction (~15% freq), W (~14%), E+ESE (~15%),
-#   S+SSW (~20%), N (~4-5%). Very cold days occur ~5-10 days/year in Denmark.
-#   Calm conditions account for ~4-5% of observations.
-#   All pi_s sum to 1.0.
+# Temperature mix per season — derived from DMI-DATA.xlsx Sheet2 (2020–2026).
+#   (p_aboveZero, p_cold, p_veryCold)   →   phi = 1.00 / 1.20 / 1.35
 ###############################################################################
 
-const SCENARIOS = [
-    # label                   wx      wy     phi    pi
-    # --- calm ---
-    (wx=  0.0, wy=  0.0, phi=1.00, pi=0.10, label="Calm / Mild"),
-    (wx=  0.0, wy=  0.0, phi=1.20, pi=0.05, label="Calm / Cold"),
-
-    # --- southwest 240° (dominant direction, ~15% freq) ---
-    # wx = 30*cos(240°-90°) = 30*sin(240°) ≈ -26, wy = 30*cos(240°) ≈ -15
-    # Simplified to equal components for a clean 240° bearing: (-21, 21) means
-    # wind blowing FROM southwest TOWARD northeast.
-    (wx=-21.0, wy= 21.0, phi=1.00, pi=0.16, label="SW-mod / Mild"),
-    (wx=-21.0, wy= 21.0, phi=1.20, pi=0.09, label="SW-mod / Cold"),
-    (wx=-21.0, wy= 21.0, phi=1.35, pi=0.04, label="SW-mod / Very cold"),
-    (wx=-39.0, wy= 39.0, phi=1.00, pi=0.09, label="SW-str / Mild"),
-
-    # --- west 270° (second most frequent, ~14% freq, highest mean speed) ---
-    (wx=-30.0, wy=  0.0, phi=1.00, pi=0.11, label="W-mod / Mild"),
-    (wx=-55.0, wy=  0.0, phi=1.20, pi=0.06, label="W-str / Cold"),
-    (wx=-55.0, wy=  0.0, phi=1.35, pi=0.03, label="W-str / Very cold"),
-
-    # --- east 90° (E + ESE combined ~15% freq) ---
-    (wx= 30.0, wy=  0.0, phi=1.00, pi=0.11, label="E-mod / Mild"),
-
-    # --- south 180° (S + SSW combined ~20% freq) ---
-    (wx=  0.0, wy= 30.0, phi=1.00, pi=0.09, label="S-mod / Mild"),
-
-    # --- north 360° (N ~4-5% freq, cold when it blows) ---
-    (wx=  0.0, wy=-30.0, phi=1.20, pi=0.05, label="N-mod / Cold"),
-    (wx=  0.0, wy=-30.0, phi=1.35, pi=0.02, label="N-mod / Very cold"),
-]
-
-# Verify probabilities sum to 1 at load time (fails loudly if table is edited
-# incorrectly rather than silently producing wrong results).
-const _PI_SUM = sum(sc.pi for sc in SCENARIOS)
-abs(_PI_SUM - 1.0) < 1e-9 || error(
-    "SCENARIOS probabilities sum to $(_PI_SUM), expected 1.0. " *
-    "Please correct the pi fields in the SCENARIOS table."
+const TEMP_PROBS = Dict(
+    :Foraar   => (0.825, 0.153, 0.022),  # Marts, April, Maj
+    :Sommer   => (1.000, 0.000, 0.000),  # Juni, Juli, August
+    :Efteraar => (0.934, 0.055, 0.011),  # September, Oktober, November
+    :Vinter   => (0.629, 0.293, 0.078),  # December, Januar, Februar
 )
 
 ###############################################################################
-# Main generation function
+# Wind-direction shares (approx. from DMI TR12-19 wind roses). Need not sum to
+# 1 — normalised inside the probability builder.
 ###############################################################################
 
-"""
-Generate scenario-dependent travel time and battery consumption parameters.
+const WIND_SHARES = Dict(
+    "Calm"        => 0.05,
+    "SW_moderate" => 0.15,
+    "SW_strong"   => 0.08,
+    "W_moderate"  => 0.14,
+    "W_strong"    => 0.06,
+    "E_moderate"  => 0.15,
+    "S_moderate"  => 0.20,
+    "N_moderate"  => 0.08,
+    "N_strong"    => 0.02,
+)
 
-Arguments:
-    V           : vector of vertiport IDs
-    lat         : Dict{Int, Float64} of latitudes
-    lon         : Dict{Int, Float64} of longitudes
-    rt          : Dict{Tuple{Int,Int}, Int/Float64} deterministic travel times
-    e           : Dict{Tuple{Int,Int}, Float64} deterministic battery consumption
-    time_per_km : minutes per km (used to derive nominal airspeed v_air)
+###############################################################################
+# The FIXED 13 scenarios.
+#   (wx, wy, phi, wind_key, temp_level, label)
+#   temp_level: 1 = AboveZero (phi 1.00), 2 = Cold (phi 1.20), 3 = VeryCold (1.35)
+###############################################################################
 
-Returns:
-    rt_s        : Dict{Tuple{Int,Int,Int}, Float64}  (scenario, i, j) -> travel time
-    e_s         : Dict{Tuple{Int,Int,Int}, Float64}  (scenario, i, j) -> battery use
-    S           : 1:length(SCENARIOS)
-    pi_s        : Dict{Int, Float64}  empirically weighted probabilities
-"""
+const SCENARIO_DEFS = [
+    ( 0.0,   0.0, 1.00, "Calm",        1, "Calm / AboveZero"),
+    ( 0.0,   0.0, 1.20, "Calm",        2, "Calm / Cold"),
+    (-21.0, 21.0, 1.00, "SW_moderate", 1, "SW-mod / AboveZero"),
+    (-21.0, 21.0, 1.20, "SW_moderate", 2, "SW-mod / Cold"),
+    (-21.0, 21.0, 1.35, "SW_moderate", 3, "SW-mod / Very cold"),
+    (-39.0, 39.0, 1.00, "SW_strong",   1, "SW-str / AboveZero"),
+    (-30.0,  0.0, 1.00, "W_moderate",  1, "W-mod / AboveZero"),
+    (-55.0,  0.0, 1.20, "W_strong",    2, "W-str / Cold"),
+    (-55.0,  0.0, 1.35, "W_strong",    3, "W-str / Very cold"),
+    ( 30.0,  0.0, 1.00, "E_moderate",  1, "E-mod / AboveZero"),
+    ( 0.0,  30.0, 1.00, "S_moderate",  1, "S-mod / AboveZero"),
+    ( 0.0, -30.0, 1.20, "N_moderate",  2, "N-mod / Cold"),
+    ( 0.0, -30.0, 1.35, "N_moderate",  3, "N-mod / Very cold"),
+]
+
+###############################################################################
+# Build the 13 scenarios with season-specific, renormalised probabilities.
+###############################################################################
+
+function build_scenarios(season::Symbol)
+    season in keys(TEMP_PROBS) || error(
+        "SEASON must be :Foraar, :Sommer, :Efteraar or :Vinter, got :$(season)"
+    )
+    p_temp     = TEMP_PROBS[season]            # (above, cold, vcold)
+    total_wind = sum(values(WIND_SHARES))      # normaliser for wind shares
+
+    raw = Float64[]
+    for (wx, wy, phi, wkey, tlvl, label) in SCENARIO_DEFS
+        push!(raw, (WIND_SHARES[wkey] / total_wind) * p_temp[tlvl])
+    end
+
+    total_raw = sum(raw)
+    total_raw > 0 || error("All 13 scenarios have zero probability for $(season).")
+
+    scenarios = NamedTuple{(:wx,:wy,:phi,:pi,:label),
+                           Tuple{Float64,Float64,Float64,Float64,String}}[]
+    for (k, (wx, wy, phi, wkey, tlvl, label)) in enumerate(SCENARIO_DEFS)
+        push!(scenarios, (wx=wx, wy=wy, phi=phi,
+                          pi = raw[k] / total_raw, label = label))
+    end
+    return scenarios
+end
+
+###############################################################################
+# Validation + printer
+###############################################################################
+
+function validate_scenarios(scenarios, season)
+    total = sum(s.pi for s in scenarios)
+    abs(total - 1.0) < 1e-9 || error(
+        "$(season) scenario probabilities sum to $(total), expected 1.0"
+    )
+end
+
+function print_scenarios(scenarios, season)
+    println("\n" * "="^72)
+    println("SCENARIO TABLE  —  active season: $(season)")
+    p_above, p_cold, p_vcold = TEMP_PROBS[season]
+    println("  Temperature mix (DMI 2020-2026): AboveZero=$(round(p_above*100,digits=1))%  " *
+            "Cold=$(round(p_cold*100,digits=1))%  VCold=$(round(p_vcold*100,digits=1))%")
+    println("="^72)
+    println(rpad("sc",4), " | ", rpad("label",22), " | ", lpad("wx",6),
+            " | ", lpad("wy",6), " | ", lpad("phi",5), " | ", lpad("pi",7))
+    println("-"^72)
+    for (sc, s) in enumerate(scenarios)
+        marker = s.pi == 0.0 ? "  ← zero (skipped)" : (s.pi < 0.005 ? "  ← rare" : "")
+        println(rpad(sc,4), " | ", rpad(s.label,22), " | ", lpad(s.wx,6),
+                " | ", lpad(s.wy,6), " | ", lpad(s.phi,5),
+                " | ", lpad(round(s.pi,digits=4),7), marker)
+    end
+    println("-"^72)
+    println(rpad("SUM",4), "   ", rpad("",22), "   ", rpad("",6), "   ",
+            rpad("",6), "   ", rpad("",5), " | ",
+            lpad(round(sum(s.pi for s in scenarios),digits=4),7))
+    println("="^72 * "\n")
+end
+
+###############################################################################
+# Main generation function (unchanged interface)
+###############################################################################
+
 function generate_scenarios(V, lat, lon, rt, e, time_per_km)
+    scenarios = build_scenarios(SEASON)
+    validate_scenarios(scenarios, SEASON)
 
-    v_air = 1.0 / time_per_km          # km/min
-    v_min = 0.1 * v_air                 # floor to avoid division by zero
+    v_air = 1.0 / time_per_km
+    v_min = 0.1 * v_air
     km_per_hour_to_km_per_min = 1.0 / 60.0
 
-    n_scenarios = length(SCENARIOS)
+    n_scenarios = length(scenarios)
     S    = 1:n_scenarios
-
-    # Probabilities come from the SCENARIOS table (empirically weighted).
-    pi_s = Dict(sc => SCENARIOS[sc].pi for sc in S)
+    pi_s = Dict(sc => scenarios[sc].pi for sc in S)
 
     rt_s = Dict{Tuple{Int,Int,Int}, Float64}()
     e_s  = Dict{Tuple{Int,Int,Int}, Float64}()
 
-    for (sc, scen) in enumerate(SCENARIOS)
+    for (sc, scen) in enumerate(scenarios)
         for i in V, j in V
             i == j && continue
-
-            h = headwind_component(lat[i], lon[i], lat[j], lon[j],
-                                   scen.wx, scen.wy)
-
+            h = headwind_component(lat[i], lon[i], lat[j], lon[j], scen.wx, scen.wy)
             gamma_t = v_air / max(v_min, v_air + h * km_per_hour_to_km_per_min)
             gamma_e = scen.phi * gamma_t
-
             rt_s[(sc, i, j)] = Int(round(gamma_t * rt[(i, j)]))
             e_s[(sc, i, j)]  = gamma_e * e[(i, j)]
         end
     end
 
-    println("Scenario generation complete:")
-    println("  $(n_scenarios) scenarios × $(length(V) * (length(V) - 1)) route pairs")
-    println("  v_air = $(round(v_air * 60, digits=1)) km/h  ",
-            "(v_min = $(round(v_min * 60, digits=1)) km/h)")
-    println()
-    println(lpad("sc", 4), " | ", rpad("label", 20),
-            " | ", lpad("wx", 6), " | ", lpad("wy", 6),
-            " | ", lpad("phi", 5), " | ", lpad("pi", 6))
-    println("-" ^ 60)
-    for (sc, scen) in enumerate(SCENARIOS)
-        println(lpad(sc, 4), " | ", rpad(scen.label, 20),
-                " | ", lpad(scen.wx, 6), " | ", lpad(scen.wy, 6),
-                " | ", lpad(scen.phi, 5), " | ", lpad(scen.pi, 6))
-    end
-    println()
-
+    print_scenarios(scenarios, SEASON)
     return rt_s, e_s, S, pi_s
+end
+
+# Expose SCENARIOS so downstream code reading SCENARIOS[sc].wx/.wy/.phi/.label
+# (the weather-slack helper and the result printers) works unchanged.
+const SCENARIOS = build_scenarios(SEASON)
+
+let
+    validate_scenarios(SCENARIOS, SEASON)
+    print_scenarios(SCENARIOS, SEASON)
 end

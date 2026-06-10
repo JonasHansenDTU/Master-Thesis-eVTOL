@@ -264,11 +264,49 @@ end
 # Scenario data cache
 ###############################################################################
 
-function build_scenario_cache(data, rt_s, e_s, S)
+###############################################################################
+# On-demand (Pool B) demand realizations
+#
+# Demand uncertainty: each potential on-demand group (data.B) independently
+# "appears" in a given scenario with probability rho. The appearance is fixed
+# per scenario with a deterministic seed so every run uses the SAME demand
+# draws (reproducibility and comparability across runs/seasons).
+#
+# Each weather scenario carries ONE demand realization (the cheap, no-extra-
+# scenarios design): scenario sc always has the same realized Pool B subset.
+# This models weather and demand jointly through the existing scenario set.
+#
+# rho may be made weather-dependent by passing a function; by default it is a
+# flat probability for every scenario.
+###############################################################################
+
+function make_demand_realizations(data, S; rho = 0.5, seed::Int = 20260101)
+    realized = Dict{Int, Vector{Int}}()
+    for sc in S
+        # Per-scenario deterministic RNG so the realization is fixed and
+        # reproducible, and independent across scenarios.
+        rng = MersenneTwister(seed + sc)
+        rho_sc = rho isa Function ? rho(sc) : rho
+        appear = Int[]
+        for b in data.B
+            if rand(rng) < rho_sc
+                push!(appear, b)
+            end
+        end
+        realized[sc] = sort(appear)
+    end
+    return realized
+end
+
+function build_scenario_cache(data, rt_s, e_s, S; demand_realized = nothing)
     cache   = Dict{Int, NamedTuple}()
     rt_mats = Dict{Int, Matrix{Int}}()
     for sc in S
-        sc_data     = make_scenario_data(data, sc, rt_s, e_s)
+        sc_data = make_scenario_data(data, sc, rt_s, e_s)
+        # Attach this scenario's realized on-demand (Pool B) groups so the
+        # second stage knows which on-demand customers actually showed up.
+        B_real = demand_realized === nothing ? Int[] : get(demand_realized, sc, Int[])
+        sc_data = merge(sc_data, (B_realized = B_real,))
         cache[sc]   = sc_data
         Vmax        = maximum(sc_data.V)
         mat         = zeros(Int, Vmax, Vmax)
@@ -516,8 +554,7 @@ function repair_unserved!(sol::allPlaneSolution, sc_data,
         te       = Int(round(sc_data.te))
         fixed    = false
 
-        # If we have a committed eVTOL assignment, only search that eVTOL.
-        # Otherwise search all planes (fallback for backward compatibility).
+        # ── Attempt 1: nudge an EXISTING op→dp leg's turnaround into the window ──
         plane_indices = collect(enumerate(sol.planes))
 
         for (pidx, plane) in plane_indices
@@ -547,6 +584,60 @@ function repair_unserved!(sol::allPlaneSolution, sc_data,
             fixed && break
         end
 
+        # ── Attempt 2: serve via an IDLE active eVTOL based at the origin ───────
+        # If no existing leg could be nudged, look for an activated but idle
+        # eVTOL (flightLegs == 0) whose base is the passenger's origin vertiport.
+        # Such an eVTOL can fly the single serving leg op→dp starting from the
+        # ground, with a turnaround chosen so departure lands inside the time
+        # window. This is safe because an idle eVTOL has no other legs to shift
+        # and no other passengers to disrupt, so a single whole-solution
+        # feasibility check is sufficient. (We deliberately do not insert into an
+        # occupied route, which would shift later legs and could push other
+        # passengers out of their windows or break ET / battery.)
+        if !fixed
+            for (pidx, plane) in plane_indices
+                plane.flightLegs == 0 || continue            # must be idle
+                Int(plane.route[1]) == sc_data.op[a] || continue  # based at origin
+
+                # Departure can be any time from 0; pick the earliest feasible
+                # turnaround that lands inside [earliest, latest].
+                new_ta  = clamp(earliest, 0, latest)
+                new_dep = new_ta
+                (earliest <= new_dep <= latest) || continue
+
+                # Tentatively give the idle eVTOL the single serving leg.
+                saved_route = copy(plane.route)
+                saved_ta    = copy(plane.turnaroundTime)
+                saved_legs  = plane.flightLegs
+
+                plane.route          = Int32[Int32(sc_data.op[a]), Int32(sc_data.dp[a])]
+                plane.turnaroundTime = Int32[Int32(new_ta)]
+                plane.flightLegs     = Int32(1)
+
+                P = FeasibilityCheck(
+                    Float32(sc_data.bmax), Float32(sc_data.bmid), Float32(sc_data.bmin),
+                    sc_data.dist, Float32(sc_data.ec), Float32(sc_data.battery_per_km),
+                    sol, sc_rt_mat, Int(round(sc_data.ET)),
+                    maximum(Int.(sc_data.T)), maximum(sc_data.V),
+                    sc_data.cap_v, Float64(sc_data.b_penalty))
+
+                feasible = all(p < 1_000_000 for p in P)
+
+                if feasible
+                    new_assign, _ = assign_passengersV2(sol, sc_data, sc_rt_mat)
+                    if a in Set(ass.group for ass in new_assign)
+                        fixed = true
+                        break
+                    end
+                end
+
+                # Revert if it didn't help or broke feasibility.
+                plane.route          = saved_route
+                plane.turnaroundTime = saved_ta
+                plane.flightLegs     = saved_legs
+            end
+        end
+
         fixed || push!(still_unserved, a)
     end
 
@@ -571,6 +662,15 @@ function solve_second_stage(fsd::FirstStageDecision,
                              top_c::Int            = 4,
                              price_boost::Float64  = 50.0,
                              hard_penalty::Float64 = 5_000.0)
+
+    # Second-stage candidate passengers =
+    #   committed Pool A (must be served — carry the hard penalty)
+    #   + this scenario's realized on-demand Pool B (opportunistic, no penalty).
+    # Rejected Pool A passengers are intentionally EXCLUDED: they received a
+    # "no" in the first stage and are not served in the second stage.
+    B_real = hasproperty(sc_data, :B_realized) ? sc_data.B_realized : Int[]
+    candidate_A = sort(collect(union(fsd.accepted_passengers, Set(B_real))))
+    sc_data = merge(sc_data, (A = candidate_A,))
 
     ss_data = make_second_stage_data(sc_data, fsd;
                                       price_boost  = price_boost,
@@ -778,7 +878,9 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
                                price_boost::Float64      = 10.0,
                                hard_penalty::Float64     = 10_000.0,
                                n_restarts::Int           = 3,
-                               n_outer_iters::Int        = 20)
+                               n_outer_iters::Int        = 20,
+                               demand_rho                = 0.5,
+                               demand_seed::Int          = 20260101)
 
     println("\n" * "="^72)
     println("TWO-STAGE STOCHASTIC HEURISTIC")
@@ -804,7 +906,16 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
     end
 
     println("\n[Setup] Building scenario cache …")
-    scenario_cache, rt_mats = build_scenario_cache(data, rt_s, e_s, S)
+    demand_realized = make_demand_realizations(data, S;
+                                               rho = demand_rho, seed = demand_seed)
+    if !isempty(data.B)
+        total_appear = sum(length(demand_realized[sc]) for sc in S)
+        println("[Setup] On-demand pool B: $(length(data.B)) potential groups, " *
+                "mean $(round(total_appear/length(S), digits=1)) appear per scenario " *
+                "(rho = $(demand_rho)).")
+    end
+    scenario_cache, rt_mats = build_scenario_cache(data, rt_s, e_s, S;
+                                                   demand_realized = demand_realized)
     println("[Setup] Done.")
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -1165,58 +1276,133 @@ function print_stochastic_result(result, data)
     end
 
     # ─────────────────────────────────────────────────────────────────────────
+    # On-demand (Pool B) demand realization per scenario: which on-demand groups
+    # ACTUALLY APPEARED in each scenario (the demand-uncertainty realization),
+    # shown alongside the scenario probability. "appeared" is independent of
+    # whether they were ultimately served — it is the realized demand the second
+    # stage had the option to serve. Pool B IDs shown with the +1000 offset removed.
+    # ─────────────────────────────────────────────────────────────────────────
+    if !isempty(data.B)
+        println("\n" * "="^72)
+        println("ON-DEMAND DEMAND REALIZATION (Pool B groups present per scenario)")
+        println("="^72)
+        println(@sprintf("  %-4s  %-18s  %8s  %7s  %s",
+                "sc", "label", "prob", "#appear", "on-demand groups that appeared"))
+        println("  " * "-"^78)
+        for sc in sort(collect(keys(result.scenario_results)))
+            scen   = SCENARIOS[sc]
+            r      = result.scenario_results[sc]
+            b_real = hasproperty(r.sc_data, :B_realized) ? r.sc_data.B_realized : Int[]
+            b_str  = isempty(b_real) ? "—" :
+                     join([g > 1000 ? g - 1000 : g for g in sort(b_real)], ", ")
+            println(@sprintf("  %-4d  %-18s  %8.4f  %7d  [%s]",
+                    sc, scen.label, result.pi_s[sc], length(b_real), b_str))
+        end
+        println("  " * "-"^78)
+        println("  (Pool B IDs shown with the +1000 offset removed; appearance is the")
+        println("   realized demand — see the service table for which were actually served.)")
+    end
+
+    # ─────────────────────────────────────────────────────────────────────────
     # Weather slack actually in effect per scenario: shows baseline vs relaxed
     # waiting time (w) and operating window (ET). Severe scenarios (strong wind
     # OR very cold) receive +10 w and +30 ET.
     # ─────────────────────────────────────────────────────────────────────────
     println("\n" * "="^72)
-    println("WEATHER SLACK IN EFFECT (waiting time w, operating window ET)")
+    println("WEATHER SLACK: allowed vs actually used")
     println("="^72)
-    println(@sprintf("  %-4s  %-18s  %6s  %6s  %s",
-            "sc", "label", "w", "ET", "relaxed?"))
-    println("  " * "-"^60)
+    println(@sprintf("  %-4s  %-18s  %4s %4s  %9s  %4s %4s  %s",
+            "sc", "label", "w", "ET", "relaxed?", "useW", "useET", "binding?"))
+    println("  " * "-"^74)
     base_w  = Float64(data.w)
     base_ET = Float64(data.ET)
     for sc in sort(collect(keys(result.scenario_results)))
         scen        = SCENARIOS[sc]
         w_sc, ET_sc = scenario_slack(data, sc)
         relaxed     = (w_sc > base_w) || (ET_sc > base_ET)
-        flag        = relaxed ? "yes (severe)" : "—"
-        println(@sprintf("  %-4d  %-18s  %6.0f  %6.0f  %s",
-                sc, scen.label, w_sc, ET_sc, flag))
+        r           = result.scenario_results[sc]
+
+        # Rebuild the realized schedule for this scenario to measure what was
+        # actually used: the latest arrival time (realized completion) and the
+        # largest passenger wait (boarding dep minus earliest-ready dt).
+        Vmax = maximum(r.sc_data.V)
+        rt_mat_sc = zeros(Int, Vmax, Vmax)
+        for (ij, v) in r.sc_data.rt
+            rt_mat_sc[ij[1], ij[2]] = v
+        end
+        sched = build_scheduled_legs(r.sol, rt_mat_sc, Int(round(r.sc_data.cap_u)))
+        used_ET = isempty(sched) ? 0 : maximum(l.arr for l in sched)
+
+        used_w = 0
+        for ass in r.assignments
+            isempty(ass.legs) && continue
+            board_leg_idx = first(ass.legs)
+            board = findfirst(l -> l.plane == ass.plane && l.leg_index == board_leg_idx, sched)
+            board === nothing && continue
+            wait = sched[board].dep - Int(round(r.sc_data.dt[ass.group]))
+            used_w = max(used_w, wait)
+        end
+
+        # "binding" if the realized usage actually exceeded the baseline limits,
+        # i.e. the relaxation was not just available but actually needed.
+        binds_ET = used_ET > base_ET
+        binds_w  = used_w  > base_w
+        bind_str = (binds_ET || binds_w) ?
+                   (binds_ET && binds_w ? "ET & w" : (binds_ET ? "ET" : "w")) : "—"
+
+        println(@sprintf("  %-4d  %-18s  %4.0f %4.0f  %9s  %4d %4d  %s",
+                sc, scen.label, w_sc, ET_sc,
+                relaxed ? "yes" : "—", used_w, used_ET, bind_str))
     end
-    println("  " * "-"^60)
-    println(@sprintf("  Baseline: w = %.0f, ET = %.0f   |   Severe: w = %.0f, ET = %.0f",
-            base_w, base_ET, base_w + 10, base_ET + 30))
+    println("  " * "-"^74)
+    println(@sprintf("  Baseline w = %.0f, ET = %.0f   |   Severe adds +10 w, +30 ET",
+            base_w, base_ET))
+    println("  useW / useET = largest wait and latest arrival actually realized.")
+    println("  binding = realized usage exceeded the baseline limit (slack was needed).")
 
     # ─────────────────────────────────────────────────────────────────────────
-    # Per-scenario passenger service breakdown:
-    #   committed = first-stage accepted groups that were served this scenario
-    #   extra     = additional groups served opportunistically as recourse
+    # Per-scenario passenger service breakdown, split by pool:
+    #   commitA  = first-stage committed (Pool A) groups served this scenario
+    #   missA    = committed (Pool A) groups NOT served (incur the penalty)
+    #   onDemB   = on-demand (Pool B) groups served opportunistically
+    # Pool B groups are identified by membership in data.B.
     # ─────────────────────────────────────────────────────────────────────────
+    poolB = Set{Int}(data.B)
     println("\n" * "="^72)
-    println("SECOND-STAGE PASSENGER SERVICE (committed vs opportunistic)")
+    println("SECOND-STAGE PASSENGER SERVICE (committed Pool A  vs  on-demand Pool B)")
     println("="^72)
-    println(@sprintf("  %-4s  %-18s  %8s  %9s  %s",
-            "sc", "label", "committed", "extra", "extra groups served"))
-    println("  " * "-"^76)
+    println(@sprintf("  %-4s  %-18s  %7s  %6s  %7s  %s",
+            "sc", "label", "commitA", "missA", "onDemB", "on-demand groups served"))
+    println("  " * "-"^80)
     accepted = result.accepted_passengers
-    total_extra = 0
+    total_B = 0
+    total_missA = 0
     for sc in sort(collect(keys(result.scenario_results)))
         scen = SCENARIOS[sc]
         r    = result.scenario_results[sc]
         served = Set(ass.group for ass in r.assignments)
-        committed_served = sort([a for a in accepted if a in served])
-        extra_served     = sort([a for a in served if !(a in accepted)])
-        total_extra += length(extra_served)
-        extra_str = isempty(extra_served) ? "—" : join(extra_served, ", ")
-        println(@sprintf("  %-4d  %-18s  %9d  %9d  [%s]",
-                sc, scen.label, length(committed_served),
-                length(extra_served), extra_str))
+
+        commitA_served = sort([a for a in accepted if a in served])
+        commitA_missed = sort([a for a in accepted if !(a in served)])
+        onDemB_served  = sort([g for g in served if g in poolB])
+
+        total_B     += length(onDemB_served)
+        total_missA += length(commitA_missed)
+
+        # Show Pool B IDs with the 1000-offset stripped for readability.
+        b_str = isempty(onDemB_served) ? "—" :
+                join([g > 1000 ? g - 1000 : g for g in onDemB_served], ", ")
+
+        println(@sprintf("  %-4d  %-18s  %7d  %6d  %7d  [%s]",
+                sc, scen.label,
+                length(commitA_served), length(commitA_missed),
+                length(onDemB_served), b_str))
     end
-    avg_extra = total_extra / length(result.scenario_results)
-    println("  " * "-"^76)
-    println(@sprintf("  Mean opportunistic (extra) groups served per scenario: %.2f", avg_extra))
+    nsc = length(result.scenario_results)
+    println("  " * "-"^80)
+    println(@sprintf("  Mean on-demand (Pool B) groups served per scenario : %.2f", total_B / nsc))
+    println(@sprintf("  Total committed (Pool A) misses across scenarios   : %d", total_missA))
+    println("  (Pool B IDs shown with the +1000 offset removed.)")
 
     # ─────────────────────────────────────────────────────────────────────────
     # Key performance indicators
@@ -1233,9 +1419,14 @@ function print_stochastic_result(result, data)
     max_profit = maximum(profits)
     n_negative = count(<(0), profits)
 
-    # mean served per scenario (committed + extra)
+    # mean total groups served per scenario (Pool A committed-served + Pool B)
     mean_served = sum(probs[k] * length(Set(ass.group for ass in
                       result.scenario_results[sc].assignments))
+                      for (k, sc) in enumerate(sort(collect(keys(result.scenario_results)))))
+
+    # mean on-demand (Pool B) groups served per scenario, probability-weighted
+    mean_onDemB = sum(probs[k] * count(g -> g in poolB,
+                      Set(ass.group for ass in result.scenario_results[sc].assignments))
                       for (k, sc) in enumerate(sort(collect(keys(result.scenario_results)))))
 
     println("\n" * "="^72)
@@ -1247,10 +1438,11 @@ function print_stochastic_result(result, data)
     @printf("  Std-dev of 2nd-stage profit            : %12.2f\n", std_ss)
     @printf("  Min / Max scenario profit              : %+10.2f / %+.2f\n", min_profit, max_profit)
     @printf("  Scenarios with negative profit         : %12d / %d\n", n_negative, length(profits))
-    @printf("  Committed (first-stage) passengers     : %12d\n", length(result.accepted_passengers))
+    @printf("  Committed (Pool A) passengers          : %12d\n", length(result.accepted_passengers))
+    @printf("  On-demand pool (Pool B) size           : %12d\n", length(poolB))
     @printf("  Active eVTOLs                          : %12d\n", length(result.active_evtols))
-    @printf("  Mean passenger groups served / scenario: %12.2f\n", mean_served)
-    @printf("  Mean opportunistic groups / scenario   : %12.2f\n", avg_extra)
+    @printf("  Mean groups served / scenario (total)  : %12.2f\n", mean_served)
+    @printf("  Mean on-demand (Pool B) served / scen. : %12.2f\n", mean_onDemB)
     println("="^72)
 
     println("\n" * "="^72)
