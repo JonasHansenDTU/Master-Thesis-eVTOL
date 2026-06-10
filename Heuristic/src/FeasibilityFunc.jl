@@ -14,54 +14,87 @@ function BatteryNeeded(TravelLength::Float32, battery_per_km::Float32)
     return TravelLength * battery_per_km
 end
 
-function BatteryCharged(turnaroundTime::Float16, ec::Float32)
+function BatteryCharged(turnaroundTime::Float32, ec::Float32)
 
     return turnaroundTime*ec
 end
 
-function FeasibleBattery(evtols::allPlaneSolution, bmax::Float32, bmid::Float32, bmin::Float32, dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32, b_penalty)
+function FeasibleBattery(
+    evtols::allPlaneSolution,
+    bmax::Float32,
+    bmid::Float32,
+    bmin::Float32,
+    dist::Dict{Tuple{Int,Int},Float64},
+    ec::Float32,
+    battery_per_km::Float32,
+    b_penalty
+)
+
     battery_levels = Vector{Vector{Float32}}()
     battery_overrule = 0
-
     feasible = true
 
     for evtol in evtols.planes
+
         BatteryLevel = zeros(Float32, evtol.flightLegs + 1)
         BatteryLevel[1] = bmid
 
-        if evtol.flightLegs >0
+        if evtol.flightLegs > 0
             from2 = evtol.route[1]
             to2 = evtol.route[2]
+
             TravelLength2 = Float32(dist[(from2, to2)])
-            BatteryLevel[2] = BatteryLevel[1] - BatteryNeeded(TravelLength2, battery_per_km)
+
+            BatteryLevel[2] =
+                BatteryLevel[1] -
+                BatteryNeeded(TravelLength2, battery_per_km)
         end
 
         for i in 1:evtol.flightLegs
+
             from = evtol.route[i]
             to = evtol.route[i + 1]
+
             TravelLength = Float32(dist[(from, to)])
 
             BatteryLevel[i + 1] =
-                min(BatteryLevel[i] + 
-                min(min(BatteryCharged(Float16(evtol.turnaroundTime[i]), ec), bmax - BatteryLevel[i]), BatteryNeeded(TravelLength, battery_per_km)) 
-                - BatteryNeeded(TravelLength, battery_per_km), 
-                bmax)
+                min(
+                    BatteryLevel[i] +
+                    min(
+                        min(
+                            BatteryCharged(
+                                Float16(evtol.turnaroundTime[i]),
+                                ec
+                            ),
+                            bmax - BatteryLevel[i]
+                        ),
+                        BatteryNeeded(TravelLength, battery_per_km)
+                    ) -
+                    BatteryNeeded(TravelLength, battery_per_km),
+                    bmax
+                )
 
-            if BatteryLevel[i+1] + BatteryNeeded(TravelLength, battery_per_km) > bmid
-                for j in bmid+1:(BatteryLevel[i+1]+ BatteryNeeded(TravelLength, battery_per_km))
-                    battery_overrule += b_penalty
-                end
-            end
+            excess = max(
+                BatteryLevel[i + 1] +
+                BatteryNeeded(TravelLength, battery_per_km) -
+                bmid,
+                0
+            )
+
+            battery_overrule += ceil(excess) * b_penalty
 
             if BatteryLevel[i + 1] < bmin
                 feasible = false
             end
+
         end
 
-        push!(battery_levels, BatteryLevel) 
-    end 
+        push!(battery_levels, BatteryLevel)
+
+    end
 
     return feasible, battery_levels, battery_overrule
+
 end
 
 function FeasibleCompletionTime(evtols::allPlaneSolution, rt::Matrix{Int}, ET::Int)
@@ -123,7 +156,7 @@ end
 function FeasibilityCheck(bmax::Float32, bmid::Float32, bmin::Float32, dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32,
     evtols::allPlaneSolution,rt::Matrix{Int}, ET::Int, T::Int, V::Int,cap_v::Dict{},b_penalty)
 
-    P = zeros(Int32, 4)
+    P = zeros(Float16, 4)
 
     feasible, battery_levels, battery_overrule = FeasibleBattery(evtols, bmax, bmid, bmin, dist, ec, battery_per_km, b_penalty)
 
