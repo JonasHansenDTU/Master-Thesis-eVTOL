@@ -106,7 +106,7 @@ function load_data(excel_file::String, parameter_file::String)
     infra = read_sheet(excel_file, "Infrastructure")
     pax = DataFrame(
         XLSX.readtable(
-            joinpath("inputData", "inputDataGiant.xlsx"),
+            joinpath("inputData", "Experiments/inputDataEx2_1_1.xlsx"),
             "PassengerGroups"
         )
     )
@@ -625,8 +625,8 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     )
 
     # (6.21) Battery cannot exceed max
-    @constraint(model, [m in M, n in N], 
-        u[m,n] <= bmax
+    @constraint(model, [m in M_no_last, n in N], 
+        u[m,n] + charge[m+1,n] <= bmax
     )
 
     # (6.22) Battery must stay above minimum
@@ -953,7 +953,7 @@ end
 # Usage
 ###############################################################################
 
-excel_file = joinpath("inputData/inputDataGiant.xlsx")
+excel_file = joinpath("inputData/Experiments/inputDataEx2_1_1.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()

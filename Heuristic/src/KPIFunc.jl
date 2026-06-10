@@ -73,7 +73,7 @@ end
 function passenger_demand_served(evtols::allPlaneSolution, data, rt::AbstractMatrix)
     assignments, _, _, _ = solution_kpi_context(evtols, data, rt)
 
-    served_demand = sum(Float64(data.q[ass.group]) for ass in assignments)
+    served_demand = sum(1 for ass in assignments)
 
     return served_demand
 end

@@ -36,7 +36,7 @@ function FeasibleBattery(evtols::allPlaneSolution, bmax::Float32, bmid::Float32,
             BatteryLevel[2] = BatteryLevel[1] - BatteryNeeded(TravelLength2, battery_per_km)
         end
 
-        for i in 2:evtol.flightLegs
+        for i in 1:evtol.flightLegs
             from = evtol.route[i]
             to = evtol.route[i + 1]
             TravelLength = Float32(dist[(from, to)])

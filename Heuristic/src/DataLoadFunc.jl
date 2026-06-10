@@ -84,7 +84,7 @@ function load_data(excel_file::String, parameter_file::String)
     infra = read_sheet(excel_file, "Infrastructure")
     pax = DataFrame(
         XLSX.readtable(
-            joinpath("inputData", "inputDataGiant.xlsx"),
+            joinpath("inputData", "Experiments/inputDataEx2_1_1.xlsx"),
             "PassengerGroups"
         )
     )
