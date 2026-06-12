@@ -68,5 +68,7 @@ function fitnessFunction(evtols::allPlaneSolution, assignments::Vector{Passenger
     # 5. Large infeasibility penalty
     fitnessvalue -= sum(P)
 
+
+
     return fitnessvalue
 end

@@ -241,6 +241,9 @@ function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; p
         key = single_route_key(plane)
         fitness, assignments = score_single_plane_solution(plane, data, rt)
 
+        # if isempty(assignments)
+        #     continue
+        # end
 
         plane_sol = allPlaneSolution([plane])
 
@@ -533,7 +536,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
     single_route_pool = SingleRoutePoolEntry[]
 
 
-    max_size = Int(round(length(data.N)*length(data.V)*1.5))
+    max_size = Int(round(length(data.N)*length(data.V)*0.5))
 
     
     while elapsed <= Float64(MaxTime)
@@ -570,7 +573,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
                 if pool_obj > temp_obj || rand() < 0.1
                     temp_sol = pool_sol
                     temp_obj = pool_obj
-                    single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max_size)
+                    # single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max_size)
                     check_route_endpoints(temp_sol, data, "Accepted pool candidate")
                 end
             end
@@ -631,7 +634,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
             end
 
             elapsed = (time_ns() - start_ns) / 1e9
-            T = max(T *0.9, 0.0001)
+            T = max(T *0.95, 0.0001)
         end
 
         iterations += 1

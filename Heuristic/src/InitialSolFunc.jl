@@ -38,6 +38,7 @@ function Time_and_Price(data, a1, a2)
     fd = data.fd
     rt = data.rt
     te = data.te
+    q = data.q
 
     from = op[a1]
     to = dp[a1]
@@ -45,7 +46,7 @@ function Time_and_Price(data, a1, a2)
 
     if !stopover
         time = rt[(from, to)]
-        price = fd[(from, to)]*(1-0.25*so[a1])
+        price = fd[(from, to)]*(1-0.25*so[a1])*q[a1]
     else
         via = op[a2]
         if via != to && from != via
@@ -53,7 +54,7 @@ function Time_and_Price(data, a1, a2)
         else
             time = rt[(from, to)]
         end
-        price = fs[(from, to)] + (fs[via, dp[a2]]*((rt[via, dp[a2]] -  rt[(to, dp[a2])])/rt[via, dp[a2]])) # Plus part of price for secondary passenger
+        price = fs[(from, to)]*q[a1] + (fs[via, dp[a2]]*((rt[via, dp[a2]] -  rt[(to, dp[a2])])/rt[via, dp[a2]]))*q[a2] # Plus part of price for secondary passenger
     end
 
     return time, price

@@ -122,7 +122,7 @@ end
 
 function main()
     max_turnaround = load_turnaround_period()
-    maxtime = Int32(70)
+    maxtime = Int32(60)
     top_c = 4
     n_runs = 20
 

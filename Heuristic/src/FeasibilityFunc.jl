@@ -63,8 +63,8 @@ function FeasibleBattery(
                     min(
                         min(
                             BatteryCharged(
-                                Float16(evtol.turnaroundTime[i]),
-                                ec
+                                Float32(evtol.turnaroundTime[i]),
+                                Float32(ec)
                             ),
                             bmax - BatteryLevel[i]
                         ),
@@ -156,7 +156,7 @@ end
 function FeasibilityCheck(bmax::Float32, bmid::Float32, bmin::Float32, dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32,
     evtols::allPlaneSolution,rt::Matrix{Int}, ET::Int, T::Int, V::Int,cap_v::Dict{},b_penalty)
 
-    P = zeros(Float16, 4)
+    P = zeros(Float32, 4)
 
     feasible, battery_levels, battery_overrule = FeasibleBattery(evtols, bmax, bmid, bmin, dist, ec, battery_per_km, b_penalty)
 
@@ -176,6 +176,9 @@ function FeasibilityCheck(bmax::Float32, bmid::Float32, bmin::Float32, dist::Dic
         P[3] = 1_000_000
     end
 
+    if sum(P) == Inf16
+        print("HEY!")
+    end
 
     return P
 end
