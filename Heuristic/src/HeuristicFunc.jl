@@ -241,9 +241,9 @@ function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; p
         key = single_route_key(plane)
         fitness, assignments = score_single_plane_solution(plane, data, rt)
 
-        # if isempty(assignments)
-        #     continue
-        # end
+        if isempty(assignments)
+            continue
+        end
 
         plane_sol = allPlaneSolution([plane])
 
