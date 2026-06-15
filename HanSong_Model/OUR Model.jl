@@ -626,7 +626,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
 
     # (6.21) Battery cannot exceed max
     @constraint(model, [m in M, n in N], 
-        u[m,n] <= bmax
+        u[m,n] + charge[m+1,n] <= bmax
     )
 
     # (6.22) Battery must stay above minimum
