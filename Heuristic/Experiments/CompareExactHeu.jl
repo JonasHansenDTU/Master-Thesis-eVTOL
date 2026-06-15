@@ -59,11 +59,14 @@ end
 
 avg_obj = mean(obj_vals)
 avg_iter = mean(iter_vals)
-if Optimum == Inf32
+if Inf in ttg_vals
     avg_ttg = Inf32
-    avg_tto = Inf32
 else 
     avg_ttg = mean(ttg_vals)
+end
+if Inf in tto_vals
+    avg_tto = Inf32
+else 
     avg_tto = mean(tto_vals)
 end
 
@@ -75,5 +78,5 @@ println("-"^40)
 
 @printf("%-20s %-15.4f\n", "Objective", avg_obj)
 @printf("%-20s %-15.2f\n", "Iterations", avg_iter)
-@printf("%-20s %-15.2f\n", "Time to Gap", avg_ttg)
-@printf("%-20s %-15.2f\n", "Time to Optimal", avg_tto)
+@printf("%-20s %-15.4f\n", "Time to Gap", avg_ttg)
+@printf("%-20s %-15.4f\n", "Time to Optimal", avg_tto)
