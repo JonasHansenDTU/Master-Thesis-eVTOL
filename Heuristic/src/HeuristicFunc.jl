@@ -536,7 +536,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
     single_route_pool = SingleRoutePoolEntry[]
 
 
-    max_size = Int(round(length(data.N)*length(data.V)*0.5))
+    max_size = Int(round(length(data.N)*length(data.V)*1.5))
 
     
     while elapsed <= Float64(MaxTime)

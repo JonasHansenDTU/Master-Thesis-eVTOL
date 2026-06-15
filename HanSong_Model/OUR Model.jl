@@ -106,7 +106,7 @@ function load_data(excel_file::String, parameter_file::String)
     infra = read_sheet(excel_file, "Infrastructure")
     pax = DataFrame(
         XLSX.readtable(
-            joinpath("inputData", "Experiments/inputDataEx5_3_10.xlsx"),
+            joinpath("inputData", "inputData.xlsx"),
             "PassengerGroups"
         )
     )
@@ -643,20 +643,19 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     @constraint(model, [i in V, j in V, m in 1:maximum(M), n in N],
         u[m,n] <= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                   charge[m,n] +
-                  (1 - x[i,j,m,n]) * M2c*2
+                  (1 - x[i,j,m,n]) * M2c
     )
 
     # (6.24b) Battery update between operations
     @constraint(model, [i in V, j in V, m in 1:maximum(M), n in N],
         u[m,n] >= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                  charge[m,n] -
-                  (1 - x[i,j,m,n]) * M2c*2
+                  (1 - x[i,j,m,n]) * M2c
     )
 
     # (6.25) Charging level at each operation 
-    @constraint(model, [i in V, j in V, m in 1:maximum(M), n in N],
-        charge[m,n] <= ec * (dep[m,n] - arr[m-1,n]) +
-                  (1 - x[i,j,m,n]) * M2c
+    @constraint(model, [m in 1:maximum(M), n in N],
+        charge[m,n] <= ec * (dep[m,n] - arr[m-1,n])
     )
 
     # (6.26) Operation 0 starts at time 0
@@ -953,7 +952,7 @@ end
 # Usage
 ###############################################################################
 
-excel_file = joinpath("inputData/Experiments/inputDataEx5_3_10.xlsx")
+excel_file = joinpath("inputData/inputData.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()
