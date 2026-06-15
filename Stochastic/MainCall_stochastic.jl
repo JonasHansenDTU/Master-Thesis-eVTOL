@@ -34,23 +34,15 @@ include(joinpath(@__DIR__, "StochasticHeuristic.jl"))
 
 maxTurnaround = 100
 
-MaxTime_1st        = Int32(90)   # MUST be enough to find the rich deterministic seed
-n_restarts         = 2            # take the better of two seeds
-n_outer_iters      = 4            # Phase 2 prunes/refines the seed
-MaxTime_2nd_search = Int32(8)     # recourse quality during search
-MaxTime_2nd_final  = Int32(30)    # final high-quality recourse pass
+MaxTime_1st        = Int32(90)   
+n_restarts         = 2      
+n_outer_iters      = 4          
+MaxTime_2nd_search = Int32(8)   
+MaxTime_2nd_final  = Int32(30)    
 price_boost        = 8.0
 hard_penalty       = 50_000.0
-top_c              = 4            # top routes per base vertiport considered by constructor
-
-MaxTime_1st        = Int32(10)   # MUST be enough to find the rich deterministic seed
-n_restarts         = 1            # take the better of two seeds
-n_outer_iters      = 1            # Phase 2 prunes/refines the seed
-MaxTime_2nd_search = Int32(8)     # recourse quality during search
-MaxTime_2nd_final  = Int32(10)    # final high-quality recourse pass
-price_boost        = 8.0
-hard_penalty       = 50_000.0
-top_c              = 4            # top routes per base vertiport considered by constructor
+top_c              = 4           
+        
 
 ###############################################################################
 # Load data and generate scenarios
