@@ -224,9 +224,7 @@ function load_data(excel_file::String, parameter_file::String)
     w                     = params["w"]
     ET                    = params["ET"]
     M1                    = 1
-    M2a                   = 0
-    M2b                   = bmax
-    M2c                   = bmax + ec * ET
+    M2                    = bmax
     M3                    = ET
 
     M = 0:10
@@ -369,7 +367,7 @@ function load_data(excel_file::String, parameter_file::String)
         dist = dist, fd = fd_lookup, fs = fs, c = c, e = e, rt = rt, end_vp = end_vp,
         op = op, dp = dp, dt = dt, q = q, so = so, p = p, d = d,
         cap_v = cap_v, cap_u = cap_u, opening_cost = opening_cost, battery_per_km,
-        bmax = bmax, bmid = bmid, b_penalty = b_penalty, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2a = M2a, M2b = M2b, M2c = M2c, M3 = M3
+        bmax = bmax, bmid = bmid, b_penalty = b_penalty, bmin = bmin, ec = ec, te = te, w = w, ET = ET, M1 = M1, M2 = M2, M3 = M3
     )
 end
 
@@ -418,9 +416,7 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     te           = data.te
     w            = data.w
     M1           = data.M1
-    M2a          = data.M2a
-    M2b          = data.M2b
-    M2c          = data.M2c
+    M2          = data.M2
     M3           = data.M3
 
     ###########################################################################
@@ -643,20 +639,20 @@ function build_model(excel_file::String, parameter_file::String; show_progress::
     @constraint(model, [i in V, j in V, m in 1:maximum(M), n in N],
         u[m,n] <= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                   charge[m,n] +
-                  (1 - x[i,j,m,n]) * M2c*2
+                  (1 - x[i,j,m,n]) * M2
     )
 
     # (6.24b) Battery update between operations
     @constraint(model, [i in V, j in V, m in 1:maximum(M), n in N],
         u[m,n] >= u[m-1,n] - e[(i,j)] * x[i,j,m,n] +
                  charge[m,n] -
-                  (1 - x[i,j,m,n]) * M2c*2
+                  (1 - x[i,j,m,n]) * M2
     )
 
     # (6.25) Charging level at each operation 
     @constraint(model, [i in V, j in V, m in 1:maximum(M), n in N],
         charge[m,n] <= ec * (dep[m,n] - arr[m-1,n]) +
-                  (1 - x[i,j,m,n]) * M2c
+                  (1 - x[i,j,m,n]) * M2
     )
 
     # (6.26) Operation 0 starts at time 0
@@ -953,7 +949,7 @@ end
 # Usage
 ###############################################################################
 
-excel_file = joinpath("inputData/Experiments/inputDataEx5_3_10.xlsx")
+excel_file = joinpath("inputData/inputData.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()
@@ -995,9 +991,7 @@ function print_results_pretty(model::Model, data)
     w = data.w
     ET = data.ET
     M1 = data.M1
-    M2a = data.M2a
-    M2b = data.M2b
-    M2c = data.M2c
+    M2 = data.M2
     M3 = data.M3
     fd = data.fd
     fs = data.fs
