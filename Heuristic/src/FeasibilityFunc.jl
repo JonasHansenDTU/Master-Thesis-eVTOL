@@ -60,12 +60,16 @@ function FeasibleBattery(
                 max(0f0, target - BatteryLevel[i])
             )
 
+
+            # --- NEW: Calculate the battery level immediately AFTER charging ---
+            preflight_battery = BatteryLevel[i] + charge
+
+            # --- NEW: Penalty for holding a charge above bmid BEFORE takeoff ---
+            excess = max(preflight_battery - bmid, 0f0)
+            battery_overrule += ceil(excess) * b_penalty
+
             BatteryLevel[i + 1] =
                 BatteryLevel[i] + charge - needed
-
-            # --- penalty for operating above bmid after arrival ---
-            excess = max(BatteryLevel[i + 1] - bmid, 0f0)
-            battery_overrule += ceil(excess) * b_penalty
 
             # --- feasibility check ---
             if BatteryLevel[i + 1] < bmin
