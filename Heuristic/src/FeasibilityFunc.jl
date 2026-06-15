@@ -31,7 +31,7 @@ function FeasibleBattery(
 )
 
     battery_levels = Vector{Vector{Float32}}()
-    battery_overrule = 0
+    battery_overrule = 0.0
     feasible = true
 
     for evtol in evtols.planes
@@ -39,50 +39,35 @@ function FeasibleBattery(
         BatteryLevel = zeros(Float32, evtol.flightLegs + 1)
         BatteryLevel[1] = bmid
 
-        if evtol.flightLegs > 0
-            from2 = evtol.route[1]
-            to2 = evtol.route[2]
-
-            TravelLength2 = Float32(dist[(from2, to2)])
-
-            BatteryLevel[2] =
-                BatteryLevel[1] -
-                BatteryNeeded(TravelLength2, battery_per_km)
-        end
-
         for i in 1:evtol.flightLegs
 
             from = evtol.route[i]
             to = evtol.route[i + 1]
 
             TravelLength = Float32(dist[(from, to)])
+            needed = BatteryNeeded(TravelLength, battery_per_km)
 
-            BatteryLevel[i + 1] =
-                min(
-                    BatteryLevel[i] +
-                    min(
-                        min(
-                            BatteryCharged(
-                                Float32(evtol.turnaroundTime[i]),
-                                Float32(ec)
-                            ),
-                            bmax - BatteryLevel[i]
-                        ),
-                        BatteryNeeded(TravelLength, battery_per_km)
-                    ) -
-                    BatteryNeeded(TravelLength, battery_per_km),
-                    bmax
-                )
+            # --- feasibility requirement: must land with at least bmin ---
+            required_preflight = needed + bmin
 
-            excess = max(
-                BatteryLevel[i + 1] +
-                BatteryNeeded(TravelLength, battery_per_km) -
-                bmid,
-                0
+            # --- preferred target is bmid, but feasibility overrides it ---
+            target = max(bmid, required_preflight)
+
+            # --- charging limited by time, capacity, and target ---
+            charge = min(
+                BatteryCharged(Float32(evtol.turnaroundTime[i]), Float32(ec)),
+                bmax - BatteryLevel[i],
+                max(0f0, target - BatteryLevel[i])
             )
 
+            BatteryLevel[i + 1] =
+                BatteryLevel[i] + charge - needed
+
+            # --- penalty for operating above bmid after arrival ---
+            excess = max(BatteryLevel[i + 1] - bmid, 0f0)
             battery_overrule += ceil(excess) * b_penalty
 
+            # --- feasibility check ---
             if BatteryLevel[i + 1] < bmin
                 feasible = false
             end
@@ -96,6 +81,7 @@ function FeasibleBattery(
     return feasible, battery_levels, battery_overrule
 
 end
+
 
 function FeasibleCompletionTime(evtols::allPlaneSolution, rt::Matrix{Int}, ET::Int)
     for evtol in evtols.planes

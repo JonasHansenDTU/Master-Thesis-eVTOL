@@ -37,6 +37,9 @@ function score_single_plane_solution(plane::planeSolution, data, rt)
     
     # Get passenger assignments for this single plane route
     assignments, scheduled = assign_passengersV2(single_sol, data, Int.(rt))
+
+   
+
     
     # Compute the objective value directly.
     # include_unserved_penalty = false: this scores ONE route in isolation for
@@ -447,7 +450,19 @@ function build_pool_candidate(pool::Vector{SingleRoutePoolEntry}, data, rt; max_
 
         # Randomly pick from the top 10 (or fewer if not available)
         # top_k = min(100, length(filtered))
-        choice = filtered[rand(1:length(filtered))]
+        α = 0.7   # higher = stronger bias to first elements
+
+        n = length(filtered)
+
+        weights = (1:n) .^ (-α)
+        weights ./= sum(weights)
+
+        r = rand()
+        cum = cumsum(weights)
+
+        idx = searchsortedfirst(cum, r)
+
+        choice = filtered[idx]
 
         # Apply chosen route and mark its key as used
         key = single_route_key(choice.plane)
@@ -520,7 +535,13 @@ function build_pool_candidate(pool::Vector{SingleRoutePoolEntry}, data, rt; max_
     return cand
 end
 
-function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
+function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; optimal_obj::Float32 = Inf32)
+
+    Time_to_Optimal = Inf
+    Time_to_Gap = Inf
+
+    Reached_Optimal = false
+    Reached_Gap = false
 
     start_ns = time_ns()
     elapsed = 0.0
@@ -539,7 +560,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
     max_size = Int(round(length(data.N)*length(data.V)*1.5))
 
     
-    while elapsed <= Float64(MaxTime)
+    while elapsed <= Float64(MaxTime) && !Reached_Optimal
         nr = 5
         idx = rand(1:nr)
         T = 1000
@@ -561,6 +582,14 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
             best_sol = deepcopy(temp_sol)
             println("New best Obj $(best_obj)")
             println("Method used: Initial Heuristic")
+            if best_obj > optimal_obj*0.9 - 0.01 && !Reached_Gap
+                Time_to_Gap = elapsed
+                Reached_Gap = true
+            end
+            if best_obj > optimal_obj - 0.01 && !Reached_Optimal
+                Time_to_Optimal = elapsed
+                Reached_Optimal = true
+            end
         end
 
         single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max_size)
@@ -630,6 +659,14 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
                     best_sol = deepcopy(temp_sol)
                     println("New best Obj $(best_obj)")
                     println("Method used: $(("Destructor", "Constructor", "SegmentExchange")[method_used + 1])")
+                    if best_obj > optimal_obj*0.9 - 0.01 && !Reached_Gap
+                        Time_to_Gap = elapsed
+                        Reached_Gap = true
+                    end
+                    if best_obj > optimal_obj - 0.01 && !Reached_Optimal
+                        Time_to_Optimal = elapsed
+                        Reached_Optimal = true
+                    end
                 end
             end
 
@@ -693,5 +730,5 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
     
     println("=========================================\n")
 
-    return best_obj, best_sol, iterations
+    return best_obj, best_sol, iterations, Time_to_Gap, Time_to_Optimal
 end

@@ -106,7 +106,7 @@ function load_data(excel_file::String, parameter_file::String)
     infra = read_sheet(excel_file, "Infrastructure")
     pax = DataFrame(
         XLSX.readtable(
-            joinpath("inputData", "inputData.xlsx"),
+            joinpath("inputData", "Experiments/inputDataEx2_1_1.xlsx"),
             "PassengerGroups"
         )
     )
@@ -948,7 +948,7 @@ end
 # Usage
 ###############################################################################
 
-excel_file = joinpath("inputData/inputData.xlsx")
+excel_file = joinpath("inputData/Experiments/inputDataEx2_1_1.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()
@@ -1222,6 +1222,8 @@ function print_results_pretty(model::Model, data)
     println()
 end
 
+
+
 function print_results_maincall_style(model::Model, data)
     if !has_values(model)
         println("No solution available.")
@@ -1239,6 +1241,10 @@ function print_results_maincall_style(model::Model, data)
     dt = data.dt
     q = data.q
     cap_u = Int(round(data.cap_u))
+    
+    d = data.d
+    so = data.so
+    c = data.c
 
     println("Best solution:")
     println("Objective Value: $(objective_value(model))")
@@ -1358,6 +1364,90 @@ function print_results_maincall_style(model::Model, data)
 
     println()
     println("Total legs: $(length(scheduled))")
+
+    ####################################################################
+    # NEW: OBJECTIVE BREAKDOWN AUDIT
+    ####################################################################
+
+    println("\n================ OBJECTIVE BREAKDOWN ================\n")
+
+    obj_revenue = 0.0
+    obj_cost_x = 0.0
+    obj_unserved = 0.0
+    obj_opening = 0.0
+    obj_battery = 0.0
+
+    # --- revenue ---
+    for a in A, i in V, j in V, n in N
+        obj_revenue += value(d[a,i,j]) *
+                       value(model[:ss][a,n]) *
+                       value(data.q[a]) *
+                       (value(data.fd[i,j]) * (1 - value(so[a])) +
+                        value(data.fs[i,j]) * value(so[a]))
+    end
+
+    # --- routing cost ---
+    for i in V, j in V, m in M, n in N
+        obj_cost_x += value(c[i,j]) * value(model[:x][i,j,m,n])
+    end
+
+    # --- unserved demand ---
+    for a in A
+        served = sum(value(model[:ss][a,n]) for n in N)
+        obj_unserved += value(data.p[a]) * (1 - served)
+    end
+
+    # --- opening cost ---
+    for n in N
+        obj_opening += value(data.opening_cost) * value(model[:y][n])
+    end
+
+    # --- battery penalty ---
+    for m in M, n in N
+        obj_battery += value(model[:bp][m,n]) * value(data.b_penalty)
+    end
+
+    total_recalc =
+        obj_revenue -
+        obj_cost_x -
+        obj_unserved -
+        obj_opening -
+        obj_battery
+
+    println("Revenue term      : ", obj_revenue)
+    println("Routing cost      : ", obj_cost_x)
+    println("Unserved penalty  : ", obj_unserved)
+    println("Opening cost      : ", obj_opening)
+    println("Battery penalty   : ", obj_battery)
+    println("-----------------------------------")
+    println("Recomputed total  : ", total_recalc)
+
+    println("\n--- Nonzero variables in objective ---")
+
+    println("\nss[a,n]:")
+    for a in A, n in N
+        v = value(model[:ss][a,n])
+        if abs(v) > 1e-6
+            println("ss[$a,$n] = $v")
+        end
+    end
+
+    println("\nx[i,j,m,n]:")
+    for i in V, j in V, m in M, n in N
+        v = value(model[:x][i,j,m,n])
+        if abs(v) > 1e-6
+            println("x[$i,$j,$m,$n] = $v")
+        end
+    end
+
+    println("\ny[n]:")
+    for n in N
+        v = value(model[:y][n])
+        if abs(v) > 1e-6
+            println("y[$n] = $v")
+        end
+    end
+
 end
 
 t_pretty = @elapsed Base.invokelatest(print_results_maincall_style, model, data)
