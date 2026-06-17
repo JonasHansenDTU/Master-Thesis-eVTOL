@@ -106,7 +106,7 @@ function load_data(excel_file::String, parameter_file::String)
     infra = read_sheet(excel_file, "Infrastructure")
     pax = DataFrame(
         XLSX.readtable(
-            joinpath("inputData", "Experiments/inputDataEx2_1_2.xlsx"),
+            joinpath("inputData", "Experiments/inputDataEx10_15_35.xlsx"),
             "PassengerGroups"
         )
     )
@@ -948,7 +948,7 @@ end
 # Usage
 ###############################################################################
 
-excel_file = joinpath("inputData/Experiments/inputDataEx2_1_2.xlsx")
+excel_file = joinpath("inputData/Experiments/inputDataEx10_15_35.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()
