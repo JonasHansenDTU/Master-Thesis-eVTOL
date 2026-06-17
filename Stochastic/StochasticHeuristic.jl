@@ -454,7 +454,24 @@ end
 function second_stage_profit(sol::allPlaneSolution, sc_data,
                               sc_rt_mat::Matrix{Int},
                               accepted::Set{Int};
-                              hard_penalty::Float64 = 5_000.0)
+                              hard_penalty::Float64 = 5_000.0,
+                              active::Union{Nothing,Set{Int}} = nothing)
+
+    # ── Active-fleet enforcement ────────────────────────────────────────────
+    # Only first-stage activated eVTOLs may fly in the second stage (matching
+    # the MIP, where routing of eVTOL n is gated by y[n]). Any eVTOL that flies
+    # but is NOT in the active set makes this solution infeasible: we apply a
+    # prohibitive penalty so the search avoids it, and treat its service as
+    # invalid. (N must remain the full fleet for planes[n] indexing, so we
+    # enforce activation here rather than by shrinking N.)
+    fleet_violation = 0.0
+    if active !== nothing
+        for (idx, plane) in enumerate(sol.planes)
+            if plane.flightLegs > 0 && !(idx in active)
+                fleet_violation += 1_000_000.0
+            end
+        end
+    end
 
     assignments, _ = assign_passengersV2(sol, sc_data, sc_rt_mat)
     served = Set{Int}(ass.group for ass in assignments)
@@ -509,6 +526,7 @@ function second_stage_profit(sol::allPlaneSolution, sc_data,
         end
     end
     value -= sum(P)
+    value -= fleet_violation   # prohibitive if a non-active eVTOL flew
 
     # Penalty only for unserved ACCEPTED passengers
     for a in accepted
@@ -539,7 +557,8 @@ end
 
 function repair_unserved!(sol::allPlaneSolution, sc_data,
                            sc_rt_mat::Matrix{Int},
-                           accepted::Set{Int})
+                           accepted::Set{Int};
+                           active::Union{Nothing,Set{Int}} = nothing)
 
 
     assignments, _ = assign_passengersV2(sol, sc_data, sc_rt_mat)
@@ -559,7 +578,7 @@ function repair_unserved!(sol::allPlaneSolution, sc_data,
 
         for (pidx, plane) in plane_indices
             plane.flightLegs == 0 && continue
-
+            (active !== nothing && !(pidx in active)) && continue  # active fleet only
             cum_time = 0
             for k in 1:plane.flightLegs
                 from = Int(plane.route[k])
@@ -597,6 +616,7 @@ function repair_unserved!(sol::allPlaneSolution, sc_data,
         if !fixed
             for (pidx, plane) in plane_indices
                 plane.flightLegs == 0 || continue            # must be idle
+                (active !== nothing && !(pidx in active)) && continue  # active fleet only
                 Int(plane.route[1]) == sc_data.op[a] || continue  # based at origin
 
                 # Departure can be any time from 0; pick the earliest feasible
@@ -676,20 +696,34 @@ function solve_second_stage(fsd::FirstStageDecision,
                                       price_boost  = price_boost,
                                       hard_penalty = hard_penalty)
 
-    # Run full heuristic — routes, times, aircraft assignment all free
-    # (within the activated fleet)
+    # Run full heuristic — routes, times, aircraft assignment all free.
     _, sc_sol, _ = HeuristicSA(maxTurnaround, MaxTime_2nd, ss_data,
                                 sc_rt_mat, top_c)
 
-    # Repair step: try to force-serve any accepted passengers still missed,
-    # searching only the committed eVTOL for each passenger.
-    repair_unserved!(sc_sol, sc_data, sc_rt_mat,
-                     fsd.accepted_passengers)
+    # ── Confine the solution to the first-stage activated fleet ──────────────
+    # The reused HeuristicSA does not know about the activation decision and may
+    # route non-activated eVTOLs. Strip the routes of any eVTOL not in the active
+    # set so only committed aircraft fly (matching the MIP, where y[n] gates
+    # routing). Passengers the search placed on stripped eVTOLs become unserved
+    # and are then re-served by the repair step using ONLY active eVTOLs.
+    active = fsd.active_evtols
+    for (idx, plane) in enumerate(sc_sol.planes)
+        if !(idx in active) && plane.flightLegs > 0
+            plane.route          = Int32[Int32(plane.route[1])]  # base only
+            plane.turnaroundTime = Int32[]
+            plane.flightLegs     = 0
+        end
+    end
 
-    # Evaluate true profit on original scenario data
+    # Repair step: force-serve any accepted passengers still missed, using only
+    # the committed (active) eVTOLs.
+    repair_unserved!(sc_sol, sc_data, sc_rt_mat,
+                     fsd.accepted_passengers; active = active)
+
+    # Evaluate true profit on original scenario data, enforcing the active fleet.
     profit, assignments, accepted_served, n_unserved = second_stage_profit(
         sc_sol, sc_data, sc_rt_mat, fsd.accepted_passengers;
-        hard_penalty = hard_penalty
+        hard_penalty = hard_penalty, active = active
     )
 
     return (
@@ -1164,6 +1198,49 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
     println("  Phase 2 best: active=$(sort(collect(best_fsd.active_evtols)))")
     println("  Phase 2 best: E[profit]=$(round(best_exp_obj, digits=2))")
 
+    # ─────────────────────────────────────────────────────────────────────────
+    # Cleanup pass: drop any committed eVTOL that never actually flies.
+    # The active set is seeded from the tentative plan and adjusted by FLEET±,
+    # but the greedy search can leave a committed eVTOL that flies in NO scenario
+    # (its opening cost is pure waste). We evaluate the current best, find which
+    # active eVTOLs carry no leg in any scenario, and drop them — this can only
+    # save opening cost without losing service, so it never worsens E[profit].
+    # ─────────────────────────────────────────────────────────────────────────
+    println("\n[Cleanup] Checking for committed eVTOLs that never fly …")
+    _, cleanup_results = expected_objective(
+        best_fsd, scenario_cache, rt_mats, S, pi_s;
+        maxTurnaround = maxTurnaround, MaxTime_2nd = MaxTime_2nd_search,
+        top_c = top_c, price_boost = price_boost,
+        hard_penalty = hard_penalty, full_output = true,
+    )
+    flew = Set{Int}()
+    for (sc, r) in cleanup_results
+        for (idx, plane) in enumerate(r.sol.planes)
+            plane.flightLegs > 0 && push!(flew, idx)
+        end
+    end
+    never_fly = setdiff(best_fsd.active_evtols, flew)
+    if !isempty(never_fly)
+        trimmed_active = setdiff(best_fsd.active_evtols, never_fly)
+        if !isempty(trimmed_active)
+            trimmed_fsd = make_fsd(best_fsd.accepted_passengers,
+                                   Set{Int}(trimmed_active), data, best_tent_sol)
+            trimmed_obj, _ = expected_objective(
+                trimmed_fsd, scenario_cache, rt_mats, S, pi_s;
+                maxTurnaround = maxTurnaround, MaxTime_2nd = MaxTime_2nd_search,
+                top_c = top_c, price_boost = price_boost,
+                hard_penalty = hard_penalty, full_output = false,
+            )
+            println("  Dropping never-flying eVTOLs $(sort(collect(never_fly))) " *
+                    "(saves opening cost). E[profit] $(round(best_exp_obj,digits=2)) " *
+                    "→ $(round(trimmed_obj,digits=2))")
+            best_fsd     = trimmed_fsd
+            best_exp_obj = trimmed_obj
+        end
+    else
+        println("  None — every committed eVTOL flies in at least one scenario.")
+    end
+
     # Final second-stage pass with longer budget
     println("\n[Final] Re-solving all scenarios with $(MaxTime_2nd_final)s budget …")
     final_exp_obj, scenario_results = expected_objective(
@@ -1451,5 +1528,71 @@ function print_stochastic_result(result, data)
     @printf("  First-stage cost (opening)     = %+.2f\n", -result.first_stage_cost)
     @printf("  E[second-stage profit]         = %+.2f\n", exp_ss)
     @printf("  E[total profit]  (E[profit])   = %+.2f\n", result.expected_obj)
+    println("="^72)
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # Per-scenario second-stage routing audit. Prints the ACTUAL routes flown in
+    # each scenario (the binding solution, not the tentative seed), and for each
+    # leg the passengers carried with a seat-capacity check. Flags any eVTOL that
+    # flies but is NOT in the committed active set (active-set leak), and any leg
+    # whose carried passengers exceed cap_u (capacity-accounting bug).
+    # ─────────────────────────────────────────────────────────────────────────
+    print_scenario_routing_audit(result, data)
+end
+
+function print_scenario_routing_audit(result, data)
+    active = Set(result.active_evtols)
+    cap_u  = Int(round(data.cap_u))
+    println("\n" * "="^72)
+    println("PER-SCENARIO SECOND-STAGE ROUTING AUDIT")
+    println("="^72)
+    println("  Active (committed) eVTOLs: $(sort(collect(active)))")
+    println("  Seat capacity per leg (cap_u): $cap_u")
+
+    for sc in sort(collect(keys(result.scenario_results)))
+        scen = SCENARIOS[sc]
+        r    = result.scenario_results[sc]
+        println("\n  " * "-"^68)
+        println("  Scenario $sc — $(scen.label)")
+        println("  " * "-"^68)
+        println("  Routes actually flown (second-stage solution):")
+        print_chromosome_table(r.sol)
+        println("  Passenger-carrying legs and capacity check:")
+
+        # Group assignments by plane and leg index.
+        # ass.legs lists the operation indices on which group ass.group is carried.
+        leg_pax = Dict{Tuple{Int,Int}, Vector{Int}}()   # (plane, leg) -> [groups]
+        planes_used = Set{Int}()
+        for ass in r.assignments
+            push!(planes_used, ass.plane)
+            for lg in ass.legs
+                push!(get!(leg_pax, (ass.plane, lg), Int[]), ass.group)
+            end
+        end
+
+        # Report each plane that actually flies in this scenario.
+        for n in sort(collect(planes_used))
+            leak = n in active ? "" : "  ⚠ NOT IN ACTIVE SET (leak?)"
+            println("    eVTOL $n$leak")
+            legs_here = sort([lg for (pl,lg) in keys(leg_pax) if pl == n])
+            if isempty(legs_here)
+                println("      (flies but carries no committed/served group)")
+            end
+            for lg in legs_here
+                groups = sort(leg_pax[(n,lg)])
+                used   = sum(data.q[g] for g in groups)
+                over   = used > cap_u ? "  ⚠ EXCEEDS cap_u=$cap_u" : ""
+                gstr   = join([g > 1000 ? "B$(g-1000)" : "A$g" for g in groups], ", ")
+                println(@sprintf("      leg %-2d : seats %d/%d  [%s]%s",
+                        lg, used, cap_u, gstr, over))
+            end
+        end
+        if isempty(planes_used)
+            println("    (no eVTOL carries any group in this scenario)")
+        end
+    end
+    println("\n" * "="^72)
+    println("  Legend: A# = committed Pool A group, B# = on-demand Pool B group.")
+    println("  ⚠ flags an eVTOL flying outside the active set, or a leg over capacity.")
     println("="^72)
 end
