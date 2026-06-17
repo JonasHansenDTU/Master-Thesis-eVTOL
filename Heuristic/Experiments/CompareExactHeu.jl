@@ -26,7 +26,7 @@ for file in source_files
     include(joinpath(src_dir, file))
 end
 
-excel_file     = joinpath(@__DIR__, "..", "..", "inputData", "Experiments/inputDataEx10_15_35.xlsx")
+excel_file     = joinpath(@__DIR__, "..", "..", "inputData", "Experiments/inputDataEx5_3_10.xlsx")
 parameter_file = joinpath(@__DIR__, "..", "..", "inputData", "Parameters.xlsx")
 data = load_data(excel_file, parameter_file)
 
@@ -39,7 +39,7 @@ for i in data.V, j in data.V
 end
 
 maxTurnaround = Int64(data.ET)
-Maxtime = Int32(600)
+Maxtime = Int32(10)
 top_c = 4
 Optimum = Inf32
 # Random.seed!(1234)
