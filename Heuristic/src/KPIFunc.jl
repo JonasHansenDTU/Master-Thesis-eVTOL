@@ -22,7 +22,17 @@ function aircraft_utilization(evtols::allPlaneSolution, data, rt::AbstractMatrix
     # Total available capacity over the time horizon (Total Planes * Capacity * Total Time)
     # If data.ET is just time, we scale it by the individual plane capacity
     total_planes = max(length(evtols.planes), 1)
-    total_capacity_available = total_planes * Float64(data.cap_u) * Float64(data.ET)
+    active_planes = 0
+
+    for i in 1:total_planes
+        if evtols.planes[i].flightLegs > 1
+            active_planes += 1
+        end
+    end
+
+
+
+    total_capacity_available = active_planes * Float64(data.cap_u) * Float64(data.ET)
     
     total_capacity_occupied = 0.0
     minimum_turnaround = Float64(data.te)
@@ -73,7 +83,7 @@ end
 function passenger_demand_served(evtols::allPlaneSolution, data, rt::AbstractMatrix)
     assignments, _, _, _ = solution_kpi_context(evtols, data, rt)
 
-    served_demand = sum(1 for ass in assignments)
+    served_demand = sum(1 for ass in assignments; init=0)
 
     return served_demand
 end

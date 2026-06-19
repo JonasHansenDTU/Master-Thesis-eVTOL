@@ -1,6 +1,6 @@
 function fitnessFunction(evtols::allPlaneSolution, assignments::Vector{PassengerAssignment}, bmax::Float32, bmid::Float32, bmin::Float32,
     dist::Dict{Tuple{Int,Int},Float64}, ec::Float32, battery_per_km::Float32, rt::Matrix{Int}, ET::Int, T::Int, V::Int, cap_v::Dict{}, data;
-    include_unserved_penalty::Bool = true)
+    include_unserved_penalty::Bool = true, profit::Bool = false)
 
 
     b_penalty = data.b_penalty 
@@ -18,7 +18,6 @@ function fitnessFunction(evtols::allPlaneSolution, assignments::Vector{Passenger
     P = FeasibilityCheck(bmax, bmid, bmin, dist, ec, battery_per_km, evtols, rt, ET, T, V, cap_v, b_penalty)
 
     fitnessvalue = 0.0
-
 
     # if (evtols.planes[1].flightLegs == 0 &&
     #     evtols.planes[2].route == [2, 3, 2] &&
@@ -50,7 +49,7 @@ function fitnessFunction(evtols::allPlaneSolution, assignments::Vector{Passenger
     # single route in the pool) it must be excluded, otherwise every route is
     # charged for all the passengers it was never meant to serve, swamping the
     # real differences between routes.
-    if include_unserved_penalty
+    if include_unserved_penalty && !profit
         assigned_groups = Set(ass.group for ass in assignments)
         for a in A
             if !(a in assigned_groups)
@@ -67,7 +66,11 @@ function fitnessFunction(evtols::allPlaneSolution, assignments::Vector{Passenger
     end
 
     # 5. Large infeasibility penalty
-    fitnessvalue -= sum(P)
+    if !profit || P[1] >= 1_000_000
+        fitnessvalue -= sum(P)
+    else
+        fitnessvalue -= sum(P)-P[1]
+    end
 
 
 

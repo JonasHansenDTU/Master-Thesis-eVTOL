@@ -540,6 +540,9 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
     Time_to_Optimal = Inf
     Time_to_Gap = Inf
 
+    Time_to_best = 0
+
+
     Reached_Optimal = false
     Reached_Gap = false
 
@@ -557,7 +560,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
     single_route_pool = SingleRoutePoolEntry[]
 
 
-    max_size = Int(round(length(data.N)*length(data.V)*1.5))
+    max_size = Int(round(length(data.N)*length(data.V)))
 
     
     while elapsed <= Float64(MaxTime) && !Reached_Optimal
@@ -566,9 +569,9 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
         T = 1000
         Best_sols = generate_best_initial_solutions(data, rt, candiateroutes; n_runs = 10, top_k = nr, top_c, maxLegs=6, maxTurnaround)
 
-        for (i, best_sol_candidate) in enumerate(Best_sols)
-            check_route_endpoints(best_sol_candidate.evtols, data, "Initial solution $(i)")
-        end
+        # for (i, best_sol_candidate) in enumerate(Best_sols)
+        #     check_route_endpoints(best_sol_candidate.evtols, data, "Initial solution $(i)")
+        # end
 
         temp_obj = Best_sols[idx].fitness
         temp_sol = deepcopy(Best_sols[idx].evtols)
@@ -582,9 +585,10 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
             best_sol = deepcopy(temp_sol)
             println("New best Obj $(best_obj)")
             println("Method used: Initial Heuristic")
-            if best_obj > optimal_obj*0.9 - 0.01 && !Reached_Gap
+            Time_to_best = elapsed
+            if (best_obj > optimal_obj*0.9 - 0.01 || best_obj > optimal_obj*1.1 - 0.01) && !Reached_Gap
                 Time_to_Gap = elapsed
-                Reached_Gap = true
+                Reached_Gap = true  
             end
             if best_obj > optimal_obj - 0.01 && !Reached_Optimal
                 Time_to_Optimal = elapsed
@@ -603,7 +607,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
                     temp_sol = pool_sol
                     temp_obj = pool_obj
                     # single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max_size)
-                    check_route_endpoints(temp_sol, data, "Accepted pool candidate")
+                    # check_route_endpoints(temp_sol, data, "Accepted pool candidate")
                 end
             end
         end
@@ -630,7 +634,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
                     next_method = 2
                 end
                 method_used = next_method
-                check_route_endpoints(cand_sol, data, "Candidate after $(("DestructSA", "ConstructSA", "SegmentExchange")[next_method + 1])")
+                # check_route_endpoints(cand_sol, data, "Candidate after $(("DestructSA", "ConstructSA", "SegmentExchange")[next_method + 1])")
             end
 
             # out = 0
@@ -650,7 +654,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
             if cand_obj > temp_obj || (rand() < exp(max(min(delta/T, 700.0), -700.0)))
                 temp_obj = cand_obj
                 temp_sol = deepcopy(cand_sol)
-                check_route_endpoints(temp_sol, data, "Accepted candidate")
+                # check_route_endpoints(temp_sol, data, "Accepted candidate")
                 improvement = true
                 single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max_size)
 
@@ -659,7 +663,8 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
                     best_sol = deepcopy(temp_sol)
                     println("New best Obj $(best_obj)")
                     println("Method used: $(("Destructor", "Constructor", "SegmentExchange")[method_used + 1])")
-                    if best_obj > optimal_obj*0.9 - 0.01 && !Reached_Gap
+                    Time_to_best = elapsed
+                    if (best_obj > optimal_obj*0.9 - 0.01 || best_obj > optimal_obj*1.1 - 0.01) && !Reached_Gap
                         Time_to_Gap = elapsed
                         Reached_Gap = true
                     end
@@ -730,5 +735,27 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
     
     println("=========================================\n")
 
-    return best_obj, best_sol, iterations, Time_to_Gap, Time_to_Optimal
+    assignments, scheduled = assign_passengersV2(best_sol, data, Int.(rt))
+
+    profit = fitnessFunction(
+            best_sol,
+            assignments,
+            Float32(data.bmax),
+            Float32(data.bmid),
+            Float32(data.bmin),
+            data.dist,
+            Float32(data.ec),
+            Float32(data.battery_per_km),
+            Int.(rt),
+            Int(round(data.ET)),
+            maximum(Int.(data.T)),
+            maximum(data.V),
+            data.cap_v,
+            data,
+            include_unserved_penalty = false,
+            profit = true
+        )
+
+
+    return best_obj, best_sol, iterations, Time_to_Gap, Time_to_Optimal, Time_to_best, profit
 end

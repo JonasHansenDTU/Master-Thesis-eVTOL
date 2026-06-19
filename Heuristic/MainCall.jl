@@ -25,7 +25,7 @@ for file in source_files
     include(joinpath(src_dir, file))
 end
 
-excel_file     = joinpath(@__DIR__, "..", "inputData", "Experiments/inputDataEx2_1_2.xlsx")
+excel_file     = joinpath(@__DIR__, "..", "inputData", "inputDataGiant.xlsx")
 parameter_file = joinpath(@__DIR__, "..", "inputData", "Parameters.xlsx")
 data = load_data(excel_file, parameter_file)
 
@@ -38,18 +38,19 @@ for i in data.V, j in data.V
 end
 
 maxTurnaround = Int64(data.ET)
-Maxtime = Int32(2)
+Maxtime = Int32(3)
 top_c = 4
 # Random.seed!(1234)
 
 
 
 # (best_obj, best_sol, iterations) = Heuristic(maxTurnaround, Maxtime, data, rt, top_c)
-(best_obj, best_sol, iterations, Time_to_Gap, Time_to_Optimal) = HeuristicSA(maxTurnaround, Maxtime, data, rt, top_c)
+(best_obj, best_sol, iterations, Time_to_Gap, Time_to_Optimal, profit) = HeuristicSA(maxTurnaround, Maxtime, data, rt, top_c)
 
 println("Heuristic ran $(iterations) iterations")
 println("Best solution:")
 println("Objective Value: $(best_obj)")
+println("Profit Value: $(profit)")
 print_chromosome_table(best_sol)
 
 # Compute and print battery levels
