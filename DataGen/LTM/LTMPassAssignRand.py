@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 # SETTINGS
 # =====================================================
 
-GROUPS_PER_DAY = 40
+GROUPS_PER_DAY = 25
 
 # -----------------------------------------------------
 # SIMULATION TIME
@@ -154,7 +154,7 @@ def sample_departure_time_valid():
 def sample_group_size():
 
     # Fully random group size
-    return np.random.choice([1, 2, 3, 4])
+    return np.random.choice([1, 2, 3, 4], p=[0.1, 0.2, 0.3, 0.4])
 
 # =====================================================
 # GENERATE DEMAND

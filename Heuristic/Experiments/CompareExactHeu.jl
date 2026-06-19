@@ -26,7 +26,7 @@ for file in source_files
     include(joinpath(src_dir, file))
 end
 
-excel_file     = joinpath(@__DIR__, "..", "..", "inputData", "Experiments/inputDataEx5_3_10.xlsx")
+excel_file     = joinpath(@__DIR__, "..", "..", "inputData", "Experiments/inputDataEx10_20_40.xlsx")
 parameter_file = joinpath(@__DIR__, "..", "..", "inputData", "Parameters.xlsx")
 data = load_data(excel_file, parameter_file)
 
@@ -39,7 +39,7 @@ for i in data.V, j in data.V
 end
 
 maxTurnaround = Int64(data.ET)
-Maxtime = Int32(10)
+Maxtime = Int32(600)
 top_c = 4
 Optimum = Inf32
 # Random.seed!(1234)
@@ -51,9 +51,10 @@ iter_vals = zeros(LoopIter)
 ttg_vals = zeros(LoopIter)
 tto_vals = zeros(LoopIter)
 ttb_vals = zeros(LoopIter)
+profit_vals = zeros(LoopIter)
 
 for i in 1:LoopIter
-    (obj_vals[i], best_sols, iter_vals[i], ttg_vals[i], tto_vals[i], ttb_vals[i]) =
+    (obj_vals[i], best_sols, iter_vals[i], ttg_vals[i], tto_vals[i], ttb_vals[i], profit_vals[i]) =
         HeuristicSA(maxTurnaround, Maxtime, data, rt, top_c; optimal_obj = Float32(Optimum))
 end
 

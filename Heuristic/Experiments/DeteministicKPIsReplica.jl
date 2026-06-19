@@ -69,6 +69,7 @@ function run_heuristic_batch(n_runs::Int; max_turnaround::Int64, maxtime::Int32,
     run_data_list = Any[]
     run_rt_list = Any[]
     iterations = Int[]
+    profits = Float64[]
 
     for run in 1:n_runs
         if seed !== nothing
@@ -76,17 +77,19 @@ function run_heuristic_batch(n_runs::Int; max_turnaround::Int64, maxtime::Int32,
         end
 
         data, rt = load_heuristic_data()
-        best_obj, best_sol, iter_count = HeuristicSA(max_turnaround, maxtime, data, rt, top_c)
+        best_obj, best_sol, iter_count, _, _, _, profit = HeuristicSA(max_turnaround, maxtime, data, rt, top_c)
         push!(best_objs, best_obj)
         push!(best_sols, best_sol)
         push!(run_data_list, data)
         push!(run_rt_list, rt)
         push!(iterations, iter_count)
+        push!(profits, profit)
+
 
         println("Run $run / $n_runs -> best_obj = $(round(best_obj; digits=2)), iterations = $iter_count")
     end
 
-    return best_objs, best_sols, run_data_list, run_rt_list, iterations
+    return best_objs, best_sols, run_data_list, run_rt_list, iterations, profits
 end
 
 function save_kpi_results(kpi_rows; out_csv::AbstractString)
@@ -119,17 +122,17 @@ function save_boxplot(best_objs::Vector{Float64}; out_png::AbstractString, title
     fig.savefig(out_png, dpi=200)
     plt.close(fig)
 end
-
+# 
 function main()
     max_turnaround = load_turnaround_period()
-    maxtime = Int32(60)
+    maxtime = Int32(10)
     top_c = 4
-    n_runs = 20
+    n_runs = 5
 
     out_dir = joinpath(@__DIR__, "Results")
     mkpath(out_dir)
 
-    best_objs, best_sols, run_data_list, run_rt_list, iterations = run_heuristic_batch(
+    best_objs, best_sols, run_data_list, run_rt_list, iterations, profitvals = run_heuristic_batch(
         n_runs;
         max_turnaround=max_turnaround,
         maxtime=maxtime,
@@ -139,6 +142,9 @@ function main()
 
     results_csv = joinpath(out_dir, "best_obj_runs.csv")
     save_batch_results(best_objs; out_csv=results_csv)
+
+    results_csv = joinpath(out_dir, "best_profit_runs.csv")
+    save_batch_results(profitvals; out_csv=results_csv)
 
     boxplot_png = joinpath(out_dir, "best_obj_boxplot.png")
     save_boxplot(

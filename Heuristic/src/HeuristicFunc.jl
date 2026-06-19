@@ -735,5 +735,27 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
     
     println("=========================================\n")
 
-    return best_obj, best_sol, iterations, Time_to_Gap, Time_to_Optimal, Time_to_best
+    assignments, scheduled = assign_passengersV2(best_sol, data, Int.(rt))
+
+    profit = fitnessFunction(
+            best_sol,
+            assignments,
+            Float32(data.bmax),
+            Float32(data.bmid),
+            Float32(data.bmin),
+            data.dist,
+            Float32(data.ec),
+            Float32(data.battery_per_km),
+            Int.(rt),
+            Int(round(data.ET)),
+            maximum(Int.(data.T)),
+            maximum(data.V),
+            data.cap_v,
+            data,
+            include_unserved_penalty = false,
+            profit = true
+        )
+
+
+    return best_obj, best_sol, iterations, Time_to_Gap, Time_to_Optimal, Time_to_best, profit
 end
