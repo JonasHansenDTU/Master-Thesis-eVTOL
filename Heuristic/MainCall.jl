@@ -25,7 +25,7 @@ for file in source_files
     include(joinpath(src_dir, file))
 end
 
-excel_file     = joinpath(@__DIR__, "..", "inputData", "inputDataGiant.xlsx")
+excel_file     = joinpath(@__DIR__, "..", "inputData", "Experiments/inputDataEx2_1_2.xlsx")
 parameter_file = joinpath(@__DIR__, "..", "inputData", "Parameters.xlsx")
 data = load_data(excel_file, parameter_file)
 
@@ -45,7 +45,7 @@ top_c = 4
 
 
 # (best_obj, best_sol, iterations) = Heuristic(maxTurnaround, Maxtime, data, rt, top_c)
-(best_obj, best_sol, iterations, Time_to_Gap, Time_to_Optimal, profit) = HeuristicSA(maxTurnaround, Maxtime, data, rt, top_c)
+(best_obj, best_sol, iterations, Time_to_Gap, Time_to_Optimal, Time_to_best, profit) = HeuristicSA(maxTurnaround, Maxtime, data, rt, top_c)
 
 println("Heuristic ran $(iterations) iterations")
 println("Best solution:")

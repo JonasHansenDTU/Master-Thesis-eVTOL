@@ -106,7 +106,7 @@ function load_data(excel_file::String, parameter_file::String)
     infra = read_sheet(excel_file, "Infrastructure")
     pax = DataFrame(
         XLSX.readtable(
-            joinpath("inputData", "Experiments/inputDataEx5_3_10.xlsx"),
+            joinpath("inputData", "Experiments/inputDataEx2_1_2.xlsx"),
             "PassengerGroups"
         )
     )
@@ -948,7 +948,7 @@ end
 # Usage
 ###############################################################################
 
-excel_file = joinpath("inputData/Experiments/inputDataEx5_3_10.xlsx")
+excel_file = joinpath("inputData/Experiments/inputDataEx2_1_2.xlsx")
 parameter_file = joinpath("inputData/Parameters.xlsx")
 println("Using Excel file: ", excel_file)
 total_start = time()
@@ -1411,8 +1411,8 @@ function print_results_maincall_style(model::Model, data)
         obj_revenue -
         obj_cost_x -
         #obj_unserved -
-        obj_opening -
-        obj_battery
+        obj_opening
+        # obj_battery
 
     println("Revenue term      : ", obj_revenue)
     println("Routing cost      : ", obj_cost_x)
@@ -1420,7 +1420,7 @@ function print_results_maincall_style(model::Model, data)
     println("Opening cost      : ", obj_opening)
     # println("Battery penalty   : ", obj_battery)
     println("-----------------------------------")
-    println("Total profit (OBJ - unserved & battery penalties)  : ", total_recalc)
+    println("Total profit (OBJ + unserved & battery penalties)  : ", total_recalc)
 
     println("\n--- Nonzero variables in objective ---")
 

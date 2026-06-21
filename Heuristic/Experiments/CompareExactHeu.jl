@@ -26,7 +26,7 @@ for file in source_files
     include(joinpath(src_dir, file))
 end
 
-excel_file     = joinpath(@__DIR__, "..", "..", "inputData", "Experiments/inputDataEx10_20_40.xlsx")
+excel_file     = joinpath(@__DIR__, "..", "..", "inputData", "Experiments/inputDataEx2_1_2.xlsx")
 parameter_file = joinpath(@__DIR__, "..", "..", "inputData", "Parameters.xlsx")
 data = load_data(excel_file, parameter_file)
 
@@ -39,9 +39,9 @@ for i in data.V, j in data.V
 end
 
 maxTurnaround = Int64(data.ET)
-Maxtime = Int32(600)
+Maxtime = Int32(10)
 top_c = 4
-Optimum = Inf32
+Optimum = 4923.38
 # Random.seed!(1234)
 
 LoopIter = 5
@@ -73,6 +73,8 @@ else
 end
 avg_ttb = mean(ttb_vals)
 
+avg_profit = mean(profit_vals)
+
 println("\n================ SUMMARY STATISTICS ================\n")
 
 @printf("%-20s %-15s\n", "Metric", "Average")
@@ -80,6 +82,7 @@ println("\n================ SUMMARY STATISTICS ================\n")
 println("-"^40)
 
 @printf("%-20s %-15.4f\n", "Objective", avg_obj)
+@printf("%-20s %-15.4f\n", "Profit", avg_profit)
 @printf("%-20s %-15.2f\n", "Iterations", avg_iter)
 @printf("%-20s %-15.4f\n", "Time to Gap", avg_ttg)
 @printf("%-20s %-15.4f\n", "Time to Optimal", avg_tto)
