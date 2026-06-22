@@ -248,8 +248,15 @@ function assign_passengers(evtols::allPlaneSolution, data, rt::Matrix{Int})
     assignments = PassengerAssignment[]
     assigned_groups = Set{Int}()
 
-    # Step 1: non-stopover passengers -> direct only
-    direct_only = sort([a for a in A if so[a] == 0], by = a -> (dt[a], -q[a]))
+    # Pool B (on-demand) groups are served on DIRECT connections only, to match
+    # the MIP (which has no stopover variable for Pool B). They are identified by
+    # their offset IDs (>= POOL_B_OFFSET) and treated as direct regardless of
+    # their so flag. so_eff is the effective stopover permission used here.
+    POOL_B_OFFSET = 1000
+    so_eff = a -> (a >= POOL_B_OFFSET ? 0 : so[a])
+
+    # Step 1: direct-only groups (so=0, plus all Pool B) -> direct only
+    direct_only = sort([a for a in A if so_eff(a) == 0], by = a -> (dt[a], -q[a]))
     for a in direct_only
         ass = find_direct_leg!(scheduled, a, op, dp, dt, q, w)
         if ass !== nothing
@@ -258,8 +265,8 @@ function assign_passengers(evtols::allPlaneSolution, data, rt::Matrix{Int})
         end
     end
 
-    # Step 2: stopover-allowed passengers -> direct first
-    stopover_ok = sort([a for a in A if so[a] == 1], by = a -> (dt[a], -q[a]))
+    # Step 2: stopover-allowed groups (so=1, Pool A only) -> direct first
+    stopover_ok = sort([a for a in A if so_eff(a) == 1], by = a -> (dt[a], -q[a]))
     for a in stopover_ok
         if a in assigned_groups #Not needed?
             continue
@@ -271,7 +278,8 @@ function assign_passengers(evtols::allPlaneSolution, data, rt::Matrix{Int})
         end
     end
 
-    # Step 3: remaining stopover-allowed passengers -> one-stop
+    # Step 3: remaining stopover-allowed groups -> one-stop (Pool A only; Pool B
+    # was placed in direct_only above, so it never reaches this stopover step)
     for a in stopover_ok
         if a in assigned_groups
             continue
@@ -304,13 +312,19 @@ function assign_passengersV2(evtols::allPlaneSolution, data, rt::Matrix{Int})
     assignments = PassengerAssignment[]
     assigned_groups = Set{Int}()
 
-    price_by_group = Dict(a => q[a] * fd[(op[a], dp[a])] * (so[a] == 1 ? 0.75 : 1.0) for a in A)
+    # Pool B (on-demand) groups are served on DIRECT connections only, matching
+    # the MIP (no Pool B stopover variable). Identified by offset IDs and treated
+    # as so=0 regardless of their stored so flag.
+    POOL_B_OFFSET = 1000
+    so_eff = a -> (a >= POOL_B_OFFSET ? 0 : so[a])
+
+    price_by_group = Dict(a => q[a] * fd[(op[a], dp[a])] * (so_eff(a) == 1 ? 0.75 : 1.0) for a in A)
     # Sort groups directly by price (descending)
     prices = [price_by_group[a] for a in A]
     Price_sort = A[sortperm(prices, rev = true)]
 
     for a in Price_sort
-        if so[a] == 0
+        if so_eff(a) == 0
             ass = find_direct_leg!V2(scheduled, a, op, dp, dt, q, w, so)
             if ass !== nothing
                 push!(assignments, ass)

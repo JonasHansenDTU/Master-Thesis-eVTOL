@@ -34,25 +34,37 @@ include(joinpath(@__DIR__, "StochasticHeuristic.jl"))
 
 maxTurnaround = 100
 
-MaxTime_1st        = Int32(90)   
-n_restarts         = 2      
-n_outer_iters      = 4          
-MaxTime_2nd_search = Int32(8)   
-MaxTime_2nd_final  = Int32(30)    
+MaxTime_1st        = Int32(90)   # MUST be enough to find the rich deterministic seed
+n_restarts         = 2            # take the better of two seeds
+n_outer_iters      = 8            # Phase 2 prunes/refines the seed (more exploration)
+MaxTime_2nd_search = Int32(15)    # recourse quality during search (less noisy candidate scoring)
+MaxTime_2nd_final  = Int32(30)    # final high-quality recourse pass
+price_boost        = 1.0
+hard_penalty       = 50_000.0
+top_c              = 4            # top routes per base vertiport considered by constructor
+
+maxTurnaround = 100
+
+MaxTime_1st        = Int32(30)   # MUST be enough to find the rich deterministic seed
+n_restarts         = 2            # take the better of two seeds
+n_outer_iters      = 2         # Phase 2 prunes/refines the seed (more exploration)
+MaxTime_2nd_search = Int32(8)    # recourse quality during search (less noisy candidate scoring)
+MaxTime_2nd_final  = Int32(15)    # final high-quality recourse pass
 price_boost        = 8.0
 hard_penalty       = 50_000.0
-top_c              = 4           
-        
+top_c              = 4            # top routes per base vertiport considered by constructor
 
 ###############################################################################
 # Load data and generate scenarios
 ###############################################################################
-
 println("Loading data …")
+# infra_file     = joinpath(@__DIR__, "..", "inputData", joinpath("Experiments", "inputDataEx5_5_20.xlsx"))
+# excel_file     = joinpath(@__DIR__, "..", "inputData", joinpath("Experiments", "inputDataEx5_5_20.xlsx"))
+infra_file     = joinpath(@__DIR__, "..", "inputData", "inputDataGiant.xlsx")
 excel_file     = joinpath(@__DIR__, "..", "inputData", "inputDataGiant.xlsx")
 parameter_file = joinpath(@__DIR__, "..", "inputData", "Parameters.xlsx")
 
-data = load_data(excel_file, parameter_file)
+data = load_data(infra_file, parameter_file, excel_file)
 println("  Vertiports     : $(data.V)")
 println("  eVTOLs         : $(length(data.N))")
 println("  Passengers     : $(length(data.A))")
@@ -89,6 +101,14 @@ println("Probabilities: $(round.([pi_s[sc] for sc in S], digits=4))")
 ###############################################################################
 # Run two-stage stochastic heuristic
 ###############################################################################
+
+###############################################################################
+# Seed the global RNG so the first-stage solve is reproducible. Use the SAME
+# value in Realised_scenario.jl so both produce the identical first-stage
+# decision (the heuristic's SA draws from the global RNG).
+###############################################################################
+const FIRST_STAGE_SEED = 12345
+Random.seed!(FIRST_STAGE_SEED)
 
 result = stochastic_heuristic(
     data, rt_s, e_s, S, pi_s;

@@ -5,10 +5,10 @@
 #
 # FIRST-STAGE (scenario-independent, decided before uncertainty is revealed):
 #   y[n]      fleet activation
-#   ss[a,n]   passenger group acceptance / assignment to eVTOL
-#   z[a]      stopover indicator
+#   alpha[a]  passenger group acceptance (eVTOL-independent)
 #
 # SECOND-STAGE (scenario-dependent, decided after scenario is realized):
+#   z[sc,a]             stopover indicator (per scenario)
 #   x[sc,i,j,m,n]       routing
 #   s[sc,a,m,n]          service per operation
 #   k[sc,a,i,j,m,n]      service arc
@@ -32,6 +32,7 @@ using MathOptInterface
 using Printf
 using HTTP
 using JSON3
+using Random
 const MOI = MathOptInterface
 
 # Load scenario generation helpers
@@ -101,6 +102,14 @@ end
 function load_data(excel_file::String, parameter_file::String)
     infra = read_sheet(excel_file, "Infrastructure")
     pax   = read_sheet(excel_file, "PassengerGroups")
+    # Pool B: on-demand passenger groups, served only in the second stage.
+    # Optional sheet; if absent, Pool B is empty and the model is unchanged.
+    paxB = try
+        read_sheet(excel_file, "PassengerGroupsB")
+    catch
+        @warn "Sheet 'PassengerGroupsB' not found — on-demand pool B is empty."
+        DataFrame()
+    end
     plane = read_sheet_any(excel_file, ["PlaneData"])
 
     id_col   = find_col(infra, [:id])
@@ -164,11 +173,11 @@ function load_data(excel_file::String, parameter_file::String)
     te                    = params["te"]
     w                     = params["w"]
     ET                    = params["ET"]
-    M1  = 1;  M2a = 0;  M2b = bmax;  M2c = bmax + ec * ET;  M3 = ET
+    M1  = 1;  M2 = bmax;  M3 = ET
  
 
 
-    M          = 0:6
+    M          = 0:10
     M_no0      = 1:maximum(M)
     M_mid      = 1:(maximum(M)-1)
     M_no_last  = 0:(maximum(M)-1)
@@ -243,14 +252,56 @@ function load_data(excel_file::String, parameter_file::String)
         so[a] = Int(r[stop_col]);  p[a]  = p_penalty
     end
 
+    ###########################################################################
+    # Pool B (on-demand) passengers — second stage only.
+    # IDs offset by POOL_B_OFFSET so they never collide with Pool A IDs. They
+    # share the op/dp/dt/q/so dicts; p[b]=0 (no penalty — opportunistic only).
+    ###########################################################################
+    POOL_B_OFFSET = 1000
+    B = Int[]
+    if nrow(paxB) > 0
+        gB = find_col(paxB, [:group, :group_id, :id])
+        oB = find_col(paxB, [:origin]); dB = find_col(paxB, [:destination])
+        tB = find_col(paxB, [:time, :arrival_time])
+        qB = find_col(paxB, [:number_of_passengers, :passengers, :numberofpassengers])
+        sB = find_col(paxB, [:stopover_allowed, :stopoverallowed, :stopover])
+        for r in eachrow(paxB)
+            b = POOL_B_OFFSET + Int(r[gB]); push!(B, b)
+            op[b] = Int(r[oB]); dp[b] = Int(r[dB]); dt[b] = Float64(r[tB])
+            q[b]  = Int(r[qB]); so[b] = Int(r[sB]); p[b]  = 0.0
+        end
+        B = sort(B)
+    end
+
+    # Combined service set: every group that can be SERVED in the second stage.
+    AB = vcat(A, B)
+
     d = Dict((a,i,j) => (i==op[a] && j==dp[a] ? 1 : 0)
-             for a in A, i in V, j in V)
+             for a in AB, i in V, j in V)
 
     # Generate scenario-dependent parameters
     rt_s, e_s, S, pi_s = generate_scenarios(V, lat, lon, rt, e, time_per_km)
 
+    ###########################################################################
+    # On-demand (Pool B) demand realizations: each Pool B group independently
+    # appears in scenario sc with probability rho, fixed by a deterministic seed
+    # so the realization matches the heuristic (reproducible, comparable).
+    # appear[sc] = set of Pool B group IDs present in scenario sc.
+    ###########################################################################
+    demand_rho  = 0.5
+    demand_seed = 20260101
+    appear = Dict{Int, Vector{Int}}()
+    for sc in S
+        rng = Random.MersenneTwister(demand_seed + sc)
+        present = Int[]
+        for b in B
+            rand(rng) < demand_rho && push!(present, b)
+        end
+        appear[sc] = sort(present)
+    end
+
     return (
-        V=V, A=A, N=collect(N), S=S,
+        V=V, A=A, B=B, AB=AB, N=collect(N), S=S, appear=appear,
         M=collect(M), M_no0=collect(M_no0), M_mid=collect(M_mid),
         M_no_last=collect(M_no_last), T=collect(T), T_no0=collect(T_no0),
         bv=bv, lat=lat, lon=lon, dist=dist,
@@ -262,7 +313,7 @@ function load_data(excel_file::String, parameter_file::String)
         cap_v=cap_v, cap_u=cap_u, opening_cost=opening_cost,
         bmax=bmax, bmid=bmid, b_penalty=b_penalty, bmin=bmin,
         ec=ec, te=te, w=w, ET=ET,
-        M1=M1, M2a=M2a, M2b=M2b, M2c=M2c, M3=M3,
+        M1=M1, M2=M2, M3=M3,
     )
 end
 
@@ -275,7 +326,8 @@ function build_model(excel_file::String, parameter_file::String;
 
     data = load_data(excel_file, parameter_file)
 
-    A=data.A; V=data.V; N=data.N; S=data.S
+    A=data.A; B=data.B; AB=data.AB; V=data.V; N=data.N; S=data.S
+    appear=data.appear
     M=data.M; M_no0=data.M_no0; M_mid=data.M_mid
     M_no_last=data.M_no_last; T=data.T; T_no0=data.T_no0
 
@@ -286,7 +338,7 @@ function build_model(excel_file::String, parameter_file::String;
     cap_v=data.cap_v; cap_u=data.cap_u; opening_cost=data.opening_cost
     bmax=data.bmax; bmid=data.bmid; b_penalty=data.b_penalty; bmin=data.bmin
     ec=data.ec; te=data.te; w=data.w
-    M1=data.M1; M2a=data.M2a; M2b=data.M2b; M2c=data.M2c; M3=data.M3
+    M1=data.M1; M2=data.M2; M3=data.M3
 
     model = Model(Gurobi.Optimizer)
     set_optimizer_attribute(model, "OutputFlag", show_progress ? 1 : 0)
@@ -300,11 +352,11 @@ function build_model(excel_file::String, parameter_file::String;
     # y[n] = 1 if eVTOL n is activated
     @variable(model, y[n in N], Bin)
 
-    # ss[a,n] = 1 if eVTOL n is committed to serve passenger group a
-    @variable(model, ss[a in A, n in N], Bin) # Move to second stage as it should be flexible
-
-    # z[a] = 1 if passenger group a is routed via a stopover
-    @variable(model, z[a in A], Bin)
+    # alpha[a] = 1 if pre-booked passenger group a is ACCEPTED in the first stage.
+    # Acceptance is eVTOL-independent: the commitment is to serve the group, not
+    # to a specific aircraft. Which eVTOL actually serves an accepted group is a
+    # second-stage decision that may differ by scenario.
+    @variable(model, alpha[a in A], Bin)
 
     ###########################################################################
     # SECOND-STAGE variables  (scenario index sc added)
@@ -313,11 +365,20 @@ function build_model(excel_file::String, parameter_file::String;
     # x[sc,i,j,m,n] = 1 if eVTOL n flies i->j in operation m under scenario sc
     @variable(model, x[sc in S, i in V, j in V, m in M, n in N], Bin)
 
+    # z[sc,a] = 1 if accepted Pool A group a is routed via a stopover in scenario
+    # sc. This is a SECOND-STAGE (operational) decision: whether to route direct
+    # or via an intermediate vertiport may differ by scenario, since wind affects
+    # which routes are feasible. Only meaningful for Pool A; Pool B is always direct.
+    @variable(model, z[sc in S, a in A], Bin)
+
     # s[sc,a,m,n] = 1 if eVTOL n serves group a in operation m under scenario sc
-    @variable(model, s[sc in S, a in A, m in M, n in N], Bin)
+    # Indexed over AB (Pool A ∪ Pool B): both pools can be served in the second
+    # stage. Commitment (ss) and penalties apply to Pool A only; Pool B service
+    # is gated by the per-scenario demand realization (fixed to 0 if absent).
+    @variable(model, s[sc in S, a in AB, m in M, n in N], Bin)
 
     # k[sc,a,i,j,m,n] = 1 if eVTOL n flies i->j in op m serving group a, scenario sc
-    @variable(model, k[sc in S, a in A, i in V, j in V, m in M, n in N], Bin)
+    @variable(model, k[sc in S, a in AB, i in V, j in V, m in M, n in N], Bin)
 
     # u[sc,m,n] = battery level of eVTOL n after operation m in scenario sc
     @variable(model, u[sc in S, m in M, n in N] >= 0)
@@ -329,8 +390,9 @@ function build_model(excel_file::String, parameter_file::String;
     # charge[sc,m,n] = battery charged during turnaround before op m
     @variable(model, charge[sc in S, m in M, n in N] >= 0)
 
-    # over_bmid[sc,m,n] = battery above bmid (penalised in objective)
-    @variable(model, over_bmid[sc in S, m in M, n in N] >= 0)
+    # over_bmid[sc,m,n] = battery above bmid (penalised in objective).
+    # Integer, matching the deterministic model's bp[m,n] variable.
+    @variable(model, over_bmid[sc in S, m in M, n in N] >= 0, Int)
 
     # is_p[sc,j,n,t] = 1 if eVTOL n is parked at j at time t in scenario sc
     @variable(model, is_p[sc in S, j in V, n in N, t in T], Bin)
@@ -343,12 +405,31 @@ function build_model(excel_file::String, parameter_file::String;
     ###########################################################################
     for sc in S, i in V, j in V, n in N
         fix(x[sc,i,j,0,n], 0.0; force=true)
-        for a in A
+        for a in AB
             fix(k[sc,a,i,j,0,n], 0.0; force=true)
         end
     end
-    for sc in S, a in A, n in N
+    for sc in S, a in AB, n in N
         fix(s[sc,a,0,n], 0.0; force=true)
+    end
+
+    ###########################################################################
+    # Demand gating: a Pool B group may be served in scenario sc ONLY if it
+    # appears in that scenario's demand realization. If it does not appear, all
+    # its service and service-arc variables are fixed to zero in that scenario.
+    ###########################################################################
+    for sc in S
+        present = Set(appear[sc])
+        for b in B
+            if !(b in present)
+                for m in M, n in N
+                    fix(s[sc,b,m,n], 0.0; force=true)
+                    for i in V, j in V
+                        fix(k[sc,b,i,j,m,n], 0.0; force=true)
+                    end
+                end
+            end
+        end
     end
 
     ###########################################################################
@@ -364,15 +445,19 @@ function build_model(excel_file::String, parameter_file::String;
     #   - battery-above-bmid penalty
     ###########################################################################
     @objective(model, Max,
-        # Revenue from accepted prebooked passengers (first-stage)
-        sum(d[(a,i,j)] * ss[a,n] * (fd[i,j]*(1-so[a]) + fs[i,j]*so[a])
-            for a in A, i in V, j in V, n in N)
-        # Penalty for unserved passenger groups (first-stage)
-        - sum(p[a] * (1 - sum(ss[a,n] for n in N)) for a in A)
+        # Revenue from accepted prebooked passengers (first-stage), per passenger
+        sum(d[(a,i,j)] * alpha[a] * q[a] * (fd[i,j]*(1-so[a]) + fs[i,j]*so[a])
+            for a in A, i in V, j in V)
+        # Penalty for unaccepted passenger groups (first-stage)
+        - sum(p[a] * (1 - alpha[a]) for a in A)
         # Fleet activation cost (first-stage)
         - sum(opening_cost * y[n] for n in N)
-        # Expected second-stage costs
+        # Expected second-stage value
         + sum(pi_s[sc] * (
+            # On-demand (Pool B) revenue: per passenger, earned per scenario when served.
+            sum(d[(b,i,j)] * s[sc,b,m,n] * q[b] *
+                (fd[i,j]*(1-so[b]) + fs[i,j]*so[b])
+                for b in B, i in V, j in V, m in M_no0, n in N)
             # Routing cost under scenario sc
             - sum(c[(i,j)] * x[sc,i,j,m,n]
                   for i in V, j in V, m in M, n in N)
@@ -391,11 +476,13 @@ function build_model(excel_file::String, parameter_file::String;
     # FIRST-STAGE constraints (no sc index)
     ###########################################################################
 
-    # (6.11) Stopover only if passenger allows it
-    @constraint(model, [a in A], z[a] <= so[a])
-
-    # (6.13) Each passenger group served by at most one eVTOL
-    @constraint(model, [a in A], sum(ss[a,n] for n in N) <= 1)
+    # (6.13) With eVTOL-independent acceptance, the per-eVTOL uniqueness of the
+    # old ss[a,n] is no longer needed: constraint (6.7) fixes each accepted
+    # group's total number of service legs to alpha[a] + z[sc,a], so a direct
+    # accepted group is served on exactly one leg (hence by one eVTOL) and a
+    # stopover group on exactly two.
+    # (6.11, the stopover-allowed constraint, is now second-stage since z is
+    # scenario-dependent — see inside the scenario loop below.)
 
     ###########################################################################
     # SECOND-STAGE constraints (sc index on all operational variables)
@@ -403,8 +490,14 @@ function build_model(excel_file::String, parameter_file::String;
 
     for sc in S
 
-        rt_sc = (i,j) -> rt_s[(sc,i,j)]   # shorthand accessors for this scenario
-        e_sc  = (i,j) -> e_s[(sc,i,j)]
+        # Shorthand accessors for this scenario. The scenario dicts only contain
+        # off-diagonal pairs (i != j); a vertiport-to-itself entry has zero travel
+        # time and energy, so return 0 on the diagonal rather than a missing key.
+        rt_sc = (i,j) -> i == j ? 0   : rt_s[(sc,i,j)]
+        e_sc  = (i,j) -> i == j ? 0.0 : e_s[(sc,i,j)]
+
+        # (6.11) Stopover only if passenger allows it (per scenario)
+        @constraint(model, [a in A], z[sc,a] <= so[a])
 
         # ── Fleet activation and routing ─────────────────────────────────────
 
@@ -436,111 +529,125 @@ function build_model(excel_file::String, parameter_file::String;
 
         # ── Passenger assignment ─────────────────────────────────────────────
 
-        # (6.7) Number of legs = service indicator + stopover indicator
+        # (6.7) Number of legs = acceptance indicator + stopover indicator (Pool A)
         @constraint(model, [a in A],
             sum(s[sc,a,m,n] for m in M_no0, n in N) ==
-            sum(ss[a,n] for n in N) + z[a])
+            alpha[a] + z[sc,a])
 
-        # (6.8) Direct connection if z[a]=0
+        # (6.7-B) Pool B (on-demand): served at most once, directly, and only if
+        # it appears in this scenario (appearance enforced by the fix-to-zero
+        # gating above). No ss/z — service is purely opportunistic recourse.
+        @constraint(model, [b in B],
+            sum(s[sc,b,m,n] for m in M_no0, n in N) <= 1)
+
+        # (6.8) Direct connection if z[sc,a]=0 (Pool A)
         @constraint(model, [a in A, m in M, n in N],
-            s[sc,a,m,n] <= x[sc,op[a],dp[a],m,n] + z[a]*M1)
+            s[sc,a,m,n] <= x[sc,op[a],dp[a],m,n] + z[sc,a]*M1)
+
+        # (6.8-B) Pool B is always direct: served on op[b]->dp[b] leg only.
+        @constraint(model, [b in B, m in M, n in N],
+            s[sc,b,m,n] <= x[sc,op[b],dp[b],m,n])
 
         # (6.9) Stopover path upper bound
         @constraint(model, [a in A, m in M, n in N],
             s[sc,a,m,n] <=
             sum(x[sc,op[a],k_node,m,n] for k_node in V) +
             sum(x[sc,k_node,dp[a],m,n] for k_node in V) +
-            (1 - z[a])*M1)
+            (1 - z[sc,a])*M1)
 
         # (6.10a) Stopover path lower bound (m, m+1)
         @constraint(model, [a in A, m in M_mid, n in N],
             s[sc,a,m,n] >=
             sum(x[sc,op[a],k_node,m,n] + x[sc,k_node,dp[a],m+1,n]
-                for k_node in V) - 1 - (1-z[a])*M1)
+                for k_node in V) - 1 - (1-z[sc,a])*M1)
 
         # (6.10b) Stopover path lower bound (m-1, m)
         @constraint(model, [a in A, m in 2:maximum(M), n in N],
             s[sc,a,m,n] >=
             sum(x[sc,op[a],k_node,m-1,n] + x[sc,k_node,dp[a],m,n]
-                for k_node in V) - 1 - (1-z[a])*M1)
+                for k_node in V) - 1 - (1-z[sc,a])*M1)
 
-        # (6.12) s[sc,a,m,n] <= ss[a,n]
+        # (6.12) A Pool A group can be served (by any eVTOL, any op) only if it
+        # was accepted in the first stage. alpha is eVTOL-independent.
         @constraint(model, [a in A, m in M, n in N],
-            s[sc,a,m,n] <= ss[a,n])
+            s[sc,a,m,n] <= alpha[a])
 
-        # (6.14) At least one arc per served operation
+        # (6.14) At least one arc per served operation (Pool A)
         @constraint(model, [a in A, m in M_no0, n in N],
             sum(k[sc,a,i,j,m,n] for i in V, j in V) >= s[sc,a,m,n])
 
-        # (6.15) Direct service linkage
-        @constraint(model, [a in A, i in V, j in V, m in M_no0, n in N],
-            2*k[sc,a,i,j,m,n] <= d[(a,i,j)] + x[sc,i,j,m,n] + z[a]*M1)
+        # (6.14-B) Same for Pool B
+        @constraint(model, [b in B, m in M_no0, n in N],
+            sum(k[sc,b,i,j,m,n] for i in V, j in V) >= s[sc,b,m,n])
 
-        # (6.16) At most 1+z[a] arcs per passenger group
+        # (6.15) Direct service linkage (Pool A)
+        @constraint(model, [a in A, i in V, j in V, m in M_no0, n in N],
+            2*k[sc,a,i,j,m,n] <= d[(a,i,j)] + x[sc,i,j,m,n] + z[sc,a]*M1)
+
+        # (6.15-B) Pool B direct service linkage (no z; always direct)
+        @constraint(model, [b in B, i in V, j in V, m in M_no0, n in N],
+            2*k[sc,b,i,j,m,n] <= d[(b,i,j)] + x[sc,i,j,m,n])
+
+        # (6.16) At most 1+z[a] arcs per passenger group (Pool A)
         @constraint(model, [a in A],
-            sum(k[sc,a,i,j,m,n] for m in M, i in V, j in V, n in N) <= 1 + z[a])
+            sum(k[sc,a,i,j,m,n] for m in M, i in V, j in V, n in N) <= 1 + z[sc,a])
+
+        # (6.16-B) Pool B uses at most one arc (always direct)
+        @constraint(model, [b in B],
+            sum(k[sc,b,i,j,m,n] for m in M, i in V, j in V, n in N) <= 1)
 
         # (6.17a) Stopover service linkage
         @constraint(model, [a in A, i in V, kk in V, j in V, m in M_no_last, n in N],
             k[sc,a,i,kk,m,n] + k[sc,a,kk,j,m+1,n] <=
-            x[sc,i,kk,m,n] + x[sc,kk,j,m+1,n] + (1-z[a])*M1)
+            x[sc,i,kk,m,n] + x[sc,kk,j,m+1,n] + (1-z[sc,a])*M1)
 
         # (6.17b)
         @constraint(model, [a in A, i in V, kk in V, j in V, m in M_no_last, n in N],
             k[sc,a,i,kk,m,n] + k[sc,a,kk,j,m+1,n] <= d[(a,i,j)] + 1)
 
-        # (6.18) Seat capacity
+        # (6.18) Seat capacity — sums over BOTH pools (Pool B occupies seats too)
         @constraint(model, [m in M, n in N],
-            sum(s[sc,a,m,n]*q[a] for a in A) <= cap_u)
+            sum(s[sc,a,m,n]*q[a] for a in AB) <= cap_u)
 
-        # (6.19) Direct-only groups fly alone
-        @constraint(model, [a in A, m in M, n in N; so[a]==0],
-            sum(s[sc,b,m,n] for b in A) <= 1 + (length(A)-1)*(1-s[sc,a,m,n]))
+        # (6.19) Direct-only groups fly alone — over both pools
+        @constraint(model, [a in AB, m in M, n in N; so[a]==0],
+            sum(s[sc,b,m,n] for b in AB) <= 1 + (length(AB)-1)*(1-s[sc,a,m,n]))
 
         # ── Battery dynamics ─────────────────────────────────────────────────
         # rt_sc and e_sc now use scenario-dependent parameters,
         # which embed both the directional wind effect (gamma_t) and
         # the temperature effect (phi, via gamma_e).
 
-        # (6.20) Initial battery level
+        # (6.20) eVTOL starts with mid battery
         @constraint(model, [n in N], u[sc,0,n] == bmid)
 
-        # (6.21) Battery upper bound
-        @constraint(model, [m in M, n in N], u[sc,m,n] <= bmax)
+        # (6.21) Battery cannot exceed max
+        @constraint(model, [m in M_no_last, n in N],
+            u[sc,m,n] + charge[sc,m+1,n] <= bmax)
 
-        # (6.22) Battery lower bound
+        # (6.22) Battery must stay above minimum
         @constraint(model, [m in M, n in N], u[sc,m,n] >= bmin)
 
-        # (6.23) Over-bmid penalty tracker
+        # (6.23) Penalize battery above bmid (includes the energy term, as in
+        # the deterministic model). over_bmid plays the role of bp[m,n].
         @constraint(model, [m in M_no0, n in N],
-            over_bmid[sc,m,n] >= u[sc,m,n] - bmid)
+            over_bmid[sc,m,n] >= u[sc,m,n] - bmid +
+                sum(e_sc(i,j)*x[sc,i,j,m,n] for i in V, j in V))
 
-        # (6.24a) Battery update — first operation (no charging possible before op 1)
-        @constraint(model, [i in V, j in V, n in N],
-            u[sc,1,n] <= u[sc,0,n] - e_sc(i,j)*x[sc,i,j,1,n] +
-                         (1 - x[sc,i,j,1,n])*M2a)
-
-        # (6.24b)
-        @constraint(model, [i in V, j in V, n in N],
-            u[sc,1,n] >= u[sc,0,n] - e_sc(i,j)*x[sc,i,j,1,n] -
-                         (1 - x[sc,i,j,1,n])*M2b)
-
-        # Charging amount available during turnaround before operation m
-        # (uses scenario-dependent rt_sc because turnaround duration depends
-        #  on how long the previous flight actually took under this scenario)
-        @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
-            charge[sc,m,n] <= ec*(arr[sc,m,n] - arr[sc,m-1,n] - rt_sc(i,j)) +
-                              (1 - x[sc,i,j,m,n])*M2c*10)
-
-        # (6.25a) Battery update — subsequent operations
-        @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
+        # (6.24a) Battery update between operations
+        @constraint(model, [i in V, j in V, m in 1:maximum(M), n in N],
             u[sc,m,n] <= u[sc,m-1,n] - e_sc(i,j)*x[sc,i,j,m,n] +
-                         charge[sc,m,n] + (1 - x[sc,i,j,m,n])*M2c)
+                         charge[sc,m,n] + (1 - x[sc,i,j,m,n])*M2)
 
-        # (6.25b)
-        @constraint(model, [i in V, j in V, m in 2:maximum(M), n in N],
+        # (6.24b) Battery update between operations
+        @constraint(model, [i in V, j in V, m in 1:maximum(M), n in N],
             u[sc,m,n] >= u[sc,m-1,n] - e_sc(i,j)*x[sc,i,j,m,n] +
-                         charge[sc,m,n] - (1 - x[sc,i,j,m,n])*M2c*2)
+                         charge[sc,m,n] - (1 - x[sc,i,j,m,n])*M2)
+
+        # (6.25) Charging level at each operation
+        @constraint(model, [i in V, j in V, m in 1:maximum(M), n in N],
+            charge[sc,m,n] <= ec*(dep[sc,m,n] - arr[sc,m-1,n]) +
+                              (1 - x[sc,i,j,m,n])*M2)
 
         # ── Timing constraints ───────────────────────────────────────────────
         # All timing constraints use rt_sc (scenario-dependent travel time).
@@ -564,18 +671,18 @@ function build_model(excel_file::String, parameter_file::String;
             arr[sc,m,n] == dep[sc,m,n] +
                 sum(rt_sc(i,j)*x[sc,i,j,m,n] for i in V, j in V))
 
-        # (6.29) Minimum layover time between consecutive operations
-        @constraint(model, [a in A, n in N, m in M_no_last],
+        # (6.29) Minimum layover time between consecutive operations (both pools)
+        @constraint(model, [a in AB, n in N, m in M_no_last],
             dep[sc,m+1,n] <= arr[sc,m,n] + te +
                              (2 - s[sc,a,m,n] - s[sc,a,m+1,n])*M3)
 
-        # (6.30) Passenger arrives before their eVTOL departs
-        @constraint(model, [a in A, i in V, j in V, m in M_no0, n in N],
+        # (6.30) Passenger arrives before their eVTOL departs (both pools)
+        @constraint(model, [a in AB, i in V, j in V, m in M_no0, n in N],
             d[(a,i,j)]*dt[a] - (1 - (s[sc,a,m,n] - s[sc,a,m-1,n]))*M3 <=
             arr[sc,m,n] - sum(rt_sc(i,kk)*x[sc,i,kk,m,n] for kk in V))
 
-        # (6.31) Maximum passenger waiting time
-        @constraint(model, [a in A, m in M_no0, n in N],
+        # (6.31) Maximum passenger waiting time (both pools)
+        @constraint(model, [a in AB, m in M_no0, n in N],
             arr[sc,m,n]
             - sum(rt_sc(i,j)*x[sc,i,j,m,n] for i in V, j in V)
             - sum(d[(a,i,j)]*dt[a]*s[sc,a,m,n] for i in V, j in V)
@@ -588,13 +695,12 @@ function build_model(excel_file::String, parameter_file::String;
         # (6.32) eVTOL is either parked or flying at each time t
         @constraint(model, [n in N, t in T],
             sum(is_p[sc,j,n,t] for j in V) +
-            sum(is_o[sc,i,j,m,n,t] for i in V, j in V, m in M) == 1)
+            sum(is_o[sc,i,j,m,n,t] for i in V, j in V, m in M) <= 1)
 
-        # (6.33) Travel-time occupancy relationship (uses scenario rt)
-        # Note: rt_sc returns Float64; is_o sums to an integer count of time
-        # periods occupied, so we use the rounded integer travel time.
+        # (6.33) Travel-time occupancy relationship (uses scenario rt).
+        # rt_s is already integer-valued, matching the deterministic rt.
         @constraint(model, [i in V, j in V, m in M, n in N],
-            Int(ceil(rt_sc(i,j))) * x[sc,i,j,m,n] ==
+            rt_sc(i,j) * x[sc,i,j,m,n] ==
             sum(is_o[sc,i,j,m,n,t] for t in T))
 
         # (6.34) Departure time bound from occupancy
@@ -605,8 +711,8 @@ function build_model(excel_file::String, parameter_file::String;
         @constraint(model, [i in V, j in V, m in M_no0, n in N, t in T],
             arr[sc,m,n] >= t - M3*(1 - is_o[sc,i,j,m,n,t]))
 
-        # (6.36) Initial parking at base vertiport
-        @constraint(model, [n in N], is_p[sc,bv[n],n,0] == 1)
+        # (6.36) Initial parking at base vertiport (tied to activation)
+        @constraint(model, [n in N], is_p[sc,bv[n],n,0] == y[n])
 
         # (6.37) Parking state propagation
         @constraint(model, [j in V, n in N, t in T_no0],
@@ -616,6 +722,11 @@ function build_model(excel_file::String, parameter_file::String;
         # (6.38) Vertiport parking capacity
         @constraint(model, [j in V, t in T],
             sum(is_p[sc,j,n,t] for n in N) <= cap_v[j])
+
+        # (extra, as in deterministic OUR_Model) parking implies some future flight
+        @constraint(model, [j in V, n in N, t in T],
+            is_p[sc,j,n,t] <=
+            sum(is_o[sc,i,k,m,n,t2] for i in V, k in V, m in M, t2 in t:maximum(T)))
 
     end  # for sc in S
 
