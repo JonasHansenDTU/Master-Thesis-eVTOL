@@ -260,6 +260,23 @@ for run in 1:RUNS
         # KPIs for this realised day's second-stage solution.
         k = solution_kpis(r.sol, sc_data, rt_mat)
 
+        # Actual (penalty-free) profit for this realised day: revenue
+        # (true fares x q) - operating cost - first-stage opening cost. This is
+        # r.profit with the commitment/feasibility penalties stripped.
+        rev = 0.0
+        for ass in r.assignments
+            a = ass.group; i = sc_data.op[a]; j = sc_data.dp[a]
+            rev += sc_data.q[a] * (sc_data.fd[(i,j)] * (1 - sc_data.so[a]) +
+                                   sc_data.fs[(i,j)] * sc_data.so[a])
+        end
+        opcost = 0.0
+        for plane in r.sol.planes
+            for kk in 1:plane.flightLegs
+                opcost += sc_data.c[(Int(plane.route[kk]), Int(plane.route[kk+1]))]
+            end
+        end
+        realised_actual = rev - opcost - result.first_stage_cost
+
         row = (
             season             = SEASON_NAME,
             run                = run,
@@ -268,6 +285,7 @@ for run in 1:RUNS
             severe             = severe ? 1 : 0,
             in_sample_RP       = RP,
             realised_profit    = r.profit,
+            realised_actual_profit = realised_actual,
             n_committed_poolA  = length(committed),
             n_active_evtols    = length(active),
             first_stage_cost   = result.first_stage_cost,
@@ -281,8 +299,8 @@ for run in 1:RUNS
         )
         push!(rows, row)
 
-        @printf("    day %d/%d : %-22s  profit=%+.2f  missA=%d  Bserved=%d/%d  %s\n",
-                rd, REALISED_PER_RUN, weather.label, r.profit, missA,
+        @printf("    day %d/%d : %-22s  profit=%+.2f  actual=%+.2f  missA=%d  Bserved=%d/%d  %s\n",
+                rd, REALISED_PER_RUN, weather.label, r.profit, realised_actual, missA,
                 onDemB, length(B_real), severe ? "(severe)" : "")
 
         CSV.write(out_path, DataFrame(rows))   # incremental save

@@ -155,6 +155,56 @@ function weighted_kpis(result)
 end
 
 ###############################################################################
+# Helper: probability-weighted ACTUAL profit (no penalties).
+#
+# The objective RP (result.expected_obj) includes the commitment hard-penalty
+# and the physical feasibility penalties. The "actual profit" reported here is
+# the same quantity with those penalties stripped: it is the true economic
+# profit the operator would realise, i.e.
+#     actual_RP = -first_stage_cost
+#                 + sum_sc pi_s * ( revenue_sc - operating_cost_sc )
+# computed with the SAME revenue/cost conventions as second_stage_profit
+# (true fares x group size, operating cost over flown legs). Opening cost is a
+# first-stage cost counted once, not per scenario.
+###############################################################################
+function weighted_actual_profit(result)
+    sr  = result.scenario_results
+    pis = result.pi_s
+    scs = collect(keys(sr))
+    wsum = sum(pis[sc] for sc in scs)
+
+    exp_actual_2nd = 0.0
+    for sc in scs
+        r  = sr[sc]
+        sd = r.sc_data
+        w  = pis[sc] / wsum
+
+        # Revenue from served passengers (true fares x q), matching
+        # second_stage_profit. r.assignments lists the served groups.
+        rev = 0.0
+        for ass in r.assignments
+            a = ass.group
+            i = sd.op[a]; j = sd.dp[a]
+            rev += sd.q[a] * (sd.fd[(i,j)] * (1 - sd.so[a]) +
+                              sd.fs[(i,j)] * sd.so[a])
+        end
+
+        # Operating cost over all flown legs.
+        opcost = 0.0
+        for plane in r.sol.planes
+            for k in 1:plane.flightLegs
+                opcost += sd.c[(Int(plane.route[k]), Int(plane.route[k+1]))]
+            end
+        end
+
+        exp_actual_2nd += w * (rev - opcost)
+    end
+
+    # First-stage opening cost is paid once (not per scenario).
+    return exp_actual_2nd - result.first_stage_cost
+end
+
+###############################################################################
 # Run the experiment.
 ###############################################################################
 parameter_file = joinpath(@__DIR__, "..", "inputData", "Parameters.xlsx")
@@ -216,6 +266,7 @@ for inst in INSTANCES
         runtime = time() - t0
 
         k = weighted_kpis(result)
+        actual_RP = weighted_actual_profit(result)
         total_unserved = sum(r.n_unserved for r in values(result.scenario_results))
 
         row = (
@@ -226,6 +277,7 @@ for inst in INSTANCES
             n_passengers        = inst.pax,
             rep                 = rep,
             H_obj_RP            = result.expected_obj,
+            actual_profit_RP    = actual_RP,
             H_time_sec          = runtime,
             n_committed_poolA   = length(result.accepted_passengers),
             n_active_evtols     = length(result.active_evtols),
@@ -238,8 +290,8 @@ for inst in INSTANCES
         )
         push!(rows, row)
 
-        @printf("  rep %d/%d : RP=%+.2f  time=%.1fs  committed=%d  active=%d  misses=%d\n",
-                rep, N_REPS, row.H_obj_RP, row.H_time_sec,
+        @printf("  rep %d/%d : RP=%+.2f  actual=%+.2f  time=%.1fs  committed=%d  active=%d  misses=%d\n",
+                rep, N_REPS, row.H_obj_RP, row.actual_profit_RP, row.H_time_sec,
                 row.n_committed_poolA, row.n_active_evtols, row.committed_misses)
 
         # Write incrementally so a crash mid-experiment doesn't lose everything.
