@@ -437,6 +437,10 @@ function make_second_stage_data(sc_data, fsd::FirstStageDecision;
         M2c            = sc_data.M2c,
         M3             = sc_data.M3,
         battery_per_km = sc_data.battery_per_km,
+        # Active-fleet restriction: the inner construction and SA neighborhoods
+        # read this and build routes ONLY on these eVTOLs, so the second-stage
+        # search optimises using exactly the committed fleet.
+        active         = fsd.active_evtols,
     )
 end
 
@@ -696,29 +700,34 @@ function solve_second_stage(fsd::FirstStageDecision,
                                       price_boost  = price_boost,
                                       hard_penalty = hard_penalty)
 
-    # Run full heuristic — routes, times, aircraft assignment all free.
+    # Run the heuristic. Because ss_data carries the active set, the construction
+    # and SA neighbourhoods build routes ONLY on the committed eVTOLs, so the
+    # search optimises directly over the activated fleet (no post-hoc stripping).
     _, sc_sol, _ = HeuristicSA(maxTurnaround, MaxTime_2nd, ss_data,
                                 sc_rt_mat, top_c)
 
-    # ── Confine the solution to the first-stage activated fleet ──────────────
-    # The reused HeuristicSA does not know about the activation decision and may
-    # route non-activated eVTOLs. Strip the routes of any eVTOL not in the active
-    # set so only committed aircraft fly (matching the MIP, where y[n] gates
-    # routing). Passengers the search placed on stripped eVTOLs become unserved
-    # and are then re-served by the repair step using ONLY active eVTOLs.
     active = fsd.active_evtols
-    for (idx, plane) in enumerate(sc_sol.planes)
-        if !(idx in active) && plane.flightLegs > 0
-            plane.route          = Int32[Int32(plane.route[1])]  # base only
-            plane.turnaroundTime = Int32[]
-            plane.flightLegs     = 0
-        end
-    end
 
     # Repair step: force-serve any accepted passengers still missed, using only
     # the committed (active) eVTOLs.
     repair_unserved!(sc_sol, sc_data, sc_rt_mat,
                      fsd.accepted_passengers; active = active)
+
+    # ── Hard safety net ──────────────────────────────────────────────────────
+    # The search is already confined to the active fleet, but as a guarantee we
+    # strip any residual route on a non-active eVTOL before scoring. This ensures
+    # the evaluated solution can NEVER use an un-activated aircraft, regardless of
+    # any construction path. A Pool B group left unserved this way is fine (it is
+    # opportunistic, no penalty); an accepted Pool A group would have been served
+    # by repair on an active eVTOL above.
+    for (idx, plane) in enumerate(sc_sol.planes)
+        if !(idx in active) && plane.flightLegs > 0
+            base = plane.route[1]
+            plane.route          = Int32[Int32(base)]
+            plane.turnaroundTime = Int32[]
+            plane.flightLegs     = Int32(0)
+        end
+    end
 
     # Evaluate true profit on original scenario data, enforcing the active fleet.
     profit, assignments, accepted_served, n_unserved = second_stage_profit(

@@ -37,9 +37,6 @@ function score_single_plane_solution(plane::planeSolution, data, rt)
     
     # Get passenger assignments for this single plane route
     assignments, scheduled = assign_passengersV2(single_sol, data, Int.(rt))
-
-   
-
     
     # Compute the objective value directly.
     # include_unserved_penalty = false: this scores ONE route in isolation for
@@ -244,9 +241,6 @@ function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; p
         key = single_route_key(plane)
         fitness, assignments = score_single_plane_solution(plane, data, rt)
 
-        if isempty(assignments)
-            continue
-        end
 
         plane_sol = allPlaneSolution([plane])
 
@@ -426,11 +420,22 @@ function build_pool_candidate(pool::Vector{SingleRoutePoolEntry}, data, rt; max_
     plane_indices = collect(1:n_planes)
     shuffle!(plane_indices)
 
+    # Optional active-fleet restriction (second stage): only committed eVTOLs
+    # may receive routes; all others stay empty. Absent field → full fleet.
+    active_set = hasproperty(data, :active) ? data.active : nothing
+    is_usable  = n -> active_set === nothing || (n in active_set)
+
     for pos in plane_indices
         # map position -> plane id
         pid = data.N[pos]
         # Get baseport of current plane from data.bv (base vertiport mapping)
         base_port = Int(data.bv[pid])
+
+        # Non-active eVTOLs stay empty under an active restriction.
+        if !is_usable(pid)
+            cand_planes[pos] = planeSolution(Int32(0), Int32[base_port], Int32[])
+            continue
+        end
 
         # Find all routes in pool that start at the same baseport
         compatible_routes = [entry for entry in pool if Int(entry.plane.route[1]) == base_port]
@@ -450,19 +455,7 @@ function build_pool_candidate(pool::Vector{SingleRoutePoolEntry}, data, rt; max_
 
         # Randomly pick from the top 10 (or fewer if not available)
         # top_k = min(100, length(filtered))
-        α = 0.7   # higher = stronger bias to first elements
-
-        n = length(filtered)
-
-        weights = (1:n) .^ (-α)
-        weights ./= sum(weights)
-
-        r = rand()
-        cum = cumsum(weights)
-
-        idx = searchsortedfirst(cum, r)
-
-        choice = filtered[idx]
+        choice = filtered[rand(1:length(filtered))]
 
         # Apply chosen route and mark its key as used
         key = single_route_key(choice.plane)
@@ -535,20 +528,14 @@ function build_pool_candidate(pool::Vector{SingleRoutePoolEntry}, data, rt; max_
     return cand
 end
 
-function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; optimal_obj::Float32 = Inf32)
-
-    Time_to_Optimal = Inf
-    Time_to_Gap = Inf
-
-    Reached_Optimal = false
-    Reached_Gap = false
+function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c)
 
     start_ns = time_ns()
     elapsed = 0.0
     iterations = 0
     iterations_since_clear = 0
-    clear_interval = 1500
-    destruct_trials = 2
+    clear_interval = 200000
+    destruct_trials = 4
 
     best_obj = -Inf
     best_sol = allPlaneSolution(planeSolution[])
@@ -557,10 +544,10 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
     single_route_pool = SingleRoutePoolEntry[]
 
 
-    max_size = Int(round(length(data.N)*length(data.V)*1.5))
+    max_size = Int(round(length(data.N)*length(data.V)))*2
 
     
-    while elapsed <= Float64(MaxTime) && !Reached_Optimal
+    while elapsed <= Float64(MaxTime)
         nr = 5
         idx = rand(1:nr)
         T = 1000
@@ -582,14 +569,6 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
             best_sol = deepcopy(temp_sol)
             println("New best Obj $(best_obj)")
             println("Method used: Initial Heuristic")
-            if best_obj > optimal_obj*0.9 - 0.01 && !Reached_Gap
-                Time_to_Gap = elapsed
-                Reached_Gap = true
-            end
-            if best_obj > optimal_obj - 0.01 && !Reached_Optimal
-                Time_to_Optimal = elapsed
-                Reached_Optimal = true
-            end
         end
 
         single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max_size)
@@ -602,7 +581,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
                 if pool_obj > temp_obj || rand() < 0.1
                     temp_sol = pool_sol
                     temp_obj = pool_obj
-                    # single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max_size)
+                    single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max_size)
                     check_route_endpoints(temp_sol, data, "Accepted pool candidate")
                 end
             end
@@ -615,7 +594,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
 
             cand_obj = temp_obj
             cand_sol = deepcopy(temp_sol)
-            n_perm = 2
+            n_perm = 3
 
             for _ in 1:n_perm
                 move_choice = rand(1:3)
@@ -659,19 +638,11 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
                     best_sol = deepcopy(temp_sol)
                     println("New best Obj $(best_obj)")
                     println("Method used: $(("Destructor", "Constructor", "SegmentExchange")[method_used + 1])")
-                    if best_obj > optimal_obj*0.9 - 0.01 && !Reached_Gap
-                        Time_to_Gap = elapsed
-                        Reached_Gap = true
-                    end
-                    if best_obj > optimal_obj - 0.01 && !Reached_Optimal
-                        Time_to_Optimal = elapsed
-                        Reached_Optimal = true
-                    end
                 end
             end
 
             elapsed = (time_ns() - start_ns) / 1e9
-            T = max(T *0.95, 0.0001)
+            T = max(T *0.9, 0.0001)
         end
 
         iterations += 1
@@ -730,5 +701,5 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
     
     println("=========================================\n")
 
-    return best_obj, best_sol, iterations, Time_to_Gap, Time_to_Optimal
+    return best_obj, best_sol, iterations
 end

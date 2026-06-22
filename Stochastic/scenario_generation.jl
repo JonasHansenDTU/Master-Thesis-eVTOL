@@ -31,7 +31,10 @@
 #   a large reduction in second-stage solve cost.
 #
 # CONFIGURATION:
-const SEASON = :Sommer    # :Foraar, :Sommer, :Efteraar, :Vinter
+# SEASON may be overridden by the EVTOL_SEASON environment variable so a driver
+# can run different seasons in separate processes without editing this file.
+# Defaults to :Sommer when the variable is unset.
+const SEASON = Symbol(get(ENV, "EVTOL_SEASON", "Sommer"))    # :Foraar, :Sommer, :Efteraar, :Vinter
 #
 ###############################################################################
 

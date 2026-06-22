@@ -1,0 +1,2 @@
+season,scenario_id,n_VP,n_eVTOL,n_passengers,rep,H_obj_RP,H_time_sec,n_committed_poolA,n_active_evtols,first_stage_cost,committed_misses,aircraft_utilization,deadhead_time,passenger_demand_served,average_passenger_waiting_time
+Sommer,1,2,1,2,1,3193.9140739268605,117.54688000679016,1,1,400.0,0,0.8282251082251082,8.376623376623376,1.5584415584415583,4.792207792207792
