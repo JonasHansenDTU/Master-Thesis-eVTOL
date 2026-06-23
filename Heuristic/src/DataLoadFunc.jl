@@ -84,10 +84,10 @@ function load_data(excel_file::String, parameter_file::String)
     infra = read_sheet(excel_file, "Infrastructure")
     pax = DataFrame(
         XLSX.readtable(
-            joinpath("inputData", "Experiments/inputDataEx2_1_2.xlsx"),
-            # joinpath("inputData", "LTM_demand5min.xlsx"),
-            "PassengerGroups"
-            # "Sheet1"
+            # joinpath("inputData", "Experiments/inputDataEx2_1_2.xlsx"),
+            joinpath("inputData", "LTM_demand5min.xlsx"),
+            # "PassengerGroups"
+            "Sheet1"
         )
     )
     # Pool B: on-demand passenger groups, served only in the second stage.

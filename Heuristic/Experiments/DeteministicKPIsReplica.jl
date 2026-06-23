@@ -30,7 +30,7 @@ end
 
 function load_heuristic_data()
     run(`python c:/Users/Kapta/Documents/DTU/Speciale/GitHubFiles/DataGen/LTM/LTMPassAssignRand.py`)
-    excel_file = joinpath(@__DIR__, "..", "..", "inputData", "inputDataGiant.xlsx")
+    excel_file = joinpath(@__DIR__, "..", "..", "inputData", "inputDataHumongous.xlsx")
     parameter_file = joinpath(@__DIR__, "..", "..",  "inputData", "Parameters.xlsx")
     data = load_data(excel_file, parameter_file)
 
@@ -125,9 +125,9 @@ end
 # 
 function main()
     max_turnaround = load_turnaround_period()
-    maxtime = Int32(10)
+    maxtime = Int32(400)
     top_c = 4
-    n_runs = 5
+    n_runs = 20
 
     out_dir = joinpath(@__DIR__, "Results")
     mkpath(out_dir)
@@ -139,6 +139,9 @@ function main()
         top_c=top_c,
         seed=1,
     )
+
+    best_idx = argmax(profitvals)
+    best_sol = best_sols[best_idx]
 
     results_csv = joinpath(out_dir, "best_obj_runs.csv")
     save_batch_results(best_objs; out_csv=results_csv)
@@ -153,7 +156,7 @@ function main()
         title_text="Heuristic best_obj over $(n_runs) runs",
     )
 
-    kpi_rows = [merge((run = i, best_obj = best_objs[i]), solution_kpis(best_sols[i], run_data_list[i], run_rt_list[i])) for i in eachindex(best_sols)]
+    kpi_rows = [merge((run = i, best_obj = best_objs[i], best_profit = profitvals[i]), solution_kpis(best_sols[i], run_data_list[i], run_rt_list[i])) for i in eachindex(best_sols)]
     kpi_csv = joinpath(out_dir, "best_solution_kpis.csv")
     save_kpi_results(kpi_rows; out_csv=kpi_csv)
 
@@ -162,7 +165,23 @@ function main()
     println("Saved boxplot to: $boxplot_png")
     println("Saved KPI results to: $kpi_csv")
     println("Summary: min=$(minimum(best_objs)), median=$(median(best_objs)), mean=$(mean(best_objs)), max=$(maximum(best_objs))")
-    println("Iterations per run: $(iterations)")
+    println("Iterations per run: $(iterations)\n")
+
+
+    println("Best solution (higest profit):")
+    println("Objective Value: $(best_objs[best_idx])")
+    println("Profit Value: $(profitvals[best_idx])")
+    print_chromosome_table(best_sol)
+
+    assignments, scheduled = assign_passengersV2(best_sol, run_data_list[best_idx], Int.(run_rt_list[best_idx]))
+
+    # println("Passenger Assignment")
+    print_assignments(assignments, run_data_list[best_idx])
+
+    # Export solution snapshots for visualization
+    # snapshots = export_solution_snapshots(best_sol, scheduled, assignments, battery_levels, data)
+    print_schedule_pretty(scheduled) 
+
 end
 
 

@@ -5,6 +5,7 @@ mutable struct PassengerAssignment
     legs::Vector{Int}
 end
 
+
 mutable struct ScheduledLeg
     plane::Int
     leg_index::Int
@@ -77,37 +78,6 @@ function print_schedule_pretty(scheduled::Vector{ScheduledLeg}; sort_by_plane::B
     println("Total legs: $(length(legs))")
 end
 
-mutable struct PassengerAssignment
-    group::Int
-    plane::Int
-    legs::Vector{Int}
-end
-
-function find_direct_leg!(scheduled::Vector{ScheduledLeg}, a::Int, op, dp, dt, q, w)
-    candidates = ScheduledLeg[]
-
-    earliest = Int(round(dt[a]))
-    latest = earliest + Int(round(w))
-
-    for leg in scheduled
-        if leg.from == op[a] &&
-           leg.to == dp[a] &&
-           earliest <= leg.dep <= latest &&
-           leg.remaining_capacity >= q[a]
-            push!(candidates, leg)
-        end
-    end
-
-    if isempty(candidates)
-        return nothing
-    end
-
-    best = candidates[argmin([leg.arr for leg in candidates])]
-    best.remaining_capacity -= q[a]
-
-    return PassengerAssignment(a, best.plane, [best.leg_index])
-end
-
 function find_direct_leg!V2(scheduled::Vector{ScheduledLeg}, a::Int, op, dp, dt, q, w, so)
     candidates = ScheduledLeg[]
 
@@ -137,62 +107,6 @@ function find_direct_leg!V2(scheduled::Vector{ScheduledLeg}, a::Int, op, dp, dt,
     return PassengerAssignment(a, best.plane, [best.leg_index])
 end
 
-function find_one_stop_assignment!(scheduled::Vector{ScheduledLeg},
-                                   a::Int, op, dp, dt, q, w)
-    best_pair = nothing
-    best_arrival = typemax(Int)
-
-    earliest = Int(round(dt[a]))
-    latest = earliest + Int(round(w))
-
-    for leg1 in scheduled
-        if leg1.from != op[a]
-            continue
-        end
-        if !(earliest <= leg1.dep <= latest)
-            continue
-        end
-        if leg1.remaining_capacity < q[a]
-            continue
-        end
-
-        for leg2 in scheduled  #Kig kun på det næste leg fra leg1
-            if leg2.plane != leg1.plane
-                continue
-            end
-            if leg2.leg_index <= leg1.leg_index
-                continue
-            end
-            if leg2.from != leg1.to
-                continue
-            end
-            if leg2.to != dp[a]
-                continue
-            end
-            if leg2.remaining_capacity < q[a]
-                continue
-            end
-            if leg2.dep < leg1.arr
-                continue
-            end
-
-            if leg2.arr < best_arrival
-                best_arrival = leg2.arr
-                best_pair = (leg1, leg2)
-            end
-        end
-    end
-
-    if best_pair === nothing
-        return nothing
-    end
-
-    leg1, leg2 = best_pair
-    leg1.remaining_capacity -= q[a]
-    leg2.remaining_capacity -= q[a]
-
-    return PassengerAssignment(a, leg1.plane, [leg1.leg_index, leg2.leg_index])
-end
 
 function find_one_stop_assignment!V2(scheduled::Vector{ScheduledLeg}, a::Int, op, dp, dt, q, w, te)
     best_pair = nothing
@@ -234,57 +148,6 @@ function find_one_stop_assignment!V2(scheduled::Vector{ScheduledLeg}, a::Int, op
     return PassengerAssignment(a, leg1.plane, [leg1.leg_index, leg2.leg_index])
 end
 
-function assign_passengers(evtols::allPlaneSolution, data, rt::Matrix{Int})
-    A = data.A
-    op = data.op
-    dp = data.dp
-    dt = data.dt
-    q = data.q
-    so = data.so
-    w = data.w
-    cap_u = Int(round(data.cap_u))
-
-    scheduled = build_scheduled_legs(evtols, rt, cap_u)
-    assignments = PassengerAssignment[]
-    assigned_groups = Set{Int}()
-
-    # Step 1: non-stopover passengers -> direct only
-    direct_only = sort([a for a in A if so[a] == 0], by = a -> (dt[a], -q[a]))
-    for a in direct_only
-        ass = find_direct_leg!(scheduled, a, op, dp, dt, q, w)
-        if ass !== nothing
-            push!(assignments, ass)
-            push!(assigned_groups, a)
-        end
-    end
-
-    # Step 2: stopover-allowed passengers -> direct first
-    stopover_ok = sort([a for a in A if so[a] == 1], by = a -> (dt[a], -q[a]))
-    for a in stopover_ok
-        if a in assigned_groups #Not needed?
-            continue
-        end
-        ass = find_direct_leg!(scheduled, a, op, dp, dt, q, w)
-        if ass !== nothing
-            push!(assignments, ass)
-            push!(assigned_groups, a)
-        end
-    end
-
-    # Step 3: remaining stopover-allowed passengers -> one-stop
-    for a in stopover_ok
-        if a in assigned_groups
-            continue
-        end
-        ass = find_one_stop_assignment!(scheduled, a, op, dp, dt, q, w)
-        if ass !== nothing
-            push!(assignments, ass)
-            push!(assigned_groups, a)
-        end
-    end
-
-    return assignments, scheduled
-end
 
 function assign_passengersV2(evtols::allPlaneSolution, data, rt::Matrix{Int})
     A = data.A
