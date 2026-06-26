@@ -84,7 +84,7 @@ function params_for(id::Int)
                 MaxTime_2nd_search=Int32(12), MaxTime_2nd_final=Int32(25))
     else
         return (MaxTime_1st=Int32(60),  n_restarts=2, n_outer_iters=5,
-                MaxTime_2nd_search=Int32(10), MaxTime_2nd_final=Int32(20))
+                MaxTime_2nd_search=Int32(12), MaxTime_2nd_final=Int32(25))
     end
 end
 
