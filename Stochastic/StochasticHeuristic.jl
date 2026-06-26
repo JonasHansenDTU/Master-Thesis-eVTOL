@@ -681,7 +681,7 @@ end
 
 function solve_second_stage(fsd::FirstStageDecision,
                              sc_data, sc_rt_mat::Matrix{Int};
-                             maxTurnaround::Int    = 100,
+                             maxTurnaround::Int    = Int(round(data.ET)),
                              MaxTime_2nd::Int32    = Int32(10),
                              top_c::Int            = 4,
                              price_boost::Float64  = 50.0,
@@ -703,7 +703,7 @@ function solve_second_stage(fsd::FirstStageDecision,
     # Run the heuristic. Because ss_data carries the active set, the construction
     # and SA neighbourhoods build routes ONLY on the committed eVTOLs, so the
     # search optimises directly over the activated fleet (no post-hoc stripping).
-    _, sc_sol, _ = HeuristicSA(maxTurnaround, MaxTime_2nd, ss_data,
+    _, sc_sol, _ = HeuristicSA(Int(round(sc_data.ET)), MaxTime_2nd, ss_data,
                                 sc_rt_mat, top_c)
 
     active = fsd.active_evtols
@@ -758,7 +758,7 @@ end
 
 function expected_objective(fsd::FirstStageDecision,
                              scenario_cache, rt_mats, S, pi_s;
-                             maxTurnaround::Int    = 100,
+                             maxTurnaround::Int    = Int(round(data.ET)),
                              MaxTime_2nd::Int32    = Int32(5),
                              top_c::Int            = 4,
                              price_boost::Float64  = 50.0,
@@ -913,7 +913,7 @@ end
 ###############################################################################
 
 function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
-                               maxTurnaround::Int        = 100,
+                               maxTurnaround::Int        = Int(round(data.ET)),
                                MaxTime_1st::Int32        = Int32(30),
                                MaxTime_2nd_search::Int32 = Int32(5),
                                MaxTime_2nd_final::Int32  = Int32(15),
@@ -976,7 +976,7 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
     for restart in 1:n_restarts
         println("\n  ── Restart $restart / $n_restarts ──")
 
-        _, tent_sol, _ = HeuristicSA(maxTurnaround, MaxTime_1st,
+        _, tent_sol, _ = HeuristicSA(Int(round(data.ET)), MaxTime_1st,
                                        data, rt_det, top_c)
 
         fsd = extract_first_stage_decision(tent_sol, data, rt_det, rt_mats)
@@ -988,7 +988,7 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
 
         exp_obj, _ = expected_objective(
             fsd, scenario_cache, rt_mats, S, pi_s;
-            maxTurnaround = maxTurnaround,
+            maxTurnaround = Int(round(data.ET)),
             MaxTime_2nd   = MaxTime_2nd_search,
             top_c         = top_c,
             price_boost   = price_boost,
@@ -1077,7 +1077,7 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
                                      data, best_tent_sol)
                     c_obj, _ = expected_objective(
                         c_fsd, scenario_cache, rt_mats, S, pi_s;
-                        maxTurnaround = maxTurnaround,
+                        maxTurnaround = Int(round(data.ET)),
                         MaxTime_2nd   = MaxTime_2nd_search,
                         top_c         = top_c,
                         price_boost   = price_boost,
@@ -1097,7 +1097,7 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
                                      data, best_tent_sol)
                     c_obj, _ = expected_objective(
                         c_fsd, scenario_cache, rt_mats, S, pi_s;
-                        maxTurnaround = maxTurnaround,
+                        maxTurnaround = Int(round(data.ET)),
                         MaxTime_2nd   = MaxTime_2nd_search,
                         top_c         = top_c,
                         price_boost   = price_boost,
@@ -1118,7 +1118,7 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
                                          data, best_tent_sol)
                         c_obj, _ = expected_objective(
                             c_fsd, scenario_cache, rt_mats, S, pi_s;
-                            maxTurnaround = maxTurnaround,
+                            maxTurnaround = Int(round(data.ET)),
                             MaxTime_2nd   = MaxTime_2nd_search,
                             top_c         = top_c,
                             price_boost   = price_boost,
@@ -1140,7 +1140,7 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
                     c_fsd = make_fsd(c_accepted, c_active, data, best_tent_sol)
                     c_obj, _ = expected_objective(
                         c_fsd, scenario_cache, rt_mats, S, pi_s;
-                        maxTurnaround = maxTurnaround,
+                        maxTurnaround = Int(round(data.ET)),
                         MaxTime_2nd   = MaxTime_2nd_search,
                         top_c         = top_c,
                         price_boost   = price_boost,
@@ -1162,7 +1162,7 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
                     c_fsd = make_fsd(c_accepted, c_active, data, best_tent_sol)
                     c_obj, _ = expected_objective(
                         c_fsd, scenario_cache, rt_mats, S, pi_s;
-                        maxTurnaround = maxTurnaround,
+                        maxTurnaround = Int(round(data.ET)),
                         MaxTime_2nd   = MaxTime_2nd_search,
                         top_c         = top_c,
                         price_boost   = price_boost,
@@ -1218,7 +1218,7 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
     println("\n[Cleanup] Checking for committed eVTOLs that never fly …")
     _, cleanup_results = expected_objective(
         best_fsd, scenario_cache, rt_mats, S, pi_s;
-        maxTurnaround = maxTurnaround, MaxTime_2nd = MaxTime_2nd_search,
+        maxTurnaround = Int(round(data.ET)), MaxTime_2nd = MaxTime_2nd_search,
         top_c = top_c, price_boost = price_boost,
         hard_penalty = hard_penalty, full_output = true,
     )
@@ -1236,7 +1236,7 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
                                    Set{Int}(trimmed_active), data, best_tent_sol)
             trimmed_obj, _ = expected_objective(
                 trimmed_fsd, scenario_cache, rt_mats, S, pi_s;
-                maxTurnaround = maxTurnaround, MaxTime_2nd = MaxTime_2nd_search,
+                maxTurnaround = Int(round(data.ET)), MaxTime_2nd = MaxTime_2nd_search,
                 top_c = top_c, price_boost = price_boost,
                 hard_penalty = hard_penalty, full_output = false,
             )
@@ -1254,7 +1254,7 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
     println("\n[Final] Re-solving all scenarios with $(MaxTime_2nd_final)s budget …")
     final_exp_obj, scenario_results = expected_objective(
         best_fsd, scenario_cache, rt_mats, S, pi_s;
-        maxTurnaround = maxTurnaround,
+        maxTurnaround = Int(round(data.ET)),
         MaxTime_2nd   = MaxTime_2nd_final,
         top_c         = top_c,
         price_boost   = price_boost,

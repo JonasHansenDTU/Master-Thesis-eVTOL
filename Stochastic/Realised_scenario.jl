@@ -36,27 +36,31 @@ const REALISED_SEED = 4242         # seed for the realised-day draws (reproducib
 # Temperature penalty (phi) levels and seasonal mix (DMI-DATA.xlsx Sheet2)
 const PHI_MAP = [1.00, 1.20, 1.35]
 const TEMP_PROBS = Dict(
-    :Foraar   => (0.825, 0.153, 0.022),
-    :Sommer   => (1.000, 0.000, 0.000),
-    :Efteraar => (0.934, 0.055, 0.011),
-    :Vinter   => (0.629, 0.293, 0.078),
+    :Foraar   => (0.831, 0.148, 0.022),  # Marts, April, Maj
+    :Sommer   => (1.000, 0.000, 0.000),  # Juni, Juli, August
+    :Efteraar => (0.934, 0.055, 0.011),  # September, Oktober, November
+    :Vinter   => (0.648, 0.278, 0.074),  # December, Januar, Februar
 )
 
 # Wind-direction options (wx, wy in km/h) and shares (DMI TR12-19 wind roses)
 const WIND_OPTIONS = [
-    (wx=  0.0, wy=  0.0, key="Calm",        share=0.05),
-    (wx=-21.0, wy= 21.0, key="SW_moderate", share=0.15),
-    (wx=-39.0, wy= 39.0, key="SW_strong",   share=0.08),
-    (wx=-30.0, wy=  0.0, key="W_moderate",  share=0.14),
-    (wx=-55.0, wy=  0.0, key="W_strong",    share=0.06),
-    (wx= 30.0, wy=  0.0, key="E_moderate",  share=0.15),
-    (wx=  0.0, wy= 30.0, key="S_moderate",  share=0.20),
-    (wx=  0.0, wy=-30.0, key="N_moderate",  share=0.08),
-    (wx=  0.0, wy=-30.0, key="N_strong",    share=0.02),
+    (wx=  0.0, wy=  -9.3, key="N-Mild",   share=0.096),
+    (wx= -9.3, wy=   0.0, key="E-Mild",   share=0.14),
+    (wx=  0.0, wy=   9.3, key="S-Mild",   share=0.181),
+    (wx=  9.3, wy=   0.0, key="W-Mild",   share=0.208),
+    (wx=  0.0, wy= -27.0, key="N-Mod",    share=0.028),
+    (wx=-27.0, wy=   0.0, key="E-Mod",    share=0.076),
+    (wx=  0.0, wy=  27.0, key="S-Mod",    share=0.080),
+    (wx= 27.0, wy=   0.0, key="W-Mod",    share=0.162),
+    (wx=  0.0, wy= -46.0, key="N-Str",    share=0.002),
+    (wx=-46.0, wy=   0.0, key="E-Str",    share=0.004),
+    (wx=  0.0, wy=  46.0, key="S-Str",    share=0.004),
+    (wx= 46.0, wy=   0.0, key="W-Str",    share=0.019),
 ]
 
+
 # Two-stage / second-stage parameters — keep identical to MainCall_stochastic.jl
-maxTurnaround      = 100
+maxTurnaround      = 120
 MaxTime_1st        = Int32(90)
 n_restarts         = 2
 n_outer_iters      = 4

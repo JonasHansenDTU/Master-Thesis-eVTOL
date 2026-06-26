@@ -2,8 +2,6 @@
 # Experiment1_sizes.jl
 #
 # EXPERIMENT 1 — Two-stage stochastic heuristic across the six instance sizes
-# (Table 9.1), so its results can be placed alongside the existing exact-vs-
-# deterministic comparison (Table 9.2).
 #
 # For each instance size, the two-stage heuristic is run several times (reps).
 # Each rep records:
@@ -46,8 +44,10 @@ const SEASON_NAME = get(ENV, "EVTOL_SEASON", "Sommer")
 # Output goes to experiment1_<season>_SMOKE.csv so it never overwrites real runs.
 const SMOKE_TEST = get(ENV, "SMOKE_TEST", "0") == "1"
 
-# Reps per instance. The reference table used 5; 4–6 is reasonable.
-const N_REPS = SMOKE_TEST ? 1 : 5
+# Reps per instance. One rep: the heuristic was observed to converge to the same
+# solution across reps (identical RP and routing), so a single rep captures the
+# result and halves the runtime relative to two reps.
+reps_for(id::Int) = 1
 
 # A fixed base seed; each rep uses base + rep so reps differ but the whole
 # experiment is reproducible. (Set to a fixed value for a reproducible table.)
@@ -68,26 +68,28 @@ const ALL_INSTANCES = [
 # Smoke test uses only the two smallest instances; the real run uses all six.
 const INSTANCES = SMOKE_TEST ? ALL_INSTANCES[1:2] : ALL_INSTANCES
 
-# Two-stage parameters. Full-quality values for the small/medium instances; the
-# two largest instances (ids 5,6) use a reduced budget so the experiment does
-# not run for days. This mirrors the reference table's use of a fixed budget for
-# the hard cases, and is documented in the thesis. The smoke test forces tiny
-# budgets for everything so it finishes quickly.
+# Two-stage parameters. With several days available, these are set for good
+# solution quality. Budgets scale with instance size; the largest instances get
+# somewhat reduced per-scenario budgets to keep total runtime within the window,
+# but enough to find good commitments. Documented as a size-dependent budget.
 function params_for(id::Int)
     if SMOKE_TEST
         return (MaxTime_1st=Int32(10), n_restarts=1, n_outer_iters=2,
                 MaxTime_2nd_search=Int32(3), MaxTime_2nd_final=Int32(5))
-    elseif id <= 4
+    elseif id <= 3
         return (MaxTime_1st=Int32(90),  n_restarts=2, n_outer_iters=8,
                 MaxTime_2nd_search=Int32(15), MaxTime_2nd_final=Int32(30))
+    elseif id <= 4
+        return (MaxTime_1st=Int32(90),  n_restarts=2, n_outer_iters=6,
+                MaxTime_2nd_search=Int32(12), MaxTime_2nd_final=Int32(25))
     else
-        # Larger instances: fewer outer iterations and shorter per-scenario
-        # search to keep total runtime manageable. Documented as a reduced
-        # budget for the hardest cases.
-        return (MaxTime_1st=Int32(90),  n_restarts=2, n_outer_iters=4,
-                MaxTime_2nd_search=Int32(10), MaxTime_2nd_final=Int32(30))
+        return (MaxTime_1st=Int32(60),  n_restarts=2, n_outer_iters=5,
+                MaxTime_2nd_search=Int32(10), MaxTime_2nd_final=Int32(20))
     end
 end
+
+# Optionally skip instances whose results you already have (set via START_FROM).
+const START_FROM = parse(Int, get(ENV, "START_FROM", "1"))
 
 const PRICE_BOOST  = 8.0
 const HARD_PENALTY = 50_000.0
@@ -224,6 +226,7 @@ end
 println("="^72)
 
 for inst in INSTANCES
+    inst.id < START_FROM && continue   # skip instances already completed
     excel_file = joinpath(@__DIR__, "..", "inputData", "Experiments", inst.file)
     if !isfile(excel_file)
         @warn "Instance file not found, skipping" file=inst.file
@@ -246,8 +249,9 @@ for inst in INSTANCES
     S        = S_active
 
     p = params_for(inst.id)
+    n_reps = reps_for(inst.id)
 
-    for rep in 1:N_REPS
+    for rep in 1:n_reps
         Random.seed!(BASE_SEED + rep)   # reproducible, differs per rep
 
         t0 = time()
@@ -269,6 +273,22 @@ for inst in INSTANCES
         actual_RP = weighted_actual_profit(result)
         total_unserved = sum(r.n_unserved for r in values(result.scenario_results))
 
+        # Probability-weighted mean number of groups served per scenario, split
+        # by pool. Pool B (on-demand) groups carry the +1000 id offset.
+        let sr = result.scenario_results, pis = result.pi_s
+            scs = collect(keys(sr)); wsum = sum(pis[sc] for sc in scs)
+            meanA = 0.0; meanB = 0.0
+            for sc in scs
+                served = Set(ass.group for ass in sr[sc].assignments)
+                nA = count(g -> g < 1000, served)
+                nB = count(g -> g >= 1000, served)
+                meanA += (pis[sc]/wsum) * nA
+                meanB += (pis[sc]/wsum) * nB
+            end
+            global _mean_poolA_served = meanA
+            global _mean_poolB_served = meanB
+        end
+
         row = (
             season              = SEASON_NAME,
             scenario_id         = inst.id,
@@ -283,6 +303,8 @@ for inst in INSTANCES
             n_active_evtols     = length(result.active_evtols),
             first_stage_cost    = result.first_stage_cost,
             committed_misses    = total_unserved,
+            mean_poolA_served   = _mean_poolA_served,
+            mean_poolB_served   = _mean_poolB_served,
             aircraft_utilization           = k.aircraft_utilization,
             deadhead_time                  = k.deadhead_time,
             passenger_demand_served        = k.passenger_demand_served,
@@ -290,9 +312,10 @@ for inst in INSTANCES
         )
         push!(rows, row)
 
-        @printf("  rep %d/%d : RP=%+.2f  actual=%+.2f  time=%.1fs  committed=%d  active=%d  misses=%d\n",
-                rep, N_REPS, row.H_obj_RP, row.actual_profit_RP, row.H_time_sec,
-                row.n_committed_poolA, row.n_active_evtols, row.committed_misses)
+        @printf("  rep %d/%d : RP=%+.2f  actual=%+.2f  time=%.1fs  committed=%d  active=%d  misses=%d  poolB_served=%.2f\n",
+                rep, n_reps, row.H_obj_RP, row.actual_profit_RP, row.H_time_sec,
+                row.n_committed_poolA, row.n_active_evtols, row.committed_misses,
+                row.mean_poolB_served)
 
         # Write incrementally so a crash mid-experiment doesn't lose everything.
         CSV.write(out_path, DataFrame(rows))
