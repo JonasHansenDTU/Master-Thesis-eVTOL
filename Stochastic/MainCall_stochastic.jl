@@ -58,10 +58,10 @@ top_c              = 4            # top routes per base vertiport considered by 
 # Load data and generate scenarios
 ###############################################################################
 println("Loading data …")
-# infra_file     = joinpath(@__DIR__, "..", "inputData", joinpath("Experiments", "inputDataEx5_5_20.xlsx"))
-# excel_file     = joinpath(@__DIR__, "..", "inputData", joinpath("Experiments", "inputDataEx5_5_20.xlsx"))
-infra_file     = joinpath(@__DIR__, "..", "inputData", "inputDataGiant.xlsx")
-excel_file     = joinpath(@__DIR__, "..", "inputData", "inputDataGiant.xlsx")
+infra_file     = joinpath(@__DIR__, "..", "inputData", joinpath("Experiments", "inputDataEx2_1_2.xlsx"))
+excel_file     = joinpath(@__DIR__, "..", "inputData", joinpath("Experiments", "inputDataEx2_1_2.xlsx"))
+#infra_file     = joinpath(@__DIR__, "..", "inputData", "inputDataGiant.xlsx")
+#excel_file     = joinpath(@__DIR__, "..", "inputData", "inputDataGiant.xlsx")
 parameter_file = joinpath(@__DIR__, "..", "inputData", "Parameters.xlsx")
 
 data = load_data(infra_file, parameter_file, excel_file)
@@ -102,11 +102,6 @@ println("Probabilities: $(round.([pi_s[sc] for sc in S], digits=4))")
 # Run two-stage stochastic heuristic
 ###############################################################################
 
-###############################################################################
-# Seed the global RNG so the first-stage solve is reproducible. Use the SAME
-# value in Realised_scenario.jl so both produce the identical first-stage
-# decision (the heuristic's SA draws from the global RNG).
-###############################################################################
 const FIRST_STAGE_SEED = 12345
 Random.seed!(FIRST_STAGE_SEED)
 
@@ -125,9 +120,4 @@ result = stochastic_heuristic(
 
 print_stochastic_result(result, data)
 
-###############################################################################
-# Note: the stochastic-programming measures (VSS / EVPI) are computed by the
-# separate driver RunMeasures.jl, so the plain two-stage run here stays fast and
-# is unaffected by the (expensive) wait-and-see solves. Run RunMeasures.jl when
-# you want EEV / WS / VSS / EVPI.
-###############################################################################
+

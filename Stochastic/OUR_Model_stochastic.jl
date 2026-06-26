@@ -784,7 +784,8 @@ end
 # Usage
 ###############################################################################
 
-excel_file     = joinpath("inputData/inputDataGiant.xlsx")
+#excel_file     = joinpath("inputData/inputDataGiant.xlsx")
+excel_file     = joinpath(@__DIR__, "..", "inputData", joinpath("Experiments", "inputDataEx5_3_10.xlsx"))
 parameter_file = joinpath("inputData/Parameters.xlsx")
 println("Using Excel file: ", excel_file)
 

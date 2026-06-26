@@ -24,7 +24,7 @@
 #   The full cross-product is 9 directions × 3 temperatures = 27 combinations.
 #   We keep 13 representative ones: all three temperatures for the directions
 #   where cold genuinely matters (SW, W, N) and AboveZero only for the
-#   mild-dominated directions (Mild, E, S). The probability mass of the omitted
+#   mild-dominated directions (Calm, E, S). The probability mass of the omitted
 #   combinations is redistributed proportionally via renormalisation. The
 #   omitted combinations are individually low-probability and do not materially
 #   change the first-stage decision, so 13 trades a small SAA-accuracy loss for
@@ -66,10 +66,10 @@ end
 ###############################################################################
 
 const TEMP_PROBS = Dict(
-    :Foraar   => (0.831, 0.148, 0.022),  # Marts, April, Maj
+    :Foraar   => (0.825, 0.153, 0.022),  # Marts, April, Maj
     :Sommer   => (1.000, 0.000, 0.000),  # Juni, Juli, August
     :Efteraar => (0.934, 0.055, 0.011),  # September, Oktober, November
-    :Vinter   => (0.648, 0.278, 0.074),  # December, Januar, Februar
+    :Vinter   => (0.629, 0.293, 0.078),  # December, Januar, Februar
 )
 
 ###############################################################################
@@ -78,19 +78,15 @@ const TEMP_PROBS = Dict(
 ###############################################################################
 
 const WIND_SHARES = Dict(
-    "N-Mild"        => 0.096,
-    "E-Mild"        => 0.14,
-    "S-Mild"        => 0.181,
-    "W-Mild"        => 0.208,
-    "N-Mod"         => 0.028,
-    "E-Mod"         => 0.076,
-    "S-Mod"         => 0.080,
-    "W-Mod"         => 0.162,
-    "N-Str"         => 0.002,
-    "E-Str"         => 0.004,
-    "S-Str"         => 0.004,
-    "W-Str"         => 0.019,
-
+    "Calm"        => 0.05,
+    "SW_moderate" => 0.15,
+    "SW_strong"   => 0.08,
+    "W_moderate"  => 0.14,
+    "W_strong"    => 0.06,
+    "E_moderate"  => 0.15,
+    "S_moderate"  => 0.20,
+    "N_moderate"  => 0.08,
+    "N_strong"    => 0.02,
 )
 
 ###############################################################################
@@ -100,42 +96,19 @@ const WIND_SHARES = Dict(
 ###############################################################################
 
 const SCENARIO_DEFS = [
-    #( 0.0,  -9.3, 1.00,  "N-Mild",        1, "N-Mild / AboveZero"),
-    #( 0.0,  -9.3, 1.20,  "N-Mild",        2, "N-Mild / Cold"),
-    #( 0.0,  -9.3, 1.35,  "N-Mild",        3, "N-Mild / Very Cold"),
-    #(-9.3,   0.0, 1.00,  "E-Mild",        1, "E-Mild / AboveZero"),
-    #(-9.3,   0.0, 1.20,  "E-Mild",        2, "E-Mild / Cold"),
-    #(-9.3,   0.0, 1.35,  "E-Mild",        3, "E-Mild / Very Cold"),
-    ( 0.0,   9.3, 1.00,  "S-Mild",        1, "S-Mild / AboveZero"),
-    ( 0.0,   9.3, 1.20,  "S-Mild",        2, "S-Mild / Cold"),
-    ( 0.0,   9.3, 1.35,  "S-Mild",        3, "S-Mild / Very Cold"),
-    ( 9.3,   0.0, 1.00,  "W-Mild",        1, "W-Mild / AboveZero"),
-    ( 9.3,   0.0, 1.20,  "W-Mild",        2, "W-Mild / Cold"),
-    ( 9.3,   0.0, 1.35,  "W-Mild",        3, "W-Mild / Very Cold"),
-    #( 0.0, -27.0, 1.00,  "N-Mod",         1, "N-Mod / AboveZero"),
-    #( 0.0, -27.0, 1.20,  "N-Mod",         2, "N-Mod / Cold"),
-    #( 0.0, -27.0, 1.35,  "N-Mod",         3, "N-Mod / Very cold"),
-    #(-27.0,  0.0, 1.00,  "E-Mod",         1, "E-Mod / AboveZero"),
-    #(-27.0,  0.0, 1.20,  "E-Mod",         2, "E-Mod / Cold"),
-    #(-27.0,  0.0, 1.35,  "E-Mod",         3, "E-Mod / Very cold"),
-    ( 0.0,  27.0, 1.00,  "S-Mod",         1, "S-Mod / AboveZero"),
-    ( 0.0,  27.0, 1.20,  "S-Mod",         2, "S-Mod / Cold"),
-    #( 0.0,  27.0, 1.35,  "S-Mod",         3, "S-mod / Very cold"),
-    ( 27.0,  0.0, 1.00,  "W-Mod",         1, "W-Mod / AboveZero"),
-    ( 27.0,  0.0, 1.20,  "W-Mod",         2, "W-Mod / Cold"),
-    ( 27.0,  0.0, 1.35,  "W-Mod",         3, "W-mod / Very cold"),
-    #( 0.0, -46.0, 1.00,  "N-Str",         1, "N-Str / AboveZero"),
-    #( 0.0, -46.0, 1.20,  "N-Str",         2, "N-Str / Cold"),
-    #( 0.0, -46.0, 1.35,  "N-Str",         3, "N-Str / Very cold"),
-    #(-46.0,  0.0, 1.00,  "E-Str",         1, "E-Str / AboveZero"),
-    #(-46.0,  0.0, 1.20,  "E-Str",         2, "E-Str / Cold"),
-    #(-46.0,  0.0, 1.35,  "E-Str",         3, "E-Str / Very cold"),
-    #( 0.0,  46.0, 1.00,  "S-Str",         1, "S-Str / AboveZero"),
-    #( 0.0,  46.0, 1.20,  "S-Str",         2, "S-Str / Cold"),
-    #( 0.0,  46.0, 1.35,  "S-Str",         3, "S-Str / Very cold"),
-    (46.0,   0.0, 1.00,  "W-Str",         1, "W-Str / AboveZero"),
-    #(46.0,   0.0, 1.20,  "W-Str",         2, "W-Str / Cold"),
-    #(46.0,   0.0, 1.35,  "W-Str",         3, "W-Str / Very cold"),
+    ( 0.0,   0.0, 1.00, "Calm",        1, "Calm / AboveZero"),
+    ( 0.0,   0.0, 1.20, "Calm",        2, "Calm / Cold"),
+    (-21.0, 21.0, 1.00, "SW_moderate", 1, "SW-mod / AboveZero"),
+    (-21.0, 21.0, 1.20, "SW_moderate", 2, "SW-mod / Cold"),
+    (-21.0, 21.0, 1.35, "SW_moderate", 3, "SW-mod / Very cold"),
+    (-39.0, 39.0, 1.00, "SW_strong",   1, "SW-str / AboveZero"),
+    (-30.0,  0.0, 1.00, "W_moderate",  1, "W-mod / AboveZero"),
+    (-55.0,  0.0, 1.20, "W_strong",    2, "W-str / Cold"),
+    (-55.0,  0.0, 1.35, "W_strong",    3, "W-str / Very cold"),
+    ( 30.0,  0.0, 1.00, "E_moderate",  1, "E-mod / AboveZero"),
+    ( 0.0,  30.0, 1.00, "S_moderate",  1, "S-mod / AboveZero"),
+    ( 0.0, -30.0, 1.20, "N_moderate",  2, "N-mod / Cold"),
+    ( 0.0, -30.0, 1.35, "N_moderate",  3, "N-mod / Very cold"),
 ]
 
 ###############################################################################
@@ -188,7 +161,7 @@ function print_scenarios(scenarios, season)
             " | ", lpad("wy",6), " | ", lpad("phi",5), " | ", lpad("pi",7))
     println("-"^72)
     for (sc, s) in enumerate(scenarios)
-        marker = s.pi == 0.0 ? "  ← zero (skipped)" : (s.pi < 0.01 ? "  ← rare" : "")
+        marker = s.pi == 0.0 ? "  ← zero (skipped)" : (s.pi < 0.005 ? "  ← rare" : "")
         println(rpad(sc,4), " | ", rpad(s.label,22), " | ", lpad(s.wx,6),
                 " | ", lpad(s.wy,6), " | ", lpad(s.phi,5),
                 " | ", lpad(round(s.pi,digits=4),7), marker)
