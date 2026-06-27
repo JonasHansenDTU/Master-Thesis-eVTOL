@@ -267,6 +267,7 @@ df_out["group"] = range(
 # SAVE OUTPUT
 # =====================================================
 
+output_path = "inputData/LTM_demand.xlsx"
 output_path = "inputData/LTM_demandBFinal.xlsx"
 
 df_out.to_excel(
