@@ -1,0 +1,12 @@
+name: evtol-experiment2
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - pip:
+      - pandas>=3.0.1
+      - numpy>=2.4.3
+      - openpyxl>=3.1.5
+      - matplotlib>=3.10.8
