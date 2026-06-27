@@ -1,0 +1,3 @@
+season,run,realised_idx,weather_label,severe,in_sample_RP,realised_profit,realised_actual_profit,n_committed_poolA,n_active_evtols,first_stage_cost,committed_missed,poolB_appeared,poolB_served,aircraft_utilization,deadhead_time,passenger_demand_served,average_passenger_waiting_time
+Sommer,1,1,W-Mod / AboveZero,0,-16200.0,0.0,0.0,0,0,16200.0,0,27,0,0.0,0.0,0,0.0
+Sommer,1,2,W-Mod / AboveZero,0,-16200.0,0.0,0.0,0,0,16200.0,0,31,0,0.0,0.0,0,0.0

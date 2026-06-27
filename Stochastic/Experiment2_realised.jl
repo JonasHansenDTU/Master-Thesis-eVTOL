@@ -43,13 +43,13 @@ const SEASON_NAME     = get(ENV, "EVTOL_SEASON", "Sommer")
 #     SMOKE_TEST=1 julia Experiment2_realised.jl
 const SMOKE_TEST = get(ENV, "SMOKE_TEST", "0") == "1"
 
-const RUNS            = SMOKE_TEST ? 2 : 5      # independent first-stage runs
-const REALISED_PER_RUN = SMOKE_TEST ? 2 : 5     # realised days evaluated per run
+const RUNS            = SMOKE_TEST ? 2 : 2      # independent first-stage runs
+const REALISED_PER_RUN = SMOKE_TEST ? 2 : 10    # realised days evaluated per run
 const BASE_FS_SEED    = 12345  # first-stage seed; run r uses BASE_FS_SEED + r
 const BASE_REAL_SEED  = 4242   # realised-draw seed; run r uses BASE_REAL_SEED + r
 
 # Large instance.
-const INSTANCE_FILE = "inputDataGiant.xlsx"
+const INSTANCE_FILE = "LTM_demandFinal.xlsx"
 
 # Two-stage parameters (full quality — this is the headline large-instance run).
 # The smoke test overrides these with tiny budgets just below.
@@ -65,29 +65,25 @@ const MAXTURN            = 100
 const DEMAND_RHO         = 0.5
 const DEMAND_SEED        = 20260101
 
-# Temperature levels / seasonal mix (DMI-DATA.xlsx Sheet2) and wind options
-# (DMI TR12-19). Identical to Realised_scenario.jl.
-const PHI_MAP = [1.00, 1.20, 1.35]
-const TEMP_PROBS = Dict(
-    :Foraar   => (0.831, 0.148, 0.022),  # Marts, April, Maj
-    :Sommer   => (1.000, 0.000, 0.000),  # Juni, Juli, August
-    :Efteraar => (0.934, 0.055, 0.011),  # September, Oktober, November
-    :Vinter   => (0.648, 0.278, 0.074),  # December, Januar, Februar
+# Weather for a realised day is drawn as UNSEEN weather: wind direction and
+# temperature are sampled INDEPENDENTLY, using the SAME probability structure as
+# the planning model (WIND_SHARES and TEMP_PROBS from scenario_generation.jl,
+# which is included below). Combining them freely means a realised day may be a
+# wind×temperature pair that is NOT one of the discrete planning scenarios — a
+# genuine out-of-sample test — while the underlying distribution is identical.
+#
+# The (wx, wy) vector for each wind direction is defined here to match the
+# convention in scenario_generation.jl's SCENARIO_DEFS (N=−y, S=+y, E=−x, W=+x;
+# Mild/Mod/Str magnitudes 9.3 / 27 / 46 km/h).
+const WIND_VECTORS = Dict(
+    "N-Mild" => ( 0.0,  -9.3),  "S-Mild" => ( 0.0,   9.3),
+    "E-Mild" => (-9.3,   0.0),  "W-Mild" => ( 9.3,   0.0),
+    "N-Mod"  => ( 0.0, -27.0),  "S-Mod"  => ( 0.0,  27.0),
+    "E-Mod"  => (-27.0,  0.0),  "W-Mod"  => (27.0,   0.0),
+    "N-Str"  => ( 0.0, -46.0),  "S-Str"  => ( 0.0,  46.0),
+    "E-Str"  => (-46.0,  0.0),  "W-Str"  => (46.0,   0.0),
 )
-const WIND_OPTIONS = [
-    (wx=  0.0, wy=  -9.3, key="N-Mild",   share=0.096),
-    (wx= -9.3, wy=   0.0, key="E-Mild",   share=0.14),
-    (wx=  0.0, wy=   9.3, key="S-Mild",   share=0.181),
-    (wx=  9.3, wy=   0.0, key="W-Mild",   share=0.208),
-    (wx=  0.0, wy= -27.0, key="N-Mod",    share=0.028),
-    (wx=-27.0, wy=   0.0, key="E-Mod",    share=0.076),
-    (wx=  0.0, wy=  27.0, key="S-Mod",    share=0.080),
-    (wx= 27.0, wy=   0.0, key="W-Mod",    share=0.162),
-    (wx=  0.0, wy= -46.0, key="N-Str",    share=0.002),
-    (wx=-46.0, wy=   0.0, key="E-Str",    share=0.004),
-    (wx=  0.0, wy=  46.0, key="S-Str",    share=0.004),
-    (wx= 46.0, wy=   0.0, key="W-Str",    share=0.019),
-]
+const PHI_LEVELS = [1.00, 1.20, 1.35]   # AboveZero / Cold / VeryCold
 
 quiet(f) = redirect_stdout(f, devnull)
 
@@ -116,14 +112,23 @@ function sample_index(weights::Vector{Float64}, u::Float64)
 end
 
 function draw_weather(season::Symbol, rng)
-    tp    = collect(TEMP_PROBS[season])
-    t_lvl = sample_index(tp ./ sum(tp), rand(rng))
-    phi   = PHI_MAP[t_lvl]
-    t_lab = ["AboveZero","Cold","VeryCold"][t_lvl]
-    wsh   = [w.share for w in WIND_OPTIONS]
-    w_idx = sample_index(wsh ./ sum(wsh), rand(rng))
-    w     = WIND_OPTIONS[w_idx]
-    return (wx=w.wx, wy=w.wy, phi=phi, label="$(w.key) / $(t_lab)")
+    # Sample wind direction and temperature INDEPENDENTLY from the same
+    # distributions the planning model uses (WIND_SHARES and TEMP_PROBS, both
+    # from scenario_generation.jl). Combining them freely yields unseen weather:
+    # a wind×temperature pair that need not be one of the discrete planning
+    # scenarios, while the underlying probabilities are identical.
+    wind_keys = collect(keys(WIND_SHARES))
+    wind_w    = [WIND_SHARES[k] for k in wind_keys]
+    w_idx     = sample_index(wind_w ./ sum(wind_w), rand(rng))
+    wkey      = wind_keys[w_idx]
+    wx, wy    = WIND_VECTORS[wkey]
+
+    tp        = collect(TEMP_PROBS[season])
+    t_lvl     = sample_index(tp ./ sum(tp), rand(rng))
+    phi       = PHI_LEVELS[t_lvl]
+    t_lab     = ("AboveZero", "Cold", "VeryCold")[t_lvl]
+
+    return (wx = wx, wy = wy, phi = phi, label = "$(wkey) / $(t_lab)")
 end
 
 function draw_demand(data, rng; rho = 0.5)
@@ -198,7 +203,7 @@ println("="^72)
 
 excel_file     = joinpath(@__DIR__, "..", "inputData", INSTANCE_FILE)
 parameter_file = joinpath(@__DIR__, "..", "inputData", "Parameters.xlsx")
-data        = load_data(excel_file, parameter_file)
+data        = load_data(excel_file, parameter_file, excel_file)
 time_per_km = derive_time_per_km(data)
 
 rt_s, e_s, S, pi_s = generate_scenarios(data.V, data.lat, data.lon,
@@ -278,7 +283,12 @@ for run in 1:RUNS
                 opcost += sc_data.c[(Int(plane.route[kk]), Int(plane.route[kk+1]))]
             end
         end
-        realised_actual = rev - opcost - result.first_stage_cost
+        # Clean economic profit for this realised day: revenue (true fares × q)
+        # minus operating cost of the legs actually flown. This deliberately
+        # EXCLUDES both the fleet opening cost and the first-stage rejection
+        # penalty — it is a pure operational measure of what the flying earned
+        # versus what it cost to fly, independent of first-stage accounting.
+        realised_actual = rev - opcost
 
         row = (
             season             = SEASON_NAME,
