@@ -345,7 +345,13 @@ function ConstructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj:
     best_obj = init_obj
     best_sol = deepcopy(planes)
 
+    # Optional active-fleet restriction (second stage): only committed eVTOLs may
+    # receive routes. Absent field → full fleet (deterministic model unaffected).
+    active_set = hasproperty(data, :active) ? data.active : nothing
+    is_usable  = n -> active_set === nothing || (n in active_set)
+
     for n in N
+        is_usable(n) || continue   # never build a route on a non-active eVTOL
         m = Int(planes.planes[n].flightLegs)
 
         if m == 0

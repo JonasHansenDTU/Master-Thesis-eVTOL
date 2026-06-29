@@ -1,0 +1,2 @@
+season,scenario_id,n_VP,n_eVTOL,n_passengers,rep,H_obj_RP,actual_profit_RP,H_time_sec,n_committed_poolA,n_active_evtols,first_stage_cost,committed_misses,mean_poolA_served,mean_poolB_served,aircraft_utilization,deadhead_time,passenger_demand_served,average_passenger_waiting_time
+Vinter,1,2,1,2,1,-1000.0,-1000.0,2526.413731098175,0,1,1000.0,0,0.0,0.0,0.0,0.0,0.0,0.0

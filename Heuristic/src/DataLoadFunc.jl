@@ -76,15 +76,15 @@ Expected sheets:
     - PassengerGroups 
     - PlaneData
 """
-function load_data(excel_file::String, parameter_file::String)
+function load_data(infra_file::String, parameter_file::String, excel_file::String)
 
     ###########################################################################
     # Read sheets
     ###########################################################################
-    infra = read_sheet(excel_file, "Infrastructure")
+    infra = read_sheet(infra_file, "Infrastructure")
     pax = DataFrame(
         XLSX.readtable(
-            joinpath("inputData", "inputDataGiant.xlsx"),
+            excel_file,
             # joinpath("inputData", "LTM_demand5min.xlsx"),
             "PassengerGroups"
             # "Sheet1"
@@ -96,7 +96,7 @@ function load_data(excel_file::String, parameter_file::String)
     paxB = try
         DataFrame(
             XLSX.readtable(
-                joinpath("inputData", "inputDataGiant.xlsx"),
+                excel_file,
                 "PassengerGroupsB"
             )
         )
