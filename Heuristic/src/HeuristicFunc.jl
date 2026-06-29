@@ -569,9 +569,9 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
         T = 1000
         Best_sols = generate_best_initial_solutions(data, rt, candiateroutes; n_runs = 10, top_k = nr, top_c, maxLegs=6, maxTurnaround)
 
-        # for (i, best_sol_candidate) in enumerate(Best_sols)
-        #     check_route_endpoints(best_sol_candidate.evtols, data, "Initial solution $(i)")
-        # end
+        for (i, best_sol_candidate) in enumerate(Best_sols)
+            check_route_endpoints(best_sol_candidate.evtols, data, "Initial solution $(i)")
+        end
 
         temp_obj = Best_sols[idx].fitness
         temp_sol = deepcopy(Best_sols[idx].evtols)
@@ -607,7 +607,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
                     temp_sol = pool_sol
                     temp_obj = pool_obj
                     # single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max_size)
-                    # check_route_endpoints(temp_sol, data, "Accepted pool candidate")
+                    check_route_endpoints(temp_sol, data, "Accepted pool candidate")
                 end
             end
         end
@@ -634,7 +634,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
                     next_method = 2
                 end
                 method_used = next_method
-                # check_route_endpoints(cand_sol, data, "Candidate after $(("DestructSA", "ConstructSA", "SegmentExchange")[next_method + 1])")
+                check_route_endpoints(cand_sol, data, "Candidate after $(("DestructSA", "ConstructSA", "SegmentExchange")[next_method + 1])")
             end
 
             # out = 0
@@ -654,7 +654,7 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
             if cand_obj > temp_obj || (rand() < exp(max(min(delta/T, 700.0), -700.0)))
                 temp_obj = cand_obj
                 temp_sol = deepcopy(cand_sol)
-                # check_route_endpoints(temp_sol, data, "Accepted candidate")
+                check_route_endpoints(temp_sol, data, "Accepted candidate")
                 improvement = true
                 single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max_size)
 

@@ -116,7 +116,7 @@ end
 function return_posssible(current_time, current_VP, next_VP, end_VP_choices::Vector{Int}, rt, ET, te)
 
     if next_VP in end_VP_choices
-        return (true, ET - current_time - rt[(current_VP, next_VP)])
+        return (true, maximum([ET - current_time - rt[(current_VP, next_VP)], te]))
     end
 
     maxTT = maximum([
@@ -124,7 +124,7 @@ function return_posssible(current_time, current_VP, next_VP, end_VP_choices::Vec
         for end_VP in end_VP_choices
     ])
 
-    return (maxTT >= 0, maxTT)
+    return (maxTT > te, maxTT)
 
 end
 
@@ -331,32 +331,42 @@ function Construction_Heuristic2(data, Candidate_Routes, maxTurnaround; maxLegs:
 
             best_routes = k_BestRoutes(poten_pass, k, current_time, Candidate_Routes, data, current_VP, end_VP_choices, first_trip)
 
-            if isnothing(best_routes)
-                returned = true
-                break
-            end
-
-            # remove entries where passengers are already served
-            best_routes = [r for r in best_routes if !any(p in passengers_served for p in r[3])]
-
-            if isempty(best_routes)
-                returned = true
-                break
-            end
-
-            # shuffle candidate routes and keep one full route tuple per next vertiport
-            best_routes = shuffle!(best_routes)
-            unique_routes = best_routes[1:0]
+            # --- FIXED ROUTING BLOCK ---
+            unique_routes = []
             seen_next_VPs = Set{Int}()
 
-            for r in best_routes
-                next_vp = r[1][2]
-                if next_vp in seen_next_VPs
-                    continue
+            if isnothing(best_routes) || isempty(best_routes)
+                if current_VP in end_VP_choices
+                    returned = true
+                    break
+                else
+                    best_routes = []
                 end
-                push!(seen_next_VPs, next_vp)
-                push!(unique_routes, r)
+            else
+                # remove entries where passengers are already served
+                best_routes = [r for r in best_routes if !any(p in passengers_served for p in r[3])]
+
+                if isempty(best_routes)
+                    if current_VP in end_VP_choices
+                        returned = true
+                        break
+                    end
+                else
+                    # shuffle candidate routes and keep one full route tuple per next vertiport
+                    best_routes = shuffle!(best_routes)
+                    unique_routes = best_routes[1:0]
+
+                    for r in best_routes
+                        next_vp = r[1][2]
+                        if next_vp in seen_next_VPs
+                            continue
+                        end
+                        push!(seen_next_VPs, next_vp)
+                        push!(unique_routes, r)
+                    end
+                end
             end
+            # --- END OF FIXED BLOCK ---
 
             selected_route = nothing
             base_only_option = false
@@ -397,6 +407,7 @@ function Construction_Heuristic2(data, Candidate_Routes, maxTurnaround; maxLegs:
                     push!(turnaroundTime, rand(Int(ceil(te)):Int(floor(maxTT))))
                     flightLegs += 1
                     current_time = current_time + turnaroundTime[end] + rt[(current_VP, next_VP)]
+                    current_VP = next_VP
                 end
             end
 

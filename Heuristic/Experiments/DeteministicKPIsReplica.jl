@@ -53,7 +53,7 @@ function load_turnaround_period()
             key = row[1]
             val = row[2]
             if key !== missing && val !== missing && String(key) == "ET"
-                et = Int64(round(parse(Float64, replace(string(val), "," => "."))))
+                et = Int64(round(parse(Float64, replace(string(val), "," => ".")))) 
                 break
             end
         end
