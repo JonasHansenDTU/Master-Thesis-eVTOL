@@ -125,9 +125,9 @@ end
 # 
 function main()
     max_turnaround = load_turnaround_period()
-    maxtime = Int32(400)
+    maxtime = Int32(100)
     top_c = 4
-    n_runs = 20
+    n_runs = 1
 
     out_dir = joinpath(@__DIR__, "Results")
     mkpath(out_dir)

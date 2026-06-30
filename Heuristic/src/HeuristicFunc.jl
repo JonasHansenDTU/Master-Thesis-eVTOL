@@ -132,6 +132,167 @@ function check_route_endpoints(sol::allPlaneSolution, data, sol_name::String="")
     return issues
 end
 
+function scrub_solution!(sol::allPlaneSolution, assignments, data)
+    # Build a map: plane index -> set of leg indices that carry passengers
+    legs_per_plane = Dict{Int, Set{Int}}()
+    for ass in assignments
+        n = ass.plane
+        if !haskey(legs_per_plane, n)
+            legs_per_plane[n] = Set{Int}()
+        end
+        union!(legs_per_plane[n], ass.legs)
+    end
+
+    changed = false
+
+    for (pidx, plane) in enumerate(sol.planes)
+        if plane.flightLegs <= 0
+            continue
+        end
+
+        base = Int(plane.route[1])
+        end_VP_choices = get(data.end_vp, base, Int[])
+        passenger_legs = get(legs_per_plane, pidx, Set{Int}())
+
+        if isempty(passenger_legs)
+            # Plane is active but carries no one: deactivate it entirely
+            plane.flightLegs = Int32(0)
+            resize!(plane.route, 1)
+            empty!(plane.turnaroundTime)
+            changed = true
+            continue
+        end
+
+        # Remove empty loops: scan each contiguous run of empty legs for any vertiport
+        # that appears more than once within the run. The first repeated vertiport marks
+        # an inner loop that can be deleted. Repeat until no loops remain.
+        loop_found = true
+        while loop_found
+            loop_found = false
+            n_legs = Int(plane.flightLegs)
+            i = 1
+            while i <= n_legs
+                if i in passenger_legs
+                    i += 1
+                    continue
+                end
+                # Find the extent of this contiguous empty segment (legs i..j)
+                j = i
+                while j < n_legs && !(j + 1 in passenger_legs)
+                    j += 1
+                end
+                # Scan route nodes i..j+1 for the first repeated vertiport
+                seen_at = Dict{Int, Int}()  # vertiport -> first route-node index
+                for node_idx in i:(j + 1)
+                    vp = Int(plane.route[node_idx])
+                    if haskey(seen_at, vp)
+                        k1 = seen_at[vp]   # first occurrence (route node index)
+                        k2 = node_idx       # repeated occurrence
+                        n_removed = k2 - k1
+                        # Remove inner loop: route nodes k1+1..k2, turnarounds k1..k2-1
+                        deleteat!(plane.route, (k1 + 1):k2)
+                        deleteat!(plane.turnaroundTime, k1:(k2 - 1))
+                        plane.flightLegs -= Int32(n_removed)
+                        # Shift down passenger leg indices that moved past the deletion
+                        passenger_legs = Set(leg >= k2 ? leg - n_removed : leg for leg in passenger_legs)
+                        legs_per_plane[pidx] = passenger_legs
+                        loop_found = true
+                        changed = true
+                        break
+                    end
+                    seen_at[vp] = node_idx
+                end
+                if loop_found
+                    break  # restart outer while to rescan from the beginning
+                end
+                i = j + 1  # advance past this empty segment
+            end
+        end
+
+        # Shorten non-loop empty segments to a single direct repositioning leg.
+        # After loop removal every empty segment has distinct internal vertiports.
+        # For a multi-leg empty run A → ... → B, we replace it with a direct A→B
+        # leg when two conditions hold:
+        #   (1) Timing: total time of the original run minus the direct flight time
+        #               leaves at least data.te as a dwell time at A.
+        #   (2) Battery: the direct A→B leg fits within the applicable battery window.
+        n_legs_s = Int(plane.flightLegs)
+        seg_i = 1
+        while seg_i <= n_legs_s
+            if seg_i in passenger_legs
+                seg_i += 1
+                continue
+            end
+            # Extend to the full contiguous empty segment
+            seg_j = seg_i
+            while seg_j < n_legs_s && !(seg_j + 1 in passenger_legs)
+                seg_j += 1
+            end
+
+            simplified = false
+            if seg_j > seg_i   # more than one empty leg — worth trying to shorten
+                A = Int(plane.route[seg_i])
+                B = Int(plane.route[seg_j + 1])
+                rt_AB   = get(data.rt,   (A, B), nothing)
+                dist_AB = get(data.dist, (A, B), nothing)
+
+                if rt_AB !== nothing && dist_AB !== nothing
+                    # Accumulate time consumed by the original segment
+                    t_seg = 0
+                    valid = true
+                    for k in seg_i:seg_j
+                        seg_rt_k = get(data.rt, (Int(plane.route[k]), Int(plane.route[k + 1])), nothing)
+                        if seg_rt_k === nothing; valid = false; break; end
+                        t_seg += Int(plane.turnaroundTime[k]) + Int(seg_rt_k)
+                    end
+
+                    if valid
+                        new_tt = t_seg - Int(round(rt_AB))
+                        needed = Float32(dist_AB) * Float32(data.battery_per_km)
+                        if seg_i == 1
+                            # Plane starts at bmid and charges for new_tt minutes before departing.
+                            chargeable    = Float32(new_tt) * Float32(data.ec)
+                            bat_preflight = min(Float32(data.bmid) + chargeable, Float32(data.bmax))
+                            battery_ok    = bat_preflight - needed >= Float32(data.bmin)
+                        else
+                            battery_ok = needed <= Float32(data.bmax) - Float32(data.bmin)
+                        end
+
+                        if new_tt >= Int(round(data.te)) && battery_ok
+                            n_rem = seg_j - seg_i   # net legs removed (j-i+1 → 1)
+                            deleteat!(plane.route, (seg_i + 1):seg_j)
+                            splice!(plane.turnaroundTime, seg_i:seg_j, Int32[Int32(new_tt)])
+                            plane.flightLegs -= Int32(n_rem)
+                            passenger_legs = Set(leg > seg_j ? leg - n_rem : leg for leg in passenger_legs)
+                            legs_per_plane[pidx] = passenger_legs
+                            n_legs_s -= n_rem
+                            changed = true
+                            simplified = true
+                        end
+                    end
+                end
+            end
+
+            seg_i = simplified ? seg_i + 1 : seg_j + 1
+        end
+
+        # Trim trailing legs that follow the last passenger leg when the
+        # plane is already at a valid endpoint after that leg.
+        last_leg = maximum(passenger_legs)
+        if last_leg < Int(plane.flightLegs)
+            last_vp = Int(plane.route[last_leg + 1])
+            if last_vp in end_VP_choices
+                plane.flightLegs = Int32(last_leg)
+                resize!(plane.route, last_leg + 1)
+                resize!(plane.turnaroundTime, last_leg)
+                changed = true
+            end
+        end
+    end
+
+    return changed
+end
+
 function get_passenger_set(assignments::Vector{Any})
     """Extract set of passenger group IDs from assignments."""
     passenger_groups = Set{Int}()
@@ -252,40 +413,59 @@ function collect_feasible_single_plane_routes(sol::allPlaneSolution, data, rt; p
 
         best_obj = fitness
         best_sol = deepcopy(plane_sol)
+        current_assignments = deepcopy(assignments)
 
-
-        
+        # We keep track of the active base solution to iterate upon
+        current_base_sol = deepcopy(plane_sol)
 
         improved = true
         while improved
             improved = false
-            cand_obj, cand_sol  = DestructLoop(plane_sol, maxTurnaround, fitness, data, rt)
-            con_obj, con_sol  = ConstructLoop(plane_sol, maxTurnaround, fitness, data, rt)
+            
+            # 1. Ruin: Pass the current baseline solution and its current objective score
+            cand_obj, cand_sol = DestructLoop(current_base_sol, maxTurnaround, best_obj, data, rt; include_unserved_penalty=false)
 
-            if con_obj > cand_obj
-                cand_obj = con_obj
-                cand_sol = con_sol
-            end
+            # 2. Recreate: Pass the RUINED solution (cand_sol) so it can build upon it
+            con_obj, con_sol = ConstructLoop(cand_sol, maxTurnaround, best_obj, data, rt; include_unserved_penalty=false)
 
-            if cand_obj > best_obj
-                best_obj = cand_obj
-                best_sol = deepcopy(cand_sol)
+            # Check if the fully reconstructed solution beats our previous milestone
+            if con_obj > best_obj
+                best_obj = con_obj
+                best_sol = deepcopy(con_sol)
+                current_base_sol = deepcopy(con_sol) # Update baseline for the next step
                 improved = true
             end
-
         end
 
+        # If we successfully found a better route, pull out its specific plane
         if best_obj > fitness
-            plane = deepcopy(best_sol.planes[1])
+            improved_plane = deepcopy(best_sol.planes[1])
+            _, improved_assignments = score_single_plane_solution(improved_plane, data, rt)
+            if !isempty(improved_assignments)
+                # Improvement is valid: accept it
+                plane = improved_plane
+                current_assignments = improved_assignments
+            else
+                # Improved route lost all passengers; revert so pool score stays consistent
+                best_obj = fitness
+            end
+            # plane and current_assignments already hold the original values when reverting
         end
 
-        diversity = compute_diversity_metrics(SingleRoutePoolEntry(deepcopy(plane), fitness, Int64(idx), deepcopy(assignments), 0.0), pool, data)
-        new_entry = SingleRoutePoolEntry(deepcopy(plane), fitness, Int64(idx), deepcopy(assignments), diversity)
-        
+        # Final guard: should not be reachable, but ensures no no-passenger route enters the pool
+        if isempty(current_assignments)
+            continue
+        end
+
+        # Now diversity and new_entry pull the perfectly matched plane & assignments
+        diversity = compute_diversity_metrics(SingleRoutePoolEntry(deepcopy(plane), best_obj, Int64(idx), deepcopy(current_assignments), 0.0), pool, data)
+        new_entry = SingleRoutePoolEntry(deepcopy(plane), best_obj, Int64(idx), deepcopy(current_assignments), diversity)
+
+
         # Debug output: show what routes are being added to the pool
         if debug && Int(plane.flightLegs) > 0
             base_port = Int(plane.route[1])
-            passenger_groups = [ass.group for ass in assignments]
+            passenger_groups = [ass.group for ass in current_assignments]
             groups_str = isempty(passenger_groups) ? "none" : join(passenger_groups, ",")
             # println("  [ADD] Plane $idx (base $base_port): legs=$(Int(plane.flightLegs)), route=$(Int.(plane.route)), diversity=$(round(diversity*100; digits=1))%, passengers=[$groups_str]")
         end
@@ -576,6 +756,11 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
         temp_obj = Best_sols[idx].fitness
         temp_sol = deepcopy(Best_sols[idx].evtols)
 
+        scrub_asgn = Best_sols[idx].assignments
+        if scrub_solution!(temp_sol, scrub_asgn, data)
+            temp_obj = obj(temp_sol, data, rt)
+        end
+
         for best_sol_candidate in Best_sols
             single_route_pool = collect_feasible_single_plane_routes(best_sol_candidate.evtols, data, rt; pool=single_route_pool, max_size=max_size, debug=true)
         end
@@ -608,6 +793,10 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
                     temp_obj = pool_obj
                     # single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max_size)
                     check_route_endpoints(temp_sol, data, "Accepted pool candidate")
+                    scrub_asgn, _ = assign_passengersV2(temp_sol, data, Int.(rt))
+                    if scrub_solution!(temp_sol, scrub_asgn, data)
+                        temp_obj = obj(temp_sol, data, rt)
+                    end
                 end
             end
         end
@@ -656,6 +845,10 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
                 temp_sol = deepcopy(cand_sol)
                 check_route_endpoints(temp_sol, data, "Accepted candidate")
                 improvement = true
+                scrub_asgn, _ = assign_passengersV2(temp_sol, data, Int.(rt))
+                if scrub_solution!(temp_sol, scrub_asgn, data)
+                    temp_obj = obj(temp_sol, data, rt)
+                end
                 single_route_pool = collect_feasible_single_plane_routes(temp_sol, data, rt; pool=single_route_pool, max_size=max_size)
 
                 if temp_obj > best_obj
@@ -734,6 +927,13 @@ function HeuristicSA(maxTurnaround::Int64, MaxTime::Int32, data, rt, top_c; opti
     end
     
     println("=========================================\n")
+
+    # Final scrub: remove any remaining empty planes and trailing dead legs
+    scrub_asgn, _ = assign_passengersV2(best_sol, data, Int.(rt))
+    if scrub_solution!(best_sol, scrub_asgn, data)
+        best_obj = obj(best_sol, data, rt)
+        println("Final scrub improved best_obj to $(best_obj)")
+    end
 
     assignments, scheduled = assign_passengersV2(best_sol, data, Int.(rt))
 

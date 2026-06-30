@@ -182,7 +182,7 @@ function UpdateTurnAroundTimes(planes::allPlaneSolution, from::Int64, maxTurnaro
     end
 end
 
-function obj(planes::allPlaneSolution, data, rt)
+function obj(planes::allPlaneSolution, data, rt; include_unserved_penalty::Bool=true)
     assignments, scheduled = assign_passengersV2(planes, data, Int.(rt))
 
     fitness = fitnessFunction(
@@ -199,7 +199,8 @@ function obj(planes::allPlaneSolution, data, rt)
             maximum(Int.(data.T)),
             maximum(data.V),
             data.cap_v,
-            data
+            data;
+            include_unserved_penalty=include_unserved_penalty
         )
 
     return fitness
@@ -291,7 +292,7 @@ function assign_Turnaround(Planes::allPlaneSolution, data)
     
 end
 
-function DestructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64, data, rt)
+function DestructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64, data, rt; include_unserved_penalty::Bool=true)
 
     N = range(1, length=length(planes.planes))
     best_obj = init_obj
@@ -310,12 +311,12 @@ function DestructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::
                 Destructor(temp_sol.planes[n], [idx], data)
             end
 
-            new_obj = obj(temp_sol, data, rt)
+            new_obj = obj(temp_sol, data, rt; include_unserved_penalty=include_unserved_penalty)
 
             temp_sol2 = deepcopy(temp_sol)
             from_idx = Int64(idx - 1)
             UpdateTurnAroundTimes(temp_sol2, from_idx, maxTurnaround, data)
-            new_obj2 = obj(temp_sol2, data, rt)
+            new_obj2 = obj(temp_sol2, data, rt; include_unserved_penalty=include_unserved_penalty)
 
             if new_obj2 > new_obj
                 temp_sol = temp_sol2
@@ -338,7 +339,7 @@ function DestructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::
     return best_obj, best_sol
 end
 
-function ConstructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64, data, rt)
+function ConstructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj::Float64, data, rt; include_unserved_penalty::Bool=true)
 
     N = range(1, length=length(planes.planes))
     V = data.V
@@ -359,11 +360,11 @@ function ConstructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj:
                 temp_sol = deepcopy(planes)
                 Constructor(temp_sol.planes[n], v, 2, data)
 
-                new_obj = obj(temp_sol, data, rt)
+                new_obj = obj(temp_sol, data, rt; include_unserved_penalty=include_unserved_penalty)
 
                 temp_sol2 = deepcopy(temp_sol)
                 UpdateTurnAroundTimes(temp_sol2, 1, maxTurnaround, data)
-                new_obj2 = obj(temp_sol2, data, rt)
+                new_obj2 = obj(temp_sol2, data, rt; include_unserved_penalty=include_unserved_penalty)
 
                 if new_obj2 > new_obj
                     temp_sol = temp_sol2
@@ -385,11 +386,11 @@ function ConstructLoop(planes::allPlaneSolution, maxTurnaround::Int64, init_obj:
 
                 if temp_sol.planes[n].route[idx] != v && temp_sol.planes[n].route[idx - 1] != v
                     Constructor(temp_sol.planes[n], v, idx, data)
-                    new_obj = obj(temp_sol, data, rt)
+                    new_obj = obj(temp_sol, data, rt; include_unserved_penalty=include_unserved_penalty)
 
                     temp_sol2 = deepcopy(temp_sol)
                     UpdateTurnAroundTimes(temp_sol2, idx, maxTurnaround, data)
-                    new_obj2 = obj(temp_sol2, data, rt)
+                    new_obj2 = obj(temp_sol2, data, rt; include_unserved_penalty=include_unserved_penalty)
 
                     if new_obj < new_obj2
                         temp_sol = temp_sol2

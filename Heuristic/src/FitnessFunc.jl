@@ -59,9 +59,11 @@ function fitnessFunction(evtols::allPlaneSolution, assignments::Vector{Passenger
     end
 
     # 4. Fixed cost for each used eVTOL
-    for plane in evtols.planes
-        if plane.flightLegs > 0
-            fitnessvalue -= opening_cost
+    if !profit
+        for plane in evtols.planes
+            if plane.flightLegs > 0
+                fitnessvalue -= opening_cost
+            end
         end
     end
 
