@@ -33,7 +33,8 @@ function load_heuristic_data()
     infra_file = joinpath(@__DIR__, "..", "..", "inputData", "inputDataHumongous.xlsx")
     excel_file = joinpath(@__DIR__, "..", "..", "inputData", "LTM_demand.xlsx")
     parameter_file = joinpath(@__DIR__, "..", "..",  "inputData", "Parameters.xlsx")
-    data = load_data(infra_file, parameter_file, excel_file)
+    Drive_radius = 60
+    data = load_data(infra_file, parameter_file, excel_file, Drive_radius)
 
     vmax = maximum(data.V)
     rt = zeros(vmax, vmax)
@@ -126,9 +127,9 @@ end
 # 
 function main()
     max_turnaround = load_turnaround_period()
-    maxtime = Int32(100)
+    maxtime = Int32(200)
     top_c = 4
-    n_runs = 1
+    n_runs = 20
 
     out_dir = joinpath(@__DIR__, "Results")
     mkpath(out_dir)
