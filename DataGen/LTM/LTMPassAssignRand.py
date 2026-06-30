@@ -36,7 +36,7 @@ df = pd.read_excel(
 # Load vertiport mapping sheet
 vertiports = pd.read_excel(
     BASE_PATH + "AntalErhvervstureMellemKommuner_GMM_Basis2025.xlsx",
-    sheet_name="VertiportIDGiant"
+    sheet_name="VertiportID"
 )
 
 # =====================================================
@@ -267,7 +267,8 @@ df_out["group"] = range(
 # SAVE OUTPUT
 # =====================================================
 
-output_path = "inputData/LTM_demandBFinal.xlsx"
+output_path = "inputData/LTM_demand.xlsx"
+# output_path = "inputData/LTM_demandBFinal.xlsx"
 
 df_out.to_excel(
     output_path,
