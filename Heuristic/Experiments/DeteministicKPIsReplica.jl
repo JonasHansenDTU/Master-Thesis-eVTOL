@@ -30,9 +30,10 @@ end
 
 function load_heuristic_data()
     run(`python c:/Users/Kapta/Documents/DTU/Speciale/GitHubFiles/DataGen/LTM/LTMPassAssignRand.py`)
-    excel_file = joinpath(@__DIR__, "..", "..", "inputData", "inputDataHumongous.xlsx")
+    infra_file = joinpath(@__DIR__, "..", "..", "inputData", "inputDataHumongous.xlsx")
+    excel_file = joinpath(@__DIR__, "..", "..", "inputData", "LTM_demand.xlsx")
     parameter_file = joinpath(@__DIR__, "..", "..",  "inputData", "Parameters.xlsx")
-    data = load_data(excel_file, parameter_file)
+    data = load_data(infra_file, parameter_file, excel_file)
 
     vmax = maximum(data.V)
     rt = zeros(vmax, vmax)

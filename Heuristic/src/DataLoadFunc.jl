@@ -86,8 +86,8 @@ function load_data(infra_file::String, parameter_file::String, excel_file::Strin
         XLSX.readtable(
             excel_file,
             # joinpath("inputData", "LTM_demand5min.xlsx"),
-            "PassengerGroups"
-            # "Sheet1"
+            # "PassengerGroups"
+            "Sheet1"
         )
     )
     # Pool B: on-demand passenger groups, served only in the second stage.
@@ -104,7 +104,7 @@ function load_data(infra_file::String, parameter_file::String, excel_file::Strin
         @warn "Sheet 'PassengerGroupsB' not found — on-demand pool B is empty."
         DataFrame()
     end
-    plane = read_sheet_any(excel_file, ["PlaneData"])
+    plane = read_sheet_any(infra_file, ["PlaneData"])
 
     ###########################################################################
     # Infrastructure columns
