@@ -45,8 +45,8 @@ const SMOKE_TEST = get(ENV, "SMOKE_TEST", "0") == "1"
 
 const RUNS            = SMOKE_TEST ? 2 : 2      # independent first-stage runs
 const REALISED_PER_RUN = SMOKE_TEST ? 2 : 10    # realised days evaluated per run
-const BASE_FS_SEED    = 12345  # first-stage seed; run r uses BASE_FS_SEED + r
-const BASE_REAL_SEED  = 4242   # realised-draw seed; run r uses BASE_REAL_SEED + r
+const BASE_FS_SEED    = 12347  # first-stage seed; run r uses BASE_FS_SEED + r
+const BASE_REAL_SEED  = 4244  # realised-draw seed; run r uses BASE_REAL_SEED + r
 
 # Large instance.
 const INSTANCE_FILE = "LTM_demandFinal.xlsx"
@@ -214,7 +214,7 @@ S        = S_active
 
 out_path = joinpath(@__DIR__,
     SMOKE_TEST ? "experiment2_realised_$(lowercase(SEASON_NAME))_SMOKE.csv"
-               : "experiment2_realised_$(lowercase(SEASON_NAME)).csv")
+               : "experiment2_realised_$(lowercase(SEASON_NAME))_extra.csv")
 rows = NamedTuple[]
 poolB = Set(data.B)
 

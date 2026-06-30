@@ -181,18 +181,26 @@ for inst in INSTANCES
 
     p = params_for(inst.id)
     # Single-scenario budget for the WS and EV solves (each is an easy one-
-    # scenario problem).
+    # scenario problem). A modest bump to the final second-stage budget makes
+    # these single-scenario solves reach near-optimal quality reliably, which is
+    # necessary for the WS >= RP >= EEV ordering to emerge.
     common = (maxTurnaround=MAXTURN, MaxTime_1st=p.MaxTime_1st,
               MaxTime_2nd_search=p.MaxTime_2nd_search,
               MaxTime_2nd_final=p.MaxTime_2nd_final, top_c=TOP_C,
               price_boost=PRICE_BOOST, hard_penalty=HARD_PENALTY,
               n_restarts=p.n_restarts, n_outer_iters=p.n_outer_iters,
               demand_rho=DEMAND_RHO, demand_seed=DEMAND_SEED)
-    # The RP problem spans all scenarios and is much harder; give it extra outer
-    # iterations so it is solved to a quality comparable to the easy WS/EV solves.
-    # Without this, RP is systematically under-solved and the required ordering
-    # WS >= RP >= EEV (for maximisation) can be violated by heuristic noise.
-    rp_common = merge(common, (n_outer_iters = p.n_outer_iters + 4,))
+    # The RP problem spans all scenarios and is much harder; it must be solved to
+    # a quality comparable to the easy single-scenario WS/EV solves, or the
+    # ordering WS >= RP >= EEV (maximisation) is violated by heuristic noise.
+    # The earlier "+4 iterations" was insufficient, so RP is given a multiplied
+    # outer-iteration budget plus a longer per-scenario final budget. RP_BUDGET_MULT
+    # can be tuned (env var) to trade solve quality against run time.
+    rp_mult   = parse(Float64, get(ENV, "RP_BUDGET_MULT", "2.0"))
+    rp_iters  = max(p.n_outer_iters + 4, round(Int, p.n_outer_iters * rp_mult))
+    rp_common = merge(common, (n_outer_iters = rp_iters,
+                               MaxTime_2nd_final = Int32(round(Int,
+                                   Float64(p.MaxTime_2nd_final) * 1.5)),))
 
     # ----- RP : the stochastic (here-and-now) solution -----------------------
     Random.seed!(BASE_SEED)
