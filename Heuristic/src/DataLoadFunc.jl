@@ -291,7 +291,7 @@ function load_data(infra_file::String, parameter_file::String, excel_file::Strin
         for j in V
             if j == i
                 push!(end_vp[i], j)
-            elseif haskey(drive_time_lookup, (i,j)) && drive_time_lookup[(i,j)] <= 60.0
+            elseif haskey(drive_time_lookup, (i,j)) && drive_time_lookup[(i,j)] <= 120.0
                 push!(end_vp[i], j)
             end
         end

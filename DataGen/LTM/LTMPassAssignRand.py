@@ -36,7 +36,7 @@ df = pd.read_excel(
 # Load vertiport mapping sheet
 vertiports = pd.read_excel(
     BASE_PATH + "AntalErhvervstureMellemKommuner_GMM_Basis2025.xlsx",
-    sheet_name="VertiportIDGiant"
+    sheet_name="VertiportID"
 )
 
 # =====================================================
