@@ -54,7 +54,14 @@ const ALL_INSTANCES = [
 # here because the wait-and-see step solves one heuristic run per scenario, which
 # is prohibitively expensive on the large instances; 1–4 give a complete and
 # standard VSS/EVPI result. (Run 5–6 separately later if time allows.)
-const INSTANCES = SMOKE_TEST ? ALL_INSTANCES[1:2] : ALL_INSTANCES[1:4]
+#
+# START_FROM lets you resume after a crash: START_FROM=2 skips instances with
+# id < 2 (already computed and saved) and begins at instance 2. New rows are
+# APPENDED to the existing CSV so earlier instances' results are preserved.
+#     START_FROM=2 EVTOL_SEASON=Sommer julia Experiment3_vss_evpi.jl
+const START_FROM = parse(Int, get(ENV, "START_FROM", "1"))
+const INSTANCES = filter(x -> x.id >= START_FROM,
+                         SMOKE_TEST ? ALL_INSTANCES[1:2] : ALL_INSTANCES[1:4])
 
 # Tiered budgets, matching Experiment 1 so the estimates are comparable.
 function params_for(id::Int)
@@ -269,7 +276,16 @@ for inst in INSTANCES
     @printf("  WS=%+.2f  RP=%+.2f  EEV=%+.2f  |  EVPI=%.2f  VSS=%.2f  %s\n",
             WS, RP, EEV, EVPI, VSS,
             row.ordering_ok ? "" : "  <-- ordering violated, check!")
-    CSV.write(out_path, DataFrame(rows))
+    # When resuming (START_FROM > 1) append to the existing CSV so the already-
+    # computed earlier instances are preserved; the header is written only if the
+    # file does not yet exist. On a fresh run (START_FROM == 1) overwrite as usual.
+    if START_FROM > 1 && isfile(out_path)
+        CSV.write(out_path, DataFrame([row]); append = true)
+    elseif START_FROM > 1
+        CSV.write(out_path, DataFrame([row]))   # file gone — start it with header
+    else
+        CSV.write(out_path, DataFrame(rows))    # fresh run: overwrite
+    end
 end
 
 println("\n" * "="^72)

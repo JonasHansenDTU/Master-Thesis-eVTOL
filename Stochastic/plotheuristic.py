@@ -3,9 +3,9 @@ import matplotlib.patches as mpatches
 
 plt.rcParams.update({
     "font.family": "serif",
-    "font.size": 13,
-    "axes.titlesize": 14,
-    "axes.labelsize": 13,
+    "font.size": 11,
+    "axes.titlesize": 11,
+    "axes.labelsize": 11,
 })
 
 LIGHT_RED = '#F9EAEA'
@@ -16,10 +16,9 @@ LGRAY     = '#cccccc'
 BG        = 'white'
 
 verts = {
-    1: (0.15, 0.50),
+    1: (0.20, 0.35),
     2: (0.50, 0.80),
-    3: (0.85, 0.50),
-    4: (0.50, 0.20),
+    3: (0.80, 0.35),
 }
 
 def draw_vertiport(ax, x, y, label, color):
@@ -35,53 +34,49 @@ def draw_arrow(ax, p1, p2, color, lw=2.5):
 
 def draw_panel(ax, title, show_stopover=False):
     ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.set_aspect('equal')
+    ax.set_ylim(0.1, 1.05)
     ax.axis('off')
     ax.set_facecolor(BG)
-    ax.set_title(title, fontsize=13, fontweight='bold', pad=12, color='#333333')
+    ax.set_title(title, fontsize=13, fontweight='bold', pad=8, color='#333333')
 
     if not show_stopover:
-        colors = {1: DARK_RED, 2: GRAY, 3: DARK_RED, 4: GRAY}
+        colors = {1: DARK_RED, 2: GRAY, 3: DARK_RED}
         for vid, (x, y) in verts.items():
             draw_vertiport(ax, x, y, str(vid), colors[vid])
 
         draw_arrow(ax, verts[1], verts[3], color=DARK_RED)
 
-        ax.text(verts[1][0] - 0.10, verts[1][1] + 0.09,
+        ax.text(verts[1][0] - 0.12, verts[1][1] + 0.10,
                 'PG 1', fontsize=10, color=DARK_RED, fontweight='bold',
                 bbox=dict(boxstyle='round,pad=0.3', facecolor=LIGHT_RED,
                           edgecolor=DARK_RED, linewidth=1.2))
 
-        ax.text(0.50, 0.58, 'Direct route', ha='center',
+        ax.text(0.50, 0.52, 'Direct route', ha='center',
                 fontsize=10, color=DARK_RED, style='italic')
 
     else:
-        colors = {1: DARK_RED, 2: MID_RED, 3: DARK_RED, 4: GRAY}
+        colors = {1: DARK_RED, 2: MID_RED, 3: DARK_RED}
         for vid, (x, y) in verts.items():
             draw_vertiport(ax, x, y, str(vid), colors[vid])
 
         draw_arrow(ax, verts[1], verts[2], color=MID_RED)
         draw_arrow(ax, verts[2], verts[3], color=MID_RED)
 
-        ax.text(verts[1][0] - 0.10, verts[1][1] + 0.09,
+        ax.text(verts[1][0] - 0.12, verts[1][1] + 0.10,
                 'PG 1', fontsize=10, color=DARK_RED, fontweight='bold',
                 bbox=dict(boxstyle='round,pad=0.3', facecolor=LIGHT_RED,
                           edgecolor=DARK_RED, linewidth=1.2))
 
-        ax.text(verts[2][0] + 0.11, verts[2][1] + 0.07,
+        ax.text(verts[2][0] + 0.12, verts[2][1] + 0.07,
                 'PG 2', fontsize=10, color=MID_RED, fontweight='bold',
                 bbox=dict(boxstyle='round,pad=0.3', facecolor=LIGHT_RED,
                           edgecolor=MID_RED, linewidth=1.2))
 
-        ax.text(verts[2][0], verts[2][1] - 0.12,
+        ax.text(verts[2][0], verts[2][1] - 0.14,
                 'Stopover', ha='center', fontsize=9,
                 color=MID_RED, style='italic')
 
-        ax.text(0.50, 0.05, 'Shared route with stopover', ha='center',
-                fontsize=10, color=MID_RED, style='italic')
-
-fig, axes = plt.subplots(1, 2, figsize=(12, 5))
+fig, axes = plt.subplots(2, 1, figsize=(6, 7))
 
 draw_panel(axes[0], 'Option A: Direct Route', show_stopover=False)
 draw_panel(axes[1], 'Option B: Shared Route with Stopover', show_stopover=True)
@@ -91,13 +86,13 @@ legend_elements = [
     mpatches.Patch(facecolor=MID_RED,  label='Shared route (PG 1 + PG 2)'),
     mpatches.Patch(facecolor=GRAY,     label='Inactive vertiport'),
 ]
-fig.legend(handles=legend_elements, loc='lower center', ncol=3,
+fig.legend(handles=legend_elements, loc='lower center', ncol=1,
            fontsize=10, frameon=True, facecolor='white',
-           edgecolor=LGRAY, bbox_to_anchor=(0.5, -0.02))
+           edgecolor=LGRAY, bbox_to_anchor=(0.5, 0.01))
 
-plt.suptitle('Candidate Route Options for Passenger Group 1',
-             fontsize=14, fontweight='bold', color='#333333', y=1.01)
+plt.suptitle('Candidate Route Options for Passenger Group',
+             fontsize=14, fontweight='bold', color='#333333', y=0.97)
 
-fig.tight_layout()
+fig.tight_layout(rect=[0, 0.16, 1, 0.94], h_pad=1.0)
 plt.savefig('heuristic_figure.png', dpi=300, bbox_inches='tight', facecolor='white')
 plt.show()

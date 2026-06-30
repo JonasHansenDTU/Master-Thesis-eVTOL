@@ -29,7 +29,7 @@ for file in source_files
 end
 
 function load_heuristic_data()
-    run(`python c:/Users/Kapta/Documents/DTU/Speciale/GitHubFiles/DataGen/LTM/LTMPassAssignRand.py`)
+    run(`/Users/asbb/Desktop/Speciale/Master-Thesis-eVTOL/DataGen/LTM/LTMPassAssignRand.py`)
     excel_file = joinpath(@__DIR__, "..", "..", "inputData", "inputDataGiant.xlsx")
     parameter_file = joinpath(@__DIR__, "..", "..",  "inputData", "Parameters.xlsx")
     data = load_data(excel_file, parameter_file)
