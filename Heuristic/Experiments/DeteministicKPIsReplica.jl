@@ -32,8 +32,8 @@ function load_heuristic_data()
     run(`python c:/Users/Kapta/Documents/DTU/Speciale/GitHubFiles/DataGen/LTM/LTMPassAssignRand.py`)
     infra_file = joinpath(@__DIR__, "..", "..", "inputData", "inputDataHumongous.xlsx")
     excel_file = joinpath(@__DIR__, "..", "..", "inputData", "LTM_demand.xlsx")
-    parameter_file = joinpath(@__DIR__, "..", "..",  "inputData", "Parameters.xlsx")
-    Drive_radius = 60
+    parameter_file = joinpath(@__DIR__, "..", "..",  "inputData", "Scenario Parameters", "Parameters s6.xlsx")
+    Drive_radius = 120
     data = load_data(infra_file, parameter_file, excel_file, Drive_radius)
 
     vmax = maximum(data.V)

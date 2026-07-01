@@ -28,7 +28,8 @@ end
 
 excel_file     = joinpath(@__DIR__, "..", "..", "inputData", "Experiments/inputDataEx10_15_35.xlsx")
 parameter_file = joinpath(@__DIR__, "..", "..", "inputData", "Parameters.xlsx")
-data = load_data(excel_file, parameter_file)
+
+data = load_data(excel_file, parameter_file, excel_file, 60)
 
 Vmax = maximum(data.V)
 rt = zeros(Vmax, Vmax)
@@ -39,7 +40,7 @@ for i in data.V, j in data.V
 end
 
 maxTurnaround = Int64(data.ET)
-Maxtime = Int32(600)
+Maxtime = Int32(100)
 top_c = 4
 Optimum = Inf
 # Random.seed!(1234)
