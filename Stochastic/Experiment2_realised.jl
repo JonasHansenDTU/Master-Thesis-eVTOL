@@ -43,7 +43,7 @@ const SEASON_NAME     = get(ENV, "EVTOL_SEASON", "Sommer")
 #     SMOKE_TEST=1 julia Experiment2_realised.jl
 const SMOKE_TEST = get(ENV, "SMOKE_TEST", "0") == "1"
 
-const RUNS            = SMOKE_TEST ? 2 : 2      # independent first-stage runs
+const RUNS            = SMOKE_TEST ? 2 : 4      # independent first-stage runs
 const REALISED_PER_RUN = SMOKE_TEST ? 2 : 10    # realised days evaluated per run
 const BASE_FS_SEED    = 12345  # first-stage seed; run r uses BASE_FS_SEED + r
 const BASE_REAL_SEED  = 4242   # realised-draw seed; run r uses BASE_REAL_SEED + r
