@@ -2,6 +2,8 @@
 # Experiment1_sizes.jl
 #
 # EXPERIMENT 1 — Two-stage stochastic heuristic across the six instance sizes
+# (Table 9.1), so its results can be placed alongside the existing exact-vs-
+# deterministic comparison (Table 9.2).
 #
 # For each instance size, the two-stage heuristic is run several times (reps).
 # Each rep records:
@@ -77,31 +79,23 @@ function params_for(id::Int)
         return (MaxTime_1st=Int32(10), n_restarts=1, n_outer_iters=2,
                 MaxTime_2nd_search=Int32(3), MaxTime_2nd_final=Int32(5))
     elseif id <= 3
-        return (MaxTime_1st=Int32(90),  n_restarts=2, n_outer_iters=4,
+        return (MaxTime_1st=Int32(90),  n_restarts=2, n_outer_iters=8,
                 MaxTime_2nd_search=Int32(15), MaxTime_2nd_final=Int32(30))
     elseif id <= 4
-        return (MaxTime_1st=Int32(90),  n_restarts=2, n_outer_iters=4,
+        return (MaxTime_1st=Int32(90),  n_restarts=2, n_outer_iters=6,
                 MaxTime_2nd_search=Int32(12), MaxTime_2nd_final=Int32(25))
     else
-        return (MaxTime_1st=Int32(60),  n_restarts=2, n_outer_iters=4,
-                MaxTime_2nd_search=Int32(12), MaxTime_2nd_final=Int32(25))
+        return (MaxTime_1st=Int32(60),  n_restarts=2, n_outer_iters=5,
+                MaxTime_2nd_search=Int32(10), MaxTime_2nd_final=Int32(20))
     end
 end
 
-
-# function params_for(id::Int)
-#     # ~2-HOUR TEST budgets across both seasons — NOT for thesis results.
-#     if id <= 4
-#         return (MaxTime_1st=Int32(30), n_restarts=1, n_outer_iters=4,
-#                 MaxTime_2nd_search=Int32(6), MaxTime_2nd_final=Int32(12))
-#     else
-#         return (MaxTime_1st=Int32(25), n_restarts=1, n_outer_iters=3,
-#                 MaxTime_2nd_search=Int32(5), MaxTime_2nd_final=Int32(10))
-#     end
-# end
-
 # Optionally skip instances whose results you already have (set via START_FROM).
 const START_FROM = parse(Int, get(ENV, "START_FROM", "1"))
+
+# Optionally run ONLY a single instance by id (set via ONLY). 0 = disabled (run
+# all / from START_FROM). e.g. ONLY=3 runs just instance 3.
+const ONLY = parse(Int, get(ENV, "ONLY", "0"))
 
 const PRICE_BOOST  = 8.0
 const HARD_PENALTY = 50_000.0
@@ -214,7 +208,8 @@ function weighted_actual_profit(result)
         exp_actual_2nd += w * (rev - opcost)
     end
 
-    return exp_actual_2nd
+    # First-stage opening cost is paid once (not per scenario).
+    return exp_actual_2nd - result.first_stage_cost
 end
 
 ###############################################################################
@@ -223,6 +218,7 @@ end
 parameter_file = joinpath(@__DIR__, "..", "inputData", "Parameters.xlsx")
 out_path       = joinpath(@__DIR__,
     SMOKE_TEST ? "experiment1_$(lowercase(SEASON_NAME))_SMOKE.csv"
+    : ONLY != 0 ? "experiment1_$(lowercase(SEASON_NAME))_inst$(ONLY).csv"
                : "experiment1_$(lowercase(SEASON_NAME)).csv")
 
 rows = NamedTuple[]
@@ -237,6 +233,7 @@ end
 println("="^72)
 
 for inst in INSTANCES
+    ONLY != 0 && inst.id != ONLY && continue   # ONLY set: run just that instance
     inst.id < START_FROM && continue   # skip instances already completed
     excel_file = joinpath(@__DIR__, "..", "inputData", "Experiments", inst.file)
     if !isfile(excel_file)

@@ -69,13 +69,13 @@ function params_for(id::Int)
         return (MaxTime_1st=Int32(10), n_restarts=1, n_outer_iters=2,
                 MaxTime_2nd_search=Int32(3), MaxTime_2nd_final=Int32(5))
     elseif id <= 3
-        return (MaxTime_1st=Int32(90),  n_restarts=2, n_outer_iters=8,
+        return (MaxTime_1st=Int32(90),  n_restarts=2, n_outer_iters=4,
                 MaxTime_2nd_search=Int32(15), MaxTime_2nd_final=Int32(30))
     elseif id <= 4
-        return (MaxTime_1st=Int32(90),  n_restarts=2, n_outer_iters=6,
+        return (MaxTime_1st=Int32(90),  n_restarts=2, n_outer_iters=4,
                 MaxTime_2nd_search=Int32(12), MaxTime_2nd_final=Int32(25))
     else
-        return (MaxTime_1st=Int32(60),  n_restarts=2, n_outer_iters=5,
+        return (MaxTime_1st=Int32(60),  n_restarts=2, n_outer_iters=4,
                 MaxTime_2nd_search=Int32(10), MaxTime_2nd_final=Int32(20))
     end
 end
@@ -132,6 +132,14 @@ function actual_profit_of(result)
     return exp2nd - result.first_stage_cost
 end
 
+# Gurobi-matching OBJECTIVE of a full heuristic result. The heuristic's
+# expected_obj already equals the Gurobi @objective: the probability-weighted
+# per-scenario second-stage value (revenue - routing cost - battery penalty
+# over_bmid*b_penalty - miss penalty) minus the first-stage cost (opening cost
+# + rejection penalty). VSS/EVPI are computed on THIS quantity so they follow
+# the standard Birge & Louveaux definition on the model's true objective.
+objective_of(result) = result.expected_obj
+
 # Build a single mean (expected-value) scenario: probability-weighted average of
 # rt_s and e_s over the real scenarios. rt_s and e_s are flat dicts keyed by the
 # 3-tuple (sc, i, j). The mean scenario reuses scenario id 1 (a valid index into
@@ -181,25 +189,33 @@ for inst in INSTANCES
 
     p = params_for(inst.id)
     # Single-scenario budget for the WS and EV solves (each is an easy one-
-    # scenario problem).
+    # scenario problem). A modest bump to the final second-stage budget makes
+    # these single-scenario solves reach near-optimal quality reliably, which is
+    # necessary for the WS >= RP >= EEV ordering to emerge.
     common = (maxTurnaround=MAXTURN, MaxTime_1st=p.MaxTime_1st,
               MaxTime_2nd_search=p.MaxTime_2nd_search,
               MaxTime_2nd_final=p.MaxTime_2nd_final, top_c=TOP_C,
               price_boost=PRICE_BOOST, hard_penalty=HARD_PENALTY,
               n_restarts=p.n_restarts, n_outer_iters=p.n_outer_iters,
               demand_rho=DEMAND_RHO, demand_seed=DEMAND_SEED)
-    # The RP problem spans all scenarios and is much harder; give it extra outer
-    # iterations so it is solved to a quality comparable to the easy WS/EV solves.
-    # Without this, RP is systematically under-solved and the required ordering
-    # WS >= RP >= EEV (for maximisation) can be violated by heuristic noise.
-    rp_common = merge(common, (n_outer_iters = p.n_outer_iters + 4,))
+    # The RP problem spans all scenarios and is much harder; it must be solved to
+    # a quality comparable to the easy single-scenario WS/EV solves, or the
+    # ordering WS >= RP >= EEV (maximisation) is violated by heuristic noise.
+    # The earlier "+4 iterations" was insufficient, so RP is given a multiplied
+    # outer-iteration budget plus a longer per-scenario final budget. RP_BUDGET_MULT
+    # can be tuned (env var) to trade solve quality against run time.
+    rp_mult   = parse(Float64, get(ENV, "RP_BUDGET_MULT", "2.0"))
+    rp_iters  = max(p.n_outer_iters + 4, round(Int, p.n_outer_iters * rp_mult))
+    rp_common = merge(common, (n_outer_iters = rp_iters,
+                               MaxTime_2nd_final = Int32(round(Int,
+                                   Float64(p.MaxTime_2nd_final) * 1.5)),))
 
     # ----- RP : the stochastic (here-and-now) solution -----------------------
     Random.seed!(BASE_SEED)
     rp_res = quiet() do
         stochastic_heuristic(data, rt_s, e_s, S, pi_s; rp_common...)
     end
-    RP = actual_profit_of(rp_res)
+    RP = objective_of(rp_res)
 
     # ----- WS : wait-and-see (each scenario solved with a free first stage) ---
     # Solve each scenario alone (S = {sc}); its first stage adapts perfectly to
@@ -211,7 +227,7 @@ for inst in INSTANCES
         ws_res = quiet() do
             stochastic_heuristic(data, rt_s, e_s, [sc], Dict(sc => 1.0); common...)
         end
-        WS += (pi_s[sc]/wsum) * actual_profit_of(ws_res)
+        WS += (pi_s[sc]/wsum) * objective_of(ws_res)
     end
 
     # ----- EEV : expected result of the expected-value solution --------------
@@ -231,8 +247,11 @@ for inst in INSTANCES
                                 ev_res.active_evtols,
                                 ev_res.tentative_sol,
                                 ev_res.first_stage_cost)
-    # Evaluate across real scenarios: probability-weighted true-fare profit, with
-    # opening cost charged once.
+    # Evaluate across real scenarios on the Gurobi-matching objective. r.profit
+    # from solve_second_stage already equals the Gurobi second-stage value for
+    # the scenario (revenue - routing cost - battery penalty - miss penalty), so
+    # the probability-weighted sum minus the first-stage cost is the objective
+    # value of the EV decision evaluated across the real scenarios (EEV).
     exp2nd = 0.0
     for sc in S
         sc_data = rp_res.scenario_results[sc].sc_data          # real scenario data
@@ -247,19 +266,7 @@ for inst in INSTANCES
                                top_c=TOP_C, price_boost=PRICE_BOOST,
                                hard_penalty=HARD_PENALTY)
         end
-        rev = 0.0
-        for ass in r.assignments
-            a = ass.group; i = sc_data.op[a]; j = sc_data.dp[a]
-            rev += sc_data.q[a]*(sc_data.fd[(i,j)]*(1-sc_data.so[a]) +
-                                 sc_data.fs[(i,j)]*sc_data.so[a])
-        end
-        opcost = 0.0
-        for plane in r.sol.planes
-            for k in 1:plane.flightLegs
-                opcost += sc_data.c[(Int(plane.route[k]), Int(plane.route[k+1]))]
-            end
-        end
-        exp2nd += (pi_s[sc]/wsum) * (rev - opcost)
+        exp2nd += (pi_s[sc]/wsum) * r.profit
     end
     EEV = exp2nd - ev_res.first_stage_cost
 

@@ -188,8 +188,8 @@ function scenario_slack(data, sc::Int)
         strong_wind = wind_speed >= 45.0
         very_cold   = scen.phi >= 1.35
         if strong_wind || very_cold
-            w_sc  += 10.0
-            ET_sc += 30.0
+            w_sc  += 15.0
+            ET_sc += 60.0
         end
     end
     return w_sc, ET_sc
@@ -953,10 +953,10 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
                                MaxTime_2nd_search::Int32 = Int32(5),
                                MaxTime_2nd_final::Int32  = Int32(15),
                                top_c::Int                = 4,
-                               price_boost::Float64      = 10.0,
-                               hard_penalty::Float64     = 10_000.0,
+                               price_boost::Float64      = 8.0,
+                               hard_penalty::Float64     = 50_000.0,
                                n_restarts::Int           = 3,
-                               n_outer_iters::Int        = 20,
+                               n_outer_iters::Int        = 4,
                                demand_rho                = 0.5,
                                demand_seed::Int          = 20260101)
 
@@ -1097,11 +1097,11 @@ function stochastic_heuristic(data, rt_s, e_s, S, pi_s;
         best_candidate_fsd = nothing
 
         # Cap how many candidates are tried per move type to control runtime.
-        # With 13 scenarios × MaxTime_2nd_search per evaluation, each candidate
-        # costs up to 13 × MaxTime_2nd_search seconds. At 5 candidates per move
+        # With 12 scenarios × MaxTime_2nd_search per evaluation, each candidate
+        # costs up to 13 × MaxTime_2nd_search seconds. At 3 candidates per move
         # type and 5 move types, one iteration costs at most:
-        # 5 × 5 × 13 × MaxTime_2nd_search seconds.
-        max_cand = 5
+        # 3 × 5 × 13 × MaxTime_2nd_search seconds.
+        max_cand = 3
 
         for move in moves
 
