@@ -69,13 +69,13 @@ function params_for(id::Int)
         return (MaxTime_1st=Int32(10), n_restarts=1, n_outer_iters=2,
                 MaxTime_2nd_search=Int32(3), MaxTime_2nd_final=Int32(5))
     elseif id <= 3
-        return (MaxTime_1st=Int32(90),  n_restarts=2, n_outer_iters=8,
+        return (MaxTime_1st=Int32(90),  n_restarts=2, n_outer_iters=4,
                 MaxTime_2nd_search=Int32(15), MaxTime_2nd_final=Int32(30))
     elseif id <= 4
-        return (MaxTime_1st=Int32(90),  n_restarts=2, n_outer_iters=6,
+        return (MaxTime_1st=Int32(90),  n_restarts=2, n_outer_iters=4,
                 MaxTime_2nd_search=Int32(12), MaxTime_2nd_final=Int32(25))
     else
-        return (MaxTime_1st=Int32(60),  n_restarts=2, n_outer_iters=5,
+        return (MaxTime_1st=Int32(60),  n_restarts=2, n_outer_iters=4,
                 MaxTime_2nd_search=Int32(10), MaxTime_2nd_final=Int32(20))
     end
 end

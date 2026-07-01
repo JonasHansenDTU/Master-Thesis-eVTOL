@@ -55,7 +55,7 @@ const INSTANCE_FILE = "LTM_demandFinal.xlsx"
 # The smoke test overrides these with tiny budgets just below.
 const MAXTIME_1ST        = SMOKE_TEST ? Int32(10) : Int32(90)
 const N_RESTARTS         = SMOKE_TEST ? 1 : 2
-const N_OUTER_ITERS      = SMOKE_TEST ? 2 : 8
+const N_OUTER_ITERS      = SMOKE_TEST ? 2 : 4
 const MAXTIME_2ND_SEARCH = SMOKE_TEST ? Int32(3)  : Int32(15)
 const MAXTIME_2ND_FINAL  = SMOKE_TEST ? Int32(5)  : Int32(30)
 const PRICE_BOOST        = 8.0
