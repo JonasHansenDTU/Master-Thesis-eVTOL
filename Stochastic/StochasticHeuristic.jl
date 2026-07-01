@@ -188,8 +188,8 @@ function scenario_slack(data, sc::Int)
         strong_wind = wind_speed >= 45.0
         very_cold   = scen.phi >= 1.35
         if strong_wind || very_cold
-            w_sc  += 10.0
-            ET_sc += 30.0
+            w_sc  += 15.0
+            ET_sc += 60.0
         end
     end
     return w_sc, ET_sc

@@ -88,6 +88,18 @@ function params_for(id::Int)
     end
 end
 
+
+# function params_for(id::Int)
+#     # ~2-HOUR TEST budgets across both seasons — NOT for thesis results.
+#     if id <= 4
+#         return (MaxTime_1st=Int32(30), n_restarts=1, n_outer_iters=4,
+#                 MaxTime_2nd_search=Int32(6), MaxTime_2nd_final=Int32(12))
+#     else
+#         return (MaxTime_1st=Int32(25), n_restarts=1, n_outer_iters=3,
+#                 MaxTime_2nd_search=Int32(5), MaxTime_2nd_final=Int32(10))
+#     end
+# end
+
 # Optionally skip instances whose results you already have (set via START_FROM).
 const START_FROM = parse(Int, get(ENV, "START_FROM", "1"))
 
@@ -202,8 +214,7 @@ function weighted_actual_profit(result)
         exp_actual_2nd += w * (rev - opcost)
     end
 
-    # First-stage opening cost is paid once (not per scenario).
-    return exp_actual_2nd - result.first_stage_cost
+    return exp_actual_2nd
 end
 
 ###############################################################################

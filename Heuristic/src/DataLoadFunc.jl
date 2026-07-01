@@ -87,7 +87,7 @@ function load_data(infra_file::String, parameter_file::String, excel_file::Strin
             excel_file,
             # joinpath("inputData", "LTM_demand5min.xlsx"),
             # "PassengerGroups"
-            "Sheet1"
+            "PassengerGroups"
         )
     )
     # Pool B: on-demand passenger groups, served only in the second stage.
@@ -291,7 +291,7 @@ function load_data(infra_file::String, parameter_file::String, excel_file::Strin
         for j in V
             if j == i
                 push!(end_vp[i], j)
-            elseif haskey(drive_time_lookup, (i,j)) && drive_time_lookup[(i,j)] <= 120.0
+            elseif haskey(drive_time_lookup, (i,j)) && drive_time_lookup[(i,j)] <= 60.0
                 push!(end_vp[i], j)
             end
         end

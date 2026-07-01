@@ -43,7 +43,7 @@ const SEASON_NAME     = get(ENV, "EVTOL_SEASON", "Sommer")
 #     SMOKE_TEST=1 julia Experiment2_realised.jl
 const SMOKE_TEST = get(ENV, "SMOKE_TEST", "0") == "1"
 
-const RUNS            = SMOKE_TEST ? 2 : 2      # independent first-stage runs
+const RUNS            = SMOKE_TEST ? 2 : 4      # independent first-stage runs
 const REALISED_PER_RUN = SMOKE_TEST ? 2 : 10    # realised days evaluated per run
 const BASE_FS_SEED    = 12347  # first-stage seed; run r uses BASE_FS_SEED + r
 const BASE_REAL_SEED  = 4244  # realised-draw seed; run r uses BASE_REAL_SEED + r
@@ -163,8 +163,8 @@ function build_realised_day_data(data, weather, B_real, time_per_km)
 
     wind_speed = sqrt(weather.wx^2 + weather.wy^2)
     severe     = (wind_speed >= 45.0) || (weather.phi >= 1.35)
-    w_day  = Float64(data.w)  + (severe ? 10.0 : 0.0)
-    ET_day = Float64(data.ET) + (severe ? 30.0 : 0.0)
+    w_day  = Float64(data.w)  + (severe ? 15.0 : 0.0)
+    ET_day = Float64(data.ET) + (severe ? 60.0 : 0.0)
 
     sc_data = (
         infra=data.infra, pax=data.pax, plane=data.plane,
@@ -214,7 +214,7 @@ S        = S_active
 
 out_path = joinpath(@__DIR__,
     SMOKE_TEST ? "experiment2_realised_$(lowercase(SEASON_NAME))_SMOKE.csv"
-               : "experiment2_realised_$(lowercase(SEASON_NAME))_extra.csv")
+               : "experiment2_realised_$(lowercase(SEASON_NAME)).csv")
 rows = NamedTuple[]
 poolB = Set(data.B)
 
